@@ -26,6 +26,7 @@ down_col  100:100:200
 
 # button style, can be rounded ( default ), square or plain
 # button_style plain
+repeat_delay 50
 
 </global>
 

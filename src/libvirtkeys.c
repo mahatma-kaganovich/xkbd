@@ -341,7 +341,7 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 
 	for (keycode = 0; ((keycode < (maxKeycode - minKeycode + 1)) && !found); keycode++)
 	{
-		for (column = 0; ((column < keysymsPerKeycode) && !found); column++)
+		for (column = 0; ((column < (keysymsPerKeycode > 4 ? 4 : keysymsPerKeycode)) && !found); column++)
 		{
 			if (keymap[(keycode * keysymsPerKeycode + column)] == ks)
 			{
