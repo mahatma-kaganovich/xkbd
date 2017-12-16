@@ -165,7 +165,8 @@ SUBDIRS = img
 kbdconfigdir = $(pkgdatadir)
 kbdconfig_DATA = en_GB.qwerty.xkbd en_GB.qwerty.tiny.xkbd \
                  en_US.qwerty.xkbd en_all.fitaly.xkbd kbdconfig.numsonly \
-                 en_GB.qwerty.tabletpc.xkbd all.qwerty.xkbd
+                 en_GB.qwerty.tabletpc.xkbd all.qwerty.xkbd \
+                 xkbd-*
 
 CLEANFILES = en_GB.qwerty.xkbd en_GB.qwerty.tiny.xkbd \
              en_US.qwerty.xkbd en_all.fitaly.xkbd kbdconfig.numsonly \

@@ -408,7 +408,7 @@ int main(int argc, char **argv)
 
       if (embed)
       {
-	 fprintf(stdout, "%i\n", win);
+	 fprintf(stdout, "%li\n", win);
 	 fclose(stdout);
       } else {
 	 XMapWindow(display, win);
