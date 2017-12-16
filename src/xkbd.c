@@ -142,6 +142,7 @@ void usage(void)
    printf("  -k  <keybaord file> Select the keyboard definition file\n");
    printf("                      other than" DEFAULTCONFIG "\n");
    printf("  -xid used for gtk embedding   \n");
+   printf("  -c  Dock\n");
    printf("  -v  version\n");
    printf("  -h  this help\n\n");
 }
@@ -184,6 +185,7 @@ int main(int argc, char **argv)
    char *font_name = NULL;
    int cmd_xft_selected = 0; /* ugly ! */
    int embed = 0;
+   int dock = 0;
    Bool use_normal_win = False;
    
    XEvent an_event;
@@ -226,6 +228,9 @@ int main(int argc, char **argv)
 	       break;
 	    case 'x' :
 	       embed = 1;
+	       break;
+	    case 'c' :
+	       dock = 1;
 	       break;
 	    case 'n' :
 	       use_normal_win = True;
@@ -372,6 +377,11 @@ int main(int argc, char **argv)
       wm_hints = XAllocWMHints();
       wm_hints->input = False;
       wm_hints->flags = InputHint;
+      if (dock) {
+	wm_hints->flags |= IconWindowHint | WindowGroupHint | StateHint;
+	wm_hints->initial_state = WithdrawnState;
+	wm_hints->icon_window = wm_hints->window_group = win;
+      }
       XSetWMHints(display, win, wm_hints );
 
       /* Tell the WM we dont want no borders */

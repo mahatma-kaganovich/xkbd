@@ -86,6 +86,10 @@ xkbd understands the following command switches;
       Select an alternate  keyboard definition file other than the
       default /etc/xkbdrc.
   </ListItem>
+  <ListItem><formalpara> -c  </formalpara>
+      
+      Dock (Openbox, etc).
+  </ListItem>
   <ListItem><formalpara> -v  </formalpara>
       
       Display the version.
