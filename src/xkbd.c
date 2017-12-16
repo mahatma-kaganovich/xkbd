@@ -313,7 +313,7 @@ int main(int argc, char **argv)
       yret = DisplayHeight(display, screen_num) - hret;
 
       // deactivate geometry for 0.8.16 release - mb
-      geometry = NULL;
+//      geometry = NULL;
       if (geometry != NULL)
 	{
 	  int flags;
