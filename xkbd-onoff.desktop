@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Keyboard on/off
+Comment=Virtual Keyboard on/off
+Exec=xkbd-onoff
+Type=Application
+Icon=xkbd
+Categories=Utility;Accessibility
+X-MB-INPUT-MECHANSIM=True

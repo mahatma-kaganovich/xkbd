@@ -1,9 +1,9 @@
 #EXTRA_DIST = autoconfigure.sh
 SUBDIRS = src data packaging doc
-EXTRA_DIST = xkbd.desktop xkbd.png
+EXTRA_DIST = xkbd.desktop xkbd-onoff.desktop xkbd.png
 
 desktopdir = $(datadir)/applications/inputmethods
-desktop_DATA = xkbd.desktop
+desktop_DATA = xkbd.desktop xkbd-onoff.desktop
 
 pixmapsdir = $(datadir)/pixmaps/
 pixmaps_DATA = xkbd.png
