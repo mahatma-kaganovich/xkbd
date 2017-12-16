@@ -18,6 +18,7 @@
 #include <X11/cursorfont.h>
 #include <X11/keysymdef.h>
 #include <X11/keysym.h>
+#include <X11/XKBlib.h>
 #include <X11/extensions/XTest.h>
 #include <X11/Xos.h>
 #include <X11/Xproto.h>
@@ -91,7 +92,7 @@ static int createModifierTable()
 	// Now we look up the Keycode, using index 0 (unshifted). If the returned KeySym is not equal
 	// to XK_Mode_switch, then it's an error.
 
-	if (XKeycodeToKeysym(dpy, kc, 0) != XK_Mode_switch)
+	if (XkbKeycodeToKeysym(dpy, kc, 0, 0) != XK_Mode_switch)
 	{
 		fprintf(stderr, "Mode_switch must be assigned to an unshifted keycode and a modifier.\n");
 		return FALSE;
@@ -155,7 +156,7 @@ static int createModifierTable()
    	{
 		if (modifierTable[modifier_index])
 		{
-			ks = XKeycodeToKeysym(dpy, modifierTable[modifier_index], 0);
+			ks = XkbKeycodeToKeysym(dpy, modifierTable[modifier_index], 0 ,0);
 			switch (ks)
 			{
 			case XK_Meta_R:
@@ -241,62 +242,7 @@ int loadKeySymTable()
 		}
 	}
 
-	// We take the KeySym table that the server gave us, and check to see if it 
-	// contains 4 columns (i.e. 4 keysymsPerKeycode). If it does, the routine just
-	// returns, and we will use the table as-is. If it doesn't contain 4 columns, the
-	// routine copies the passed table into one that does, and returns that. That allows
-	// us to utilitize the "Mode_Shift" key to access columns 2 and 3 (of 0..3), and to
-	// assign those columns to any KeySyms that don't currently exist in the table. That
-	// allows the program to autoconfigure the server to include definitions for KeySyms 
-	// that the Keyboard config file references, whether or not they exist in the table
-	// before the program runs.
-
- 	// We check to see if the table contains 2 or 4 columns. Any other configuration is
-	// NOT supported! If 4, then just return the table that was returned by the GetKeyboardMapping
-	// call.
-
-	if (keysymsPerKeycode == 4)
-		return TRUE;
-
-	if (keysymsPerKeycode == 2)
-	{
-		// We have to make a copy of the table by allocating one that has 4 columns instead of
-		// 2, copying the table entries, and then initializing all unused entries to NoSymbol.
-
-		int k;
-		int n;
-		KeySym *newKeymap = Xmalloc((maxKeycode - minKeycode + 1) * 4 * sizeof(KeySym));
-
-		for (k = 0; k < (maxKeycode - minKeycode + 1); k++)
-		{
-			// Initialize the new entries
-
-			for (n = 2; n < 4; n++)
-				newKeymap[((k * 4) + n)] = NoSymbol;
-
-			// Copy over the existing ones
-
-			for (n = 0; n < keysymsPerKeycode; n++)
-				newKeymap[((k * 4) + n)] = keymap[((k * keysymsPerKeycode) + n)];
-		}
-
-		// Indicate that the new table has 4 entries per Keycode
-
-		keysymsPerKeycode = 4;
-
-		// Discard the old keymap
-
-		XFree(keymap);
-
-		keymap = newKeymap;
-
-		return TRUE;
-	}
-	else
-	{
-		fprintf(stderr, "Sorry - server Keyboard map doesn't contain either 2 or 4 KeySyms per Keycode - unsupported!\n");
-		return FALSE;
-	}
+	return TRUE;
 }
 
 // This routine takes a KeySym, a pointer to a keycodeEntry table array, and an optional labelBuffer

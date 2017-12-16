@@ -21,6 +21,7 @@
 #include <X11/Xutil.h>
 #include <X11/extensions/XTest.h>
 #include <X11/keysym.h>
+#include <X11/XKBlib.h>
 
 #ifdef USE_XFT
 #include <X11/Xft/Xft.h>
@@ -941,7 +942,7 @@ int kb_find_keycode(keyboard *kb, KeySym keysym,
   XDisplayKeycodes(kb->display, &min_kc, &max_kc);
 
   for (keycode = min_kc; keycode <= max_kc; keycode++) {
-    for (col = 0; (k = XKeycodeToKeysym (kb->display, keycode, col)) 
+    for (col = 0; (k = XkbKeycodeToKeysym (kb->display, keycode, col, 0)) 
 	   != NoSymbol; col++)
       if (k == keysym) {
 	*code_ret = keycode;

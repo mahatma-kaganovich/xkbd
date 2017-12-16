@@ -25,6 +25,7 @@
 #include <X11/Xatom.h>
 #include <X11/extensions/XTest.h>
 #include <X11/keysym.h>
+#include <X11/XKBlib.h>
 #include <X11/extensions/shape.h>
 #include "../config.h"
 
@@ -274,7 +275,7 @@ int main(int argc, char **argv)
 	  XDisplayKeycodes(display, &min_kc, &max_kc);
 	  
 	  for (keycode = min_kc; keycode <= max_kc; keycode++)
-	    if (XKeycodeToKeysym (display, keycode, 0) == NoSymbol)
+	    if (XkbKeycodeToKeysym (display, keycode, 0, 0) == NoSymbol)
 	      {
 		mode_switch_ksym = XStringToKeysym("Mode_switch");
 		XChangeKeyboardMapping(display, 
