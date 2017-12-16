@@ -38,7 +38,7 @@ void xkbd_resize(Xkbd *xkbd, int width, int height);
 void xkbd_move(Xkbd *kb, int x, int y);
 void xkbd_repaint(Xkbd *xkbd);
 void xkbd_process(Xkbd *xkbd, XEvent *an_event);
-void xkbd_process_repeats(Xkbd *xkbd);
+Bool xkbd_process_repeats(Xkbd *xkbd);
 int xkbd_get_width(Xkbd *xkbd);
 int xkbd_get_height(Xkbd *xkbd);
 void xkbd_destroy(Xkbd *xkbd);

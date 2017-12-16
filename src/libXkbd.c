@@ -52,9 +52,9 @@ xkbd_process(Xkbd *xkbd, XEvent *an_event)
    xkbd->active_but = kb_handle_events(xkbd->kb, *an_event);
 }
 
-void xkbd_process_repeats(Xkbd *xkbd)
+Bool xkbd_process_repeats(Xkbd *xkbd)
 {
-   kb_do_repeat(xkbd->kb, xkbd->active_but);
+   return kb_do_repeat(xkbd->kb, xkbd->active_but);
 }
 
 int xkbd_get_width(Xkbd *xkbd)

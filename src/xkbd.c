@@ -190,8 +190,6 @@ int main(int argc, char **argv)
    
    XEvent an_event;
 
-   int done = 0;
-   
    int i;
    char userconffile[256];
    FILE *fp;
@@ -426,18 +424,19 @@ int main(int argc, char **argv)
 		   StructureNotifyMask |
 		   VisibilityChangeMask);
        
-      while (!done)
+      while (1)
       {
-	 while ( XPending(display) ) 
-	 {
-
 	    XNextEvent(display, &an_event);
 	    xkbd_process(kb, &an_event);
 	    switch (an_event.type) {
 	       case ClientMessage:
 		  if ((an_event.xclient.message_type == wm_protocols[1])
 		      && (an_event.xclient.data.l[0] == wm_protocols[0])) 
-		     done = 1;
+		  {
+			xkbd_destroy(kb);
+			XCloseDisplay(display);
+			exit(0);
+		  }
 		  break;
 	       case ConfigureNotify:
 		  if ( an_event.xconfigure.width != xkbd_get_width(kb)
@@ -452,20 +451,15 @@ int main(int argc, char **argv)
 		  xkbd_repaint(kb);
 		  break;
 	    }
-	 }
-	 xkbd_process_repeats(kb);
-	 usleep(10000L); /* sleep for a 10th of a second */
+	    while (xkbd_process_repeats(kb) && !XPending(display))
+		usleep(10000L); /* sleep for a 10th of a second */
       }
-      xkbd_destroy(kb);
-      XCloseDisplay(display);
        
    } else {
       fprintf(stderr, "%s: cannot connect to X server '%s'\n",
 	      argv[0], display_name);
       exit(1);
    }
-   exit(0);
-   
 
 }
 

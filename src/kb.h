@@ -27,7 +27,7 @@ void kb_render(keyboard *kb);
 void kb_paint(keyboard *kb);
 void kb_destroy(keyboard *kb);
 button *kb_handle_events(keyboard *kb, XEvent an_event);
-void kb_do_repeat(keyboard *kb, button *active_but);
+Bool kb_do_repeat(keyboard *kb, button *active_but);
 void kb_set_slide(button *active_but, int x, int y);
 int kb_process_keypress(button *active_but);
 int kb_find_keycode(keyboard *kb, KeySym keysym, 

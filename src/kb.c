@@ -856,15 +856,17 @@ void kb_set_slide(button *active_but, int x, int y)
 
 }
 
-void kb_do_repeat(keyboard *kb, button *active_but)
+Bool kb_do_repeat(keyboard *kb, button *active_but)
 {
   static int timer;
   static Bool delay;
+  if (!kb->key_repeat)
+    return False;
   if (active_but == NULL) 
     {
       timer = 0; 
       delay = False;
-      return; /* reset everything */
+      return False; /* reset everything */
     }
   timer++;
   if ((delay && timer == kb->key_repeat)
@@ -874,6 +876,7 @@ void kb_do_repeat(keyboard *kb, button *active_but)
       timer = 0;
       delay = True;
     }
+    return True;
 }
 
 int kb_process_keypress(button *active_but)
