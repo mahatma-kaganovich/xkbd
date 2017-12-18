@@ -204,8 +204,8 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
   kb->state_locked     = KB_STATE_NORMAL;
   kb->theme            = rounded;
   kb->slide_margin     = 0;
-  kb->key_delay_repeat = 40;
-  kb->key_repeat       = 5;
+  kb->key_delay_repeat = 50;
+  kb->key_repeat       = -1;
   
   kb->total_layouts = 0;
 
@@ -500,6 +500,9 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
     }
 
   fclose(rcfp);
+
+  kb->key_delay_repeat1 = kb->key_delay_repeat;
+  kb->key_repeat1 = kb->key_repeat;
 
   kb->vbox = kb->kbd_layouts[0];
   if(height_tmp)
@@ -860,6 +863,7 @@ Bool kb_do_repeat(keyboard *kb, button *active_but)
 {
   static int timer;
   static Bool delay;
+  
   if (!kb->key_repeat)
     return False;
   if (active_but == NULL) 
@@ -868,9 +872,16 @@ Bool kb_do_repeat(keyboard *kb, button *active_but)
       delay = False;
       return False; /* reset everything */
     }
-  timer++;
-  if ((delay && timer == kb->key_repeat)
-      || (!delay && timer == kb->key_delay_repeat))
+  /* sometimes update rate from X */
+  if (!timer++ && kb->key_repeat == -1) {
+	unsigned int d, r;
+
+	XkbGetAutoRepeatRate(kb->display, XkbUseCoreKbd, &d, &r);
+	kb->key_delay_repeat1 = d / 10 + 1;
+	kb->key_repeat1 = r / 10 + 1;
+  }
+  if ((delay && timer == kb->key_repeat1)
+      || (!delay && timer == kb->key_delay_repeat1))
     {
       kb_process_keypress(active_but);
       timer = 0;

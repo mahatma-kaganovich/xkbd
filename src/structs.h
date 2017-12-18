@@ -109,6 +109,8 @@ typedef struct _keyboard
   int slide_margin;
   int key_delay_repeat; /* delay time before key repeat */
   int key_repeat;       /* delay time between key repeats */
+  unsigned int key_delay_repeat1;
+  unsigned int key_repeat1;
   
 #ifdef USE_XFT
   XftDraw *xftdraw;   /* xft aa bits */
