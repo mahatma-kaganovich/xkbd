@@ -1046,6 +1046,7 @@ button * kb_find_button(keyboard *kb, int x, int y)
   offset_x = kb->vbox->x;
   offset_y = kb->vbox->y;
 
+  /* adding outer borders, but still something under y */
   if (x >= offset_x &&
       y >= offset_y &&
       x <= (offset_x+kb->vbox->act_width) &&
@@ -1058,17 +1059,17 @@ button * kb_find_button(keyboard *kb, int x, int y)
 	  
 	  button *tmp_but = NULL;
 	  tmp_box = (box *)listp->data;
-	  if (y > (offset_y + tmp_box->y) && 
+	  if (y >= (offset_y + tmp_box->y) && 
 	      y < (offset_y + tmp_box->y + tmp_box->act_height))
 	    {
 	      ip = tmp_box->root_kid;
 	      while (ip != NULL) /* now the row is found, find the key */
 		{
 		  tmp_but = (button *)ip->data;
-		  if (x > (tmp_but->x+offset_x+tmp_box->x) &&
-		      x < (tmp_but->x+offset_x+tmp_box->x+tmp_but->act_width) &&
-		      y > (tmp_but->y+offset_y+tmp_box->y) &&
-		      y < (tmp_but->y+offset_y+tmp_box->y+tmp_but->act_height)
+		  if (x > (tmp_but->x+offset_x+tmp_box->x-(ip==tmp_box->root_kid)) &&
+		      x < (tmp_but->x+offset_x+tmp_box->x+tmp_but->act_width+(ip->next==NULL)) &&
+		      y > (tmp_but->y+offset_y+tmp_box->y-(listp==kb->vbox->root_kid)) &&
+		      y < (tmp_but->y+offset_y+tmp_box->y+tmp_but->act_height+(listp->next==NULL))
 		      )
 		    {
 		      return tmp_but;
