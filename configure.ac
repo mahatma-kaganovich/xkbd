@@ -1,6 +1,7 @@
 # Process this file with autoconf to produce a configure script.
-AC_INIT(src/kb.c)
-AM_INIT_AUTOMAKE(xkbd, 0.8.17)
+
+AC_INIT([xkbd], [0.8.18])
+AM_INIT_AUTOMAKE()
 AM_CONFIG_HEADER(config.h)
 
 XFT_LIBS=""
