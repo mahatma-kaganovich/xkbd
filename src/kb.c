@@ -1042,16 +1042,17 @@ button * kb_find_button(keyboard *kb, int x, int y)
   list *listp;
   box *tmp_box = NULL;
   int offset_x, offset_y;
+  button *but = NULL;
 
   offset_x = kb->vbox->x;
   offset_y = kb->vbox->y;
 
-  /* adding outer borders, but still something under y */
-  if (x >= offset_x &&
-      y >= offset_y &&
-      x <= (offset_x+kb->vbox->act_width) &&
-      y <= (offset_y+kb->vbox->act_height) )
-    {
+  /* global check required(?) only on global event hook. we dont */
+//  if (x >= offset_x &&
+//      y >= offset_y &&
+//      x <= (offset_x+kb->vbox->act_width) &&
+//      y <= (offset_y+kb->vbox->act_height) )
+//    {
       listp = kb->vbox->root_kid;
       while (listp != NULL)
 	{
@@ -1060,19 +1061,33 @@ button * kb_find_button(keyboard *kb, int x, int y)
 	  button *tmp_but = NULL;
 	  tmp_box = (box *)listp->data;
 	  if (y >= (offset_y + tmp_box->y) && 
-	      y < (offset_y + tmp_box->y + tmp_box->act_height))
+	      y <= (offset_y + tmp_box->y + tmp_box->act_height))
 	    {
 	      ip = tmp_box->root_kid;
 	      while (ip != NULL) /* now the row is found, find the key */
 		{
 		  tmp_but = (button *)ip->data;
-		  if (x > (tmp_but->x+offset_x+tmp_box->x-(ip==tmp_box->root_kid)) &&
-		      x < (tmp_but->x+offset_x+tmp_box->x+tmp_but->act_width+(ip->next==NULL)) &&
-		      y > (tmp_but->y+offset_y+tmp_box->y-(listp==kb->vbox->root_kid)) &&
-		      y < (tmp_but->y+offset_y+tmp_box->y+tmp_but->act_height+(listp->next==NULL))
+		  if (x >= (tmp_but->x+offset_x+tmp_box->x) &&
+		      x <= (tmp_but->x+offset_x+tmp_box->x+tmp_but->act_width) &&
+		      y >= (tmp_but->y+offset_y+tmp_box->y) &&
+		      y <= (tmp_but->y+offset_y+tmp_box->y+tmp_but->act_height)
 		      )
 		    {
-		      return tmp_but;
+			/* if pressed invariant/border - check buttons are identical */
+			if (but && !(
+			    but->default_ks==tmp_but->default_ks &&
+			    but->shift_ks==tmp_but->shift_ks &&
+			    but->mod_ks==tmp_but->mod_ks &&
+			    but->slide_up_ks==tmp_but->slide_up_ks &&
+			    but->slide_down_ks==tmp_but->slide_down_ks &&
+			    but->slide_left_ks==tmp_but->slide_left_ks &&
+			    but->slide_right_ks==tmp_but->slide_right_ks &&
+			    but->slide==tmp_but->slide &&
+			    but->modifier==tmp_but->modifier &&
+			    but->options==tmp_but->options
+			    ))
+				return NULL;
+		        but = tmp_but;
 		    }
 		  
 		  ip = ip->next;
@@ -1080,8 +1095,10 @@ button * kb_find_button(keyboard *kb, int x, int y)
 	    }
 	  listp = listp->next;
 	}
-    }
-  return NULL;
+//    }
+  if (!but)
+	fprintf(stderr, "xkbd: no button %i,%i\n",x,y);
+  return but;
     
 }
 

@@ -1,48 +1,16 @@
 SUBDIRS = img
 kbdconfigdir = $(pkgdatadir)
-kbdconfig_DATA = en_GB.qwerty.xkbd en_GB.qwerty.tiny.xkbd \
-                 en_US.qwerty.xkbd en_all.fitaly.xkbd kbdconfig.numsonly \
-                 en_GB.qwerty.tabletpc.xkbd all.qwerty.xkbd \
-                 xkbd-*
+kbdconfig_DATA = *.???? xkbd-onoff xkbd-config
 
-CLEANFILES = en_GB.qwerty.xkbd en_GB.qwerty.tiny.xkbd \
-             en_US.qwerty.xkbd en_all.fitaly.xkbd kbdconfig.numsonly \
-	     en_GB.qwerty.tabletpc.xkbd all.qwerty.xkbd
+CLEANFILES = $(kbdconfig_DATA)
 
-EXTRA_DIST = en_GB.qwerty.xkbd.in en_GB.qwerty.tiny.xkbd.in \
-             en_US.qwerty.xkbd.in en_all.fitaly.xkbd.in kbdconfig.numsonly.in \
-             en_GB.qwerty.tabletpc.xkbd.in all.qwerty.xkbd.in
+EXTRA_DIST = *.in
 
-# en_GB.qwerty.xkbd
-# en_GB.qwerty.tiny.xkbd
-# en_US.qwerty.xkbd
-# en_all.fitaly.xkbd
+*.????: *.????.in
+	sh ./mk.sh $(pkgdatadir) *.????.in
 
-en_all.fitaly.xkbd: en_all.fitaly.xkbd.in
-	sed -e "s,@pkgdatadir@,$(pkgdatadir)," \
-	en_all.fitaly.xkbd.in >  en_all.fitaly.xkbd 
+xkbd-config: xkbd-config.in
+	sh ./mk.sh $(pkgdatadir) xkbd-config.in
 
-en_US.qwerty.xkbd: en_US.qwerty.xkbd.in
-	sed -e "s,@pkgdatadir@,$(pkgdatadir)," \
-	en_US.qwerty.xkbd.in > en_US.qwerty.xkbd 
-
-en_GB.qwerty.tiny.xkbd: en_GB.qwerty.tiny.xkbd.in
-	sed -e "s,@pkgdatadir@,$(pkgdatadir)," \
-	en_GB.qwerty.tiny.xkbd.in > en_GB.qwerty.tiny.xkbd 
-
-en_GB.qwerty.tabletpc.xkbd: en_GB.qwerty.tabletpc.xkbd.in
-	sed -e "s,@pkgdatadir@,$(pkgdatadir)," \
-	en_GB.qwerty.tabletpc.xkbd.in > en_GB.qwerty.tabletpc.xkbd 
-
-kbdconfig.numsonly: kbdconfig.numsonly.in
-	sed -e "s,@pkgdatadir@,$(pkgdatadir)," \
-	kbdconfig.numsonly.in >  kbdconfig.numsonly 
-
-en_GB.qwerty.xkbd: en_GB.qwerty.xkbd.in
-	sed -e "s,@pkgdatadir@,$(pkgdatadir)," \
-	en_GB.qwerty.xkbd.in > en_GB.qwerty.xkbd 
-
-all.qwerty.xkbd: all.qwerty.xkbd.in
-	sed -e "s,@pkgdatadir@,$(pkgdatadir)," \
-	all.qwerty.xkbd.in > all.qwerty.xkbd 
-
+xkbd-onoff: xkbd-onoff.in
+	sh ./mk.sh $(pkgdatadir) xkbd-onoff.in

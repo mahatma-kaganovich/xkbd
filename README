@@ -27,7 +27,7 @@ Building and Installing xkbd
 
 Xkbd uses autoconf, so building it should be straightforward:
 
-	$aclocal && autoheader && libtoolize && automake -a
+	$aclocal && autoheader && libtoolize && automake -a && autoconf
 	$./configure
 	$make
 	# This next step might require root access

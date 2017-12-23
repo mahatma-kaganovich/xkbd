@@ -67,7 +67,7 @@ sub key{
 }
 
 
-for(@ARGV?(@ARGV):('/etc/xkbd-config.conf','/usr/share/xkbd/xkbd-kp-f.conf')){
+for(@ARGV?(@ARGV):('/etc/xkbd-config.conf','@pkgdatadir@/xkbd-kp-f.conf')){
 	open(F,'<',$_) && read(F,$k,-s F) && close(F) && last;
 }
 die $! if($k eq '');
