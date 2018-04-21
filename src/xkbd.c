@@ -143,6 +143,7 @@ void usage(void)
    printf("                      other than" DEFAULTCONFIG "\n");
    printf("  -xid used for gtk embedding   \n");
    printf("  -c  Dock\n");
+   printf("  -s  strut\n");
    printf("  -v  version\n");
    printf("  -h  this help\n\n");
 }
@@ -230,6 +231,9 @@ int main(int argc, char **argv)
 	    case 'c' :
 	       dock = 1;
 	       break;
+	    case 's' :
+	       dock = 2;
+	       break;
 	    case 'n' :
 	       use_normal_win = True;
 	       break;
@@ -264,7 +268,6 @@ int main(int argc, char **argv)
 
       Atom window_type_dock_atom = 
 	XInternAtom(display, "_NET_WM_WINDOW_TYPE_DOCK",False);
-
 
       /* HACK to get libvirtkeys to work without mode_switch */
 
@@ -375,7 +378,7 @@ int main(int argc, char **argv)
       wm_hints = XAllocWMHints();
       wm_hints->input = False;
       wm_hints->flags = InputHint;
-      if (dock) {
+      if (dock == 1) {
 	wm_hints->flags |= IconWindowHint | WindowGroupHint | StateHint;
 	wm_hints->initial_state = WithdrawnState;
 	wm_hints->icon_window = wm_hints->window_group = win;
@@ -388,6 +391,7 @@ int main(int argc, char **argv)
       
       mwm_hints->flags = MWM_HINTS_DECORATIONS;
       mwm_hints->decorations = 0;
+
 
 
       XChangeProperty(display, win, mwm_atom, 
@@ -405,6 +409,22 @@ int main(int argc, char **argv)
 	XChangeProperty(display, win, window_type_atom, XA_ATOM, 32, 
 			PropModeReplace, 
 			(unsigned char *) &window_type_toolbar_atom, 1);
+
+      if (dock == 2) {
+	/* learned from tint2 */
+	long prop[12] = {2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+	XChangeProperty(display,win, mwm_atom, mwm_atom,32,PropModeReplace,(unsigned char *)&prop,5);
+        prop[0]=0;
+	prop[3] = xkbd_get_height(kb); // -1 ?
+	XChangeProperty(display,
+		win,
+		XInternAtom(display, "_NET_WM_STRUT",False),
+		XA_CARDINAL, 32, PropModeReplace, (unsigned char *)&prop, 4);
+	XChangeProperty(display, win,
+		XInternAtom(display, "_NET_WM_STRUT_PARTIAL",False),
+		XA_CARDINAL, 32, PropModeReplace, (unsigned char *)&prop, 12);
+
+      }
 
       if (embed)
       {

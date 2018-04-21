@@ -81,6 +81,9 @@ xkbd understands the following command switches;
    -c
       Dock (Openbox, etc).
 
+   -c
+      Strut (vs. dock.
+
    -v
       Display the version.
 
