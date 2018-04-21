@@ -229,10 +229,10 @@ int main(int argc, char **argv)
 	       embed = 1;
 	       break;
 	    case 'c' :
-	       dock = 1;
+	       dock |= 1;
 	       break;
 	    case 's' :
-	       dock = 2;
+	       dock |= 2;
 	       break;
 	    case 'n' :
 	       use_normal_win = True;
@@ -378,7 +378,7 @@ int main(int argc, char **argv)
       wm_hints = XAllocWMHints();
       wm_hints->input = False;
       wm_hints->flags = InputHint;
-      if (dock == 1) {
+      if (dock & 1) {
 	wm_hints->flags |= IconWindowHint | WindowGroupHint | StateHint;
 	wm_hints->initial_state = WithdrawnState;
 	wm_hints->icon_window = wm_hints->window_group = win;
@@ -410,7 +410,7 @@ int main(int argc, char **argv)
 			PropModeReplace, 
 			(unsigned char *) &window_type_toolbar_atom, 1);
 
-      if (dock == 2) {
+      if (dock & 2) {
 	/* learned from tint2 */
 	long prop[12] = {2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 	XChangeProperty(display,win, mwm_atom, mwm_atom,32,PropModeReplace,(unsigned char *)&prop,5);
