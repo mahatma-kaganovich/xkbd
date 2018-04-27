@@ -111,7 +111,7 @@ print $k;
 
 for(2..$n){
 	$l1=$l;
-	$l1=~s/[ 	]*(<key>.*?<\/key>)/key($1,$n-1)/gse;
+	$l1=~s/[ 	]*(<key>.*?<\/key>)/key($1,$_-1)/gse;
 	$l1=~s/switch 0/switch $_/ if($_<$n);
 	utf8::encode($l1);
 	print "\n",$l1;
