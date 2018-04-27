@@ -49,7 +49,7 @@ sub key{
 		if(exists($u{$y})){
 			$y=$u{$y};
 		}elsif(length($y)>1){
-			$y=~s/_//g;
+			$y=~s/_//g or $y=~s/^U([0-9A-F]{4})$/chr(hex($1))/e;
 		}
 		$s{$x}=$y if($y=~/\S/);
 	}
@@ -86,6 +86,7 @@ close(F);
 
 open F,'-|','xmodmap -pke' or die $!;
 while(defined($s=<F>)){
+	$s=~s/ 8 asterisk U20BD NoSymbol/ 8 asterisk/gs; # ₽ussian trash
 	my ($x)=$s=~/^keycode +[0-9]+ += +(\S.*?)\s*$/;
 	push @k,[split(/\s+/,$x)];
 }
