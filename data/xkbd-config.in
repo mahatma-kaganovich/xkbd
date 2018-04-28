@@ -66,8 +66,16 @@ sub key{
 	return join("\n",'	<key>',(map{"		$_ $s{$_}"}sort keys %s),'	</key>');
 }
 
+$i='config';
+for(@ARGV){
+	if($_=~s/^--//){
+		undef $P{$i=$_};
+	}else{
+		push(@{$P{$i}},$_);
+	}
+}
 
-for(@ARGV?(@ARGV):('/etc/xkbd-config.conf','@pkgdatadir@/xkbd-kp-f.conf')){
+for(@{$P{config}?(@{$P{config}):('/etc/xkbd-config.conf','@pkgdatadir@/xkbd-kp-f.conf')){
 	open(F,'<',$_) && read(F,$k,-s F) && close(F) && last;
 }
 die $! if($k eq '');
@@ -84,11 +92,23 @@ while(defined($s=<F>)){
 }
 close(F);
 
+open F,'-|','setxkbmap -query' or die $!;
+while(defined($s=<F>)){
+	if(my ($l)=$s=~/layout:\s*(\S*)/){
+		@layouts=split(/,/,$l);
+		break;
+	}
+}
+
+@layouts||die "ERROR: no keyboard layouts from 'setxkbmap -query'";
+$n=($#layouts+1)*2;
+
 open F,'-|','xmodmap -pke' or die $!;
 while(defined($s=<F>)){
 	$s=~s/ 8 asterisk U20BD NoSymbol/ 8 asterisk/gs; # ₽ussian trash
 	my ($x)=$s=~/^keycode +[0-9]+ += +(\S.*?)\s*$/;
-	push @k,[split(/\s+/,$x)];
+	my @x=split(/\s+/,$x);
+	push @k,[splice(@x,$n)];
 }
 close(F);
 
