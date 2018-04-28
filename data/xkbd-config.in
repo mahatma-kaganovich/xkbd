@@ -75,7 +75,7 @@ for(@ARGV){
 	}
 }
 
-for(@{$P{config}?(@{$P{config}):('/etc/xkbd-config.conf','@pkgdatadir@/xkbd-kp-f.conf')){
+for(@{$P{config}}?(@{$P{config}}):('/etc/xkbd-config.conf','@pkgdatadir@/xkbd-kp-f.conf')){
 	open(F,'<',$_) && read(F,$k,-s F) && close(F) && last;
 }
 die $! if($k eq '');
@@ -92,23 +92,12 @@ while(defined($s=<F>)){
 }
 close(F);
 
-open F,'-|','setxkbmap -query' or die $!;
-while(defined($s=<F>)){
-	if(my ($l)=$s=~/layout:\s*(\S*)/){
-		@layouts=split(/,/,$l);
-		break;
-	}
-}
-
-@layouts||die "ERROR: no keyboard layouts from 'setxkbmap -query'";
-$n=($#layouts+1)*2;
 
 open F,'-|','xmodmap -pke' or die $!;
 while(defined($s=<F>)){
 	$s=~s/ 8 asterisk U20BD NoSymbol/ 8 asterisk/gs; # ₽ussian trash
 	my ($x)=$s=~/^keycode +[0-9]+ += +(\S.*?)\s*$/;
-	my @x=split(/\s+/,$x);
-	push @k,[splice(@x,$n)];
+	push @k,[split(/\s+/,$x)];
 }
 close(F);
 
@@ -117,11 +106,20 @@ for('grey_col','kp_col'){
 	$p{$_}=defined($x)?$x:'0:0:0';
 }
 
-for(@k){
-	$n{$#{$_}>>1}++ if(length($_->[0])==1);
+#for(@k){$n{$#{$_}>>1}++ if(length($_->[0])==1);}
+#($n)=((sort{$n{$b}<=>$n{$a}}keys %n));
+#$n++;
+
+open F,'-|','setxkbmap -query' or die $!;
+while(defined($s=<F>)){
+	if(my ($l)=$s=~/layout:\s*(\S*)/){
+		@layouts=split(/,/,$l);
+		break;
+	}
 }
-($n)=((sort{$n{$b}<=>$n{$a}}keys %n));
-$n++;
+close(F);
+@layouts||die "ERROR: no keyboard layouts from 'setxkbmap -query'";
+$n=$#layouts+1;
 
 ($l)=$k=~/(<layout>.*<\/layout>)/gs;
 
