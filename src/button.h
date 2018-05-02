@@ -26,6 +26,7 @@ GC _createGC(Display *display, Window win);
 int _XColorFromStr(Display *display, XColor *col, const char *defstr);
 
 char *button_set(char *txt);
+KeySym button_ks(char *txt);
 
 void button_set_layout(button *b, char *txt);
 void button_set_bg_col(button *b, char *txt);
