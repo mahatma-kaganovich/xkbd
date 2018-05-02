@@ -29,13 +29,12 @@ sub key{
 				$i++;
 			}
 			$i=($N<<1)+($n<<1);
+			$i+=2 if($N==1 && $k[0] eq $k[2] && $k[1] eq $k[3]);
 			for my $x ('mod','shift_mod'){
 				last if($i>$#{$_});
 				exists($s{$x})&&next;
-#				print STDERR "$i $_->[$i]\n";
 				my $y=$x.'_ks';
 				exists($s{$y})&&next;
-				print STDERR "$N:$i $x=$_->[$i]\n";
 				$s{$y}=$_->[$i];
 				$i++;
 			}
