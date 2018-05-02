@@ -25,25 +25,13 @@ GC _createGC(Display *display, Window win);
 
 int _XColorFromStr(Display *display, XColor *col, const char *defstr);
 
+char *button_set(char *txt);
+
 void button_set_layout(button *b, char *txt);
-
 void button_set_bg_col(button *b, char *txt);
-
 void button_set_fg_col(button *b, char *txt);
-
 void button_set_pixmap(button *b, char *txt);
-
-void button_set_txt(button *b, char *txt);
-
 void button_set_txt_ks(button *b, char *txt);
-
-void button_set_shift_txt(button *b, char *txt);
-
-void button_set_shift_ks(button *b, char *txt);
-
-void button_set_mod_txt(button *b, char *txt);
-
-void button_set_mod_ks(button *b, char *txt);
 void button_set_slide_ks(button *b, char *txt, int dir);
 int _button_get_txt_size(button *b, char *txt);
 int button_calc_c_width(button *b);
