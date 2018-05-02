@@ -132,6 +132,8 @@ typedef struct _button
   KeySym shift_ks;
   char *mod_txt;
   KeySym mod_ks;
+  char *shift_mod_txt;
+  KeySym shift_mod_ks;
 
   KeySym slide_up_ks;
   KeySym slide_down_ks;

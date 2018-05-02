@@ -24,14 +24,7 @@
 
 box* box_new(void)
 {
-  box *bx = NULL;
-  bx = malloc(sizeof(box));
-  bx->root_kid = NULL;
-  bx->tail_kid = NULL;
-  bx->act_width = 0;
-  bx->act_height = 0;
-  bx->parent = NULL;
-  return bx;
+  return calloc(1, sizeof(box));
 }
 
 button *box_add_button(box *bx, button *but)

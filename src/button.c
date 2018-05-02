@@ -162,12 +162,6 @@ void button_set_layout(button *b, char *txt)
   b->layout_switch = atoi(txt);
 }
 
-void button_set_txt(button *b, char *txt)
-{
-  b->default_txt = malloc(sizeof(char)*(strlen(txt)+1));
-  strcpy(b->default_txt,txt);
-}
-
 void button_set_txt_ks(button *b, char *txt)
 {
   if (strcmp(txt, "Caps_Lock") == 0 )
@@ -191,18 +185,6 @@ void button_set_txt_ks(button *b, char *txt)
     b->options |= OPT_OBEYCAPS;
 }
 
-void button_set_shift_txt(button *b, char *txt)
-{
-  b->shift_txt = malloc(sizeof(char)*(strlen(txt)+1));
-  strcpy(b->shift_txt,txt);
-}
-
-void button_set_shift_ks(button *b, char *txt)
-{
-  if ((b->shift_ks = XStringToKeysym(txt)) == (KeySym)NULL)
-    fprintf(stderr, "Cant find keysym for %s \n", txt); 
-}
-
 void button_set_slide_ks(button *b, char *txt, int dir)
 {
   KeySym tmp_ks;
@@ -221,17 +203,19 @@ void button_set_slide_ks(button *b, char *txt, int dir)
     }
 }
 
-
-void button_set_mod_txt(button *b, char *txt)
+char *button_set(char *txt)
 {
-  b->mod_txt = malloc(sizeof(char)*(strlen(txt)+1));
-  strcpy(b->mod_txt,txt);
+    char *res = malloc(sizeof(char)*(strlen(txt)+1));
+    strcpy(res, txt);
+    return res;
 }
 
-void button_set_mod_ks(button *b, char *txt)
+KeySym button_ks(char *txt)
 {
-  if ((b->mod_ks = XStringToKeysym(txt)) == (KeySym)NULL)
+  KeySym res;
+  if ((res = XStringToKeysym(txt)) == (KeySym)NULL)
     fprintf(stderr, "Cant find keysym for %s \n", txt); 
+  return res;
 }
 
 int _button_get_txt_size(button *b, char *txt)
@@ -350,34 +334,37 @@ void button_render(button *b, int mode)
 
   /* figure out what text to display 
      via keyboard state              */
-  if ( b->kb->state != KB_STATE_NORMAL ) 
-    {
-      if ( (b->kb->state & KB_STATE_SHIFT 
-	    || b->kb->state & KB_STATE_CAPS )
-	   && b->shift_txt != NULL )
-	{
-	   if (b->kb->state & KB_STATE_CAPS
-	       && b->kb->state & KB_STATE_SHIFT)
-	   {
-	      if (b->options & OPT_OBEYCAPS)
-		txt = b->default_txt;
-	      else
+  switch (b->kb->state) {
+    case KB_STATE_SHIFT|KB_STATE_CAPS|KB_STATE_MOD:
+	if (b->options & OPT_OBEYCAPS || !b->shift_mod_txt)
+		txt = b->mod_txt;
+	else
+		txt = b->shift_mod_txt;
+	break;
+    case KB_STATE_CAPS|KB_STATE_MOD:
+	if (b->options & OPT_OBEYCAPS && b->shift_mod_txt)
+		txt = b->shift_mod_txt;
+	else
+		txt = b->mod_txt;
+	break;
+    case KB_STATE_SHIFT|KB_STATE_MOD:
+	txt = b->shift_mod_txt?:b->mod_txt;
+	break;
+    case KB_STATE_MOD:
+	txt = b->mod_txt;
+	break;
+    case KB_STATE_SHIFT|KB_STATE_CAPS:
+	if (!(b->options & OPT_OBEYCAPS))
 		txt = b->shift_txt;
-	   } 
-	   else if (b->kb->state & KB_STATE_CAPS) 
-	   {
-	      if (b->options & OPT_OBEYCAPS)
-		 txt = b->shift_txt;
-
-	   }
-	   else txt = b->shift_txt;
-	} 
-      else if ( b->kb->state & KB_STATE_MOD 
-		&& b->mod_txt != NULL )
-	{
-	  txt = b->mod_txt;
-	}
-    }
+	break;
+    case KB_STATE_CAPS:
+	if (b->options & OPT_OBEYCAPS)
+		txt = b->shift_txt;
+	break;
+    case KB_STATE_SHIFT:
+	txt = b->shift_txt;
+	break;
+  }
 
   if (txt == NULL) txt = b->default_txt;
 
@@ -505,40 +492,18 @@ int button_get_abs_y(button *b)
 
 button* button_new(keyboard *k)
 {
-  button *b = NULL;
-  b = malloc(sizeof(button));
+  button *b = calloc(1, sizeof(button));
   b->kb = k;
-  b->default_txt = NULL;
-  b->shift_txt   = NULL;
-  b->mod_txt     = NULL;
-
-  b->default_ks     = 0; /* I hope 0 is safe ! */
-  b->shift_ks       = 0 ;  
-  b->mod_ks         = 0;
-
-  b->slide_up_ks    = 0;
-  b->slide_down_ks  = 0;
-  b->slide_left_ks  = 0;
-  b->slide_right_ks = 0;
-
-  b->c_width        = 0;
-  b->c_height       = 0;
-  b->is_width_spec  = False;
-  b->key_span_width = 0;
   
   b->slide = none;
 
   b->modifier    = BUT_NORMAL;
   b->options = OPT_NORMAL;  
-  b->b_size = 0;
-  b->pixmap      = NULL;
-  b->mask        = NULL;
   b->fg_gc      = k->gc;
   b->bg_gc      = k->rev_gc;
 
   b->layout_switch = -1;
 
-  b->parent = NULL;
   return b;
 }
 

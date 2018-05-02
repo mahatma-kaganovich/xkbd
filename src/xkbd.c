@@ -386,8 +386,7 @@ int main(int argc, char **argv)
       XSetWMHints(display, win, wm_hints );
 
       /* Tell the WM we dont want no borders */
-      mwm_hints = malloc(sizeof(PropMotifWmHints));
-      memset(mwm_hints, 0, sizeof(PropMotifWmHints));
+      mwm_hints = calloc(1, sizeof(PropMotifWmHints));
       
       mwm_hints->flags = MWM_HINTS_DECORATIONS;
       mwm_hints->decorations = 0;

@@ -434,19 +434,23 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		break;
 	      case keydef:
 		if (strcmp(tmpstr_A, "default") == 0)
-		  button_set_txt(tmp_but, tmpstr_C);
+		  tmp_but->default_txt = button_set(tmpstr_C);
 		else if (strcmp(tmpstr_A, "shift") == 0)
-		  button_set_shift_txt(tmp_but, tmpstr_C);
+		  tmp_but->shift_txt = button_set(tmpstr_C);
 		else if (strcmp(tmpstr_A, "switch") == 0)
 		  button_set_layout(tmp_but, tmpstr_C);
 		else if (strcmp(tmpstr_A, "mod") == 0)
-		  button_set_mod_txt(tmp_but, tmpstr_C); 
+		  tmp_but->mod_txt = button_set(tmpstr_C); 
+		else if (strcmp(tmpstr_A, "shift_mod") == 0)
+		  tmp_but->shift_mod_txt = button_set(tmpstr_C);
 		else if (strcmp(tmpstr_A, "default_ks") == 0)
 		  button_set_txt_ks(tmp_but, tmpstr_C);
 		else if (strcmp(tmpstr_A, "shift_ks") == 0)
-		  button_set_shift_ks(tmp_but, tmpstr_C);
+		  tmp_but->shift_ks =button_ks(tmpstr_C);
 		else if (strcmp(tmpstr_A, "mod_ks") == 0)
-		  button_set_mod_ks(tmp_but, tmpstr_C); 
+		  tmp_but->mod_ks = button_ks(tmpstr_C); 
+		else if (strcmp(tmpstr_A, "shift_mod_ks") == 0)
+		  tmp_but->shift_mod_ks = button_ks(tmpstr_C);
 #ifdef USE_XPM
 		else if (strcmp(tmpstr_A, "img") == 0)
 		  { button_set_pixmap(tmp_but, tmpstr_C); }
@@ -975,23 +979,38 @@ void kb_send_keypress(button *b)
 
   struct keycodeEntry vk_keycodes[10];
 
-  if (b->kb->state & KB_STATE_SHIFT || b->kb->state & KB_STATE_CAPS)
-  {
-    if (b->kb->state & KB_STATE_SHIFT && b->kb->state & KB_STATE_CAPS)
-      {
-	if (b->options & OPT_OBEYCAPS)
-	  ks = b->default_ks;
-	else 
-	  ks = b->shift_ks;
-      }
-    else if (b->kb->state & KB_STATE_CAPS)
-      {
-	if (b->options & OPT_OBEYCAPS)
-	  ks = b->shift_ks;
-      } else ks = b->shift_ks;
+  switch (b->kb->state) {
+    case KB_STATE_SHIFT|KB_STATE_CAPS|KB_STATE_MOD:
+	if (b->options & OPT_OBEYCAPS || !b->shift_mod_ks)
+		ks = b->mod_ks;
+	else
+		ks = b->shift_mod_ks;
+	break;
+    case KB_STATE_CAPS|KB_STATE_MOD:
+	if (b->options & OPT_OBEYCAPS && b->shift_mod_ks)
+		ks = b->shift_mod_ks;
+	else
+		ks = b->mod_ks;
+	break;
+    case KB_STATE_SHIFT|KB_STATE_MOD:
+	ks = b->shift_mod_ks?:b->mod_ks;
+	break;
+    case KB_STATE_MOD:
+	ks = b->mod_ks;
+	break;
+    case KB_STATE_SHIFT|KB_STATE_CAPS:
+	if (!(b->options & OPT_OBEYCAPS))
+		ks = b->shift_ks;
+	break;
+    case KB_STATE_CAPS:
+	/* xkbd track self? */
+//	if (b->options & OPT_OBEYCAPS)
+//		ks = b->shift_ks;
+	break;
+    case KB_STATE_SHIFT:
+	ks = b->shift_ks;
+	break;
   }
-  else if (b->kb->state & KB_STATE_MOD)
-    ks = b->mod_ks;
 
   if (b->slide != none)
     {
@@ -999,15 +1018,18 @@ void kb_send_keypress(button *b)
 	{
 	  case up :
 	    ks = b->slide_up_ks;
-	    if (ks == 0) ks = b->shift_ks;
+//	    if (ks == 0) ks = b->shift_ks;
+	    if (ks == 0 && (b->kb->state & KB_STATE_SHIFT)) ks = b->shift_ks;
 	    break;
 	  case down : /* hold ctrl */
 	    ks = b->slide_down_ks;
-	    if (ks == 0) slide_flag = KB_STATE_CTRL;
+//	    if (ks == 0) slide_flag = KB_STATE_CTRL;
+	    if (!ks && (b->kb->state & KB_STATE_CTRL)) slide_flag = KB_STATE_CTRL;
 	    break;
 	  case left : /* hold alt */
 	    ks = b->slide_left_ks;
-	    if (ks == 0) 
+//	    if (ks == 0)
+	    if (ks == 0 && (b->kb->state & KB_STATE_MOD))
 	      {
 		ks = b->mod_ks;
 		slide_flag = KB_STATE_MOD;
