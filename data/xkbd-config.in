@@ -71,8 +71,10 @@ sub key{
 				$y=~s/_//g;
 			}elsif(exists($u{$y})){
 				$y=$u{$y};
-			}elsif($lc && (($y1=charnames::vianame("$y accent")) || ($y1=charnames::vianame($y)))){
+			}elsif($lc && ($y1=charnames::vianame("combining $y accent"))){
 				$u{$y}=$y=chr($y1);
+#			}elsif($lc && (($y1=charnames::vianame("$y accent")) || ($y1=charnames::vianame($y)))){
+#				$u{$y}=$y=chr($y1);
 			}
 			$u{$y0}=$y;
 		    }
