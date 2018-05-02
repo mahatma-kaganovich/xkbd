@@ -340,29 +340,29 @@ void button_render(button *b, int mode)
 		txt = b->mod_txt;
 	else
 		txt = b->shift_mod_txt;
+	if (txt) break;
+    case KB_STATE_SHIFT|KB_STATE_CAPS:
+	if (!(b->options & OPT_OBEYCAPS))
+		txt = b->shift_txt;
 	break;
     case KB_STATE_CAPS|KB_STATE_MOD:
 	if (b->options & OPT_OBEYCAPS && b->shift_mod_txt)
 		txt = b->shift_mod_txt;
 	else
 		txt = b->mod_txt;
-	break;
-    case KB_STATE_SHIFT|KB_STATE_MOD:
-	txt = b->shift_mod_txt?:b->mod_txt;
-	break;
-    case KB_STATE_MOD:
-	txt = b->mod_txt;
-	break;
-    case KB_STATE_SHIFT|KB_STATE_CAPS:
-	if (!(b->options & OPT_OBEYCAPS))
-		txt = b->shift_txt;
-	break;
+	if (txt) break;
     case KB_STATE_CAPS:
 	if (b->options & OPT_OBEYCAPS)
 		txt = b->shift_txt;
 	break;
+    case KB_STATE_SHIFT|KB_STATE_MOD:
+	txt = b->shift_mod_txt?:b->mod_txt;
+	break;
     case KB_STATE_SHIFT:
 	txt = b->shift_txt;
+	if (txt) break;
+    case KB_STATE_MOD:
+	txt = b->mod_txt;
 	break;
   }
 

@@ -21,17 +21,28 @@ sub key{
 			my $i=($n<<1);
 			for my $x ('default','shift'){
 				my $y=$x.'_ks';
-				if((!exists($s{$y}) || $s{$y} ne $_->[$i]) && $_->[$i] ne 'NoSymbol' && $_->[$i] ne ''){
+				if($i<=$#{$_} && (!exists($s{$y}) || $s{$y} ne $_->[$i]) && $_->[$i] ne 'NoSymbol' && $_->[$i] ne ''){
 					$s{$y}=$_->[$i] if(!($x eq 'shift' && $_->[$i-1] eq $_->[$i]));
 					$n && delete($s{$x});
 				}
+				$i++;
+			}
+			$i=($N<<1)+($n<<1);
+			for my $x ('mod','shift_mod'){
+				last if($i>$#{$_});
+				exists($s{$x})&&next;
+#				print STDERR "$i $_->[$i]\n";
+				my $y=$x.'_ks';
+				exists($s{$y})&&next;
+				print STDERR "$N:$i $x=$_->[$i]\n";
+				$s{$y}=$_->[$i];
 				$i++;
 			}
 			last;
 		}
 		$cnt || return '';
 	}
-	for my $x ('default','shift','mod'){
+	for my $x ('default','shift','mod','shift_mod'){
 		exists($s{$x})&&next;
 		my $y=$x.'_ks';
 		exists($s{$y})||next;
@@ -106,9 +117,9 @@ for('grey_col','kp_col'){
 	$p{$_}=defined($x)?$x:'0:0:0';
 }
 
-#for(@k){$n{$#{$_}>>1}++ if(length($_->[0])==1);}
-#($n)=((sort{$n{$b}<=>$n{$a}}keys %n));
-#$n++;
+#for(@k){$N{$#{$_}>>1}++ if(length($_->[0])==1);}
+#($N)=((sort{$N{$b}<=>$N{$a}}keys %n));
+#$N++;
 
 open F,'-|','setxkbmap -query' or die $!;
 while(defined($s=<F>)){
@@ -119,19 +130,19 @@ while(defined($s=<F>)){
 }
 close(F);
 @layouts||die "ERROR: no keyboard layouts from 'setxkbmap -query'";
-$n=$#layouts+1;
+$N=$#layouts+1;
 
 ($l)=$k=~/(<layout>.*<\/layout>)/gs;
 
 $k=~s/[ 	]*(<key>.*?<\/key>)/key($1,0)/gse;
-$k=~s/switch 0/switch 1/ if($n>1);
+$k=~s/switch 0/switch 1/ if($N>1);
 utf8::encode($k);
 print $k;
 
-for(2..$n){
+for(2..$N){
 	$l1=$l;
 	$l1=~s/[ 	]*(<key>.*?<\/key>)/key($1,$_-1)/gse;
-	$l1=~s/switch 0/switch $_/ if($_<$n);
+	$l1=~s/switch 0/switch $_/ if($_<$N);
 	utf8::encode($l1);
 	print "\n",$l1;
 }

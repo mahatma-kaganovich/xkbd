@@ -985,30 +985,30 @@ void kb_send_keypress(button *b)
 		ks = b->mod_ks;
 	else
 		ks = b->shift_mod_ks;
+	if (ks) break;
+    case KB_STATE_SHIFT|KB_STATE_CAPS:
+	if (!(b->options & OPT_OBEYCAPS))
+		ks = b->shift_ks;
 	break;
     case KB_STATE_CAPS|KB_STATE_MOD:
 	if (b->options & OPT_OBEYCAPS && b->shift_mod_ks)
 		ks = b->shift_mod_ks;
 	else
 		ks = b->mod_ks;
-	break;
-    case KB_STATE_SHIFT|KB_STATE_MOD:
-	ks = b->shift_mod_ks?:b->mod_ks;
-	break;
-    case KB_STATE_MOD:
-	ks = b->mod_ks;
-	break;
-    case KB_STATE_SHIFT|KB_STATE_CAPS:
-	if (!(b->options & OPT_OBEYCAPS))
-		ks = b->shift_ks;
-	break;
+	if (ks) break;
     case KB_STATE_CAPS:
 	/* xkbd track self? */
 //	if (b->options & OPT_OBEYCAPS)
 //		ks = b->shift_ks;
 	break;
+    case KB_STATE_SHIFT|KB_STATE_MOD:
+	ks = b->shift_mod_ks?:b->mod_ks;
+	if (ks) break;
     case KB_STATE_SHIFT:
 	ks = b->shift_ks;
+	break;
+    case KB_STATE_MOD:
+	ks = b->mod_ks;
 	break;
   }
 
