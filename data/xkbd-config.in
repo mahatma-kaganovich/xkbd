@@ -13,6 +13,7 @@ sub key{
 		my $d=$s{'default_ks'};
 		my $sh;
 		my $cnt=exists($s{'default'});
+		$s{'shift_mod_ks'}=$s{'mod_ks'} if(exists($s{'mod_ks'}) && !exists($s{'shift_mod_ks'}));
 		for(@k){
 			next if($_->[0] ne $d);
 			$sh=$_->[1];
