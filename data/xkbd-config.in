@@ -1,5 +1,6 @@
 #!/usr/bin/perl
 # generate xkbd config for "us,..." multi-layout
+use charnames qw(:full :short :loose);
 
 sub key{
 	my ($s,$n)=@_;
@@ -57,10 +58,24 @@ sub key{
 			}
 		}
 		$y=~s/^KP_//;
-		if(exists($u{$y})){
+		if(length($y)>1){
+		    if(exists($u{$y})){
 			$y=$u{$y};
-		}elsif(length($y)>1){
-			$y=~s/_//g or $y=~s/^U([0-9A-F]{4})$/chr(hex($1))/e;
+		    }else{
+			my $y0=$u;
+			my ($lc,$y1);
+			if($y=~s/^U([0-9A-F]{4})$/chr(hex($1))/e){
+			}elsif(($lc=lc($y) eq $y) && ($y1=charnames::vianame($y))){
+				$y=chr($y1);
+			}elsif(!($y=~s/^dead_//)){
+				$y=~s/_//g;
+			}elsif(exists($u{$y})){
+				$y=$u{$y};
+			}elsif($lc && (($y1=charnames::vianame("$y accent")) || ($y1=charnames::vianame($y)))){
+				$u{$y}=$y=chr($y1);
+			}
+			$u{$y0}=$y;
+		    }
 		}
 		$s{$x}=$y if($y=~/\S/);
 	}
