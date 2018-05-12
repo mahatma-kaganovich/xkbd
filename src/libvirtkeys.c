@@ -665,13 +665,15 @@ void ksText(KeySym ks, char **txt)
 	struct ks2unicode *k2u;
 
 	if (!ks || *txt) return;
-	n=0;
-	for(k2u = (struct ks2unicode*)&ks2u; k2u->ks && k2u->ks!=ks; k2u+=sizeof(*k2u)){}
-	if(!k2u->ks) {
-		*txt=XKeysymToString(ks);
-		return;
+	if (ks > 0x01000000){
+		wc = ks - 0x01000000;
+	} else {
+		for(k2u = (struct ks2unicode*)&ks2u; k2u->ks && k2u->ks!=ks; k2u+=sizeof(*k2u)){};
+		if(!(wc=k2u->u)) {
+			*txt=XKeysymToString(ks);
+			return;
+		}
 	}
-	wc=k2u->u;
 	if (wc < 0x000080) {
 		n=1;
 		s[0]=(char)wc;
@@ -690,6 +692,9 @@ void ksText(KeySym ks, char **txt)
 		s[2] = (char) (0x80 | (wc & 0x3F)); wc >>= 6;
 		s[1] = (char) (0x80 | (wc & 0x3F)); wc >>= 6;
 		s[0] = (char) (0xF0 | wc);
+	} else {
+		*txt=XKeysymToString(ks);
+		return;
 	}
 	s[n]=0;
 	*txt = malloc(n);

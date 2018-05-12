@@ -14,7 +14,8 @@ sub key{
 		my $d=$s{'default_ks'};
 		my $sh;
 		my $cnt=exists($s{'default'});
-		$s{'shift_mod_ks'}=$s{'mod_ks'} if(exists($s{'mod_ks'}) && !exists($s{'shift_mod_ks'}));
+		# now - in binary (must)
+#		$s{'shift_mod_ks'}=$s{'mod_ks'} if(exists($s{'mod_ks'}) && !exists($s{'shift_mod_ks'}));
 		for(@k){
 			next if($_->[0] ne $d);
 			$sh=$_->[1];
@@ -29,16 +30,17 @@ sub key{
 				}
 				$i++;
 			}
-			$i=($N<<1)+($n<<1);
-			$i+=2 if($N==1 && $k[0] eq $k[2] && $k[1] eq $k[3]);
-			for my $x ('mod','shift_mod'){
-				last if($i>$#{$_});
-				exists($s{$x})&&next;
-				my $y=$x.'_ks';
-				exists($s{$y})&&next;
-				$s{$y}=$_->[$i];
-				$i++;
-			}
+			# now - in binary (must)
+#			$i=($N<<1)+($n<<1);
+#			$i+=2 if($N==1 && $k[0] eq $k[2] && $k[1] eq $k[3]);
+#			for my $x ('mod','shift_mod'){
+#				last if($i>$#{$_});
+#				exists($s{$x})&&next;
+#				my $y=$x.'_ks';
+#				exists($s{$y})&&next;
+#				$s{$y}=$_->[$i];
+#				$i++;
+#			}
 			last;
 		}
 		$cnt || return '';
