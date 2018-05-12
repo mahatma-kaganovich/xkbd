@@ -30,8 +30,6 @@ button *kb_handle_events(keyboard *kb, XEvent an_event);
 Bool kb_do_repeat(keyboard *kb, button *active_but);
 void kb_set_slide(button *active_but, int x, int y);
 int kb_process_keypress(button *active_but);
-int kb_find_keycode(keyboard *kb, KeySym keysym, 
-		    KeyCode *code_ret, int *col_ret);
 button * kb_find_button(keyboard *kb, int x, int y);
 int _XColorFromStr(Display *display, XColor *col, const char *defstr);
 

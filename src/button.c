@@ -449,7 +449,6 @@ void button_render(button *b, int mode)
 		    );
       }
     }
-
 }
 
 void button_paint(button *b)
@@ -506,9 +505,5 @@ button* button_new(keyboard *k)
 
   return b;
 }
-
-
-
-
 
 

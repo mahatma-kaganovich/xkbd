@@ -212,6 +212,8 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 
   kb->backing = 0;
 
+  setupKeyboardVariables(kb->display);
+
   if ((rcfp = fopen(conf_file, "r")) == NULL)
     { 
       fprintf(stderr, "xkbd: Cant open conf file: %s\n", conf_file);
@@ -245,6 +247,13 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		case keydef:
 		  button_calc_c_width(tmp_but);
 		  button_calc_c_height(tmp_but);
+		  ksMap(tmp_but->default_ks, &tmp_but->shift_ks, &tmp_but->shift_txt, BUT_SHIFT);
+		  ksMap(tmp_but->default_ks, &tmp_but->mod_ks, &tmp_but->mod_txt, BUT_MOD);
+		  ksMap(tmp_but->shift_ks, &tmp_but->shift_mod_ks, &tmp_but->shift_mod_txt, BUT_SHIFT);
+		  ksText(tmp_but->default_ks, &tmp_but->default_txt);
+		  ksText(tmp_but->shift_ks, &tmp_but->shift_txt);
+		  ksText(tmp_but->mod_ks, &tmp_but->mod_txt);
+		  ksText(tmp_but->shift_mod_ks, &tmp_but->shift_mod_txt);
 		  break;
 		case none:
 		  break;
@@ -446,7 +455,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		else if (strcmp(tmpstr_A, "default_ks") == 0)
 		  button_set_txt_ks(tmp_but, tmpstr_C);
 		else if (strcmp(tmpstr_A, "shift_ks") == 0)
-		  tmp_but->shift_ks =button_ks(tmpstr_C);
+		  tmp_but->shift_ks = button_ks(tmpstr_C);
 		else if (strcmp(tmpstr_A, "mod_ks") == 0)
 		  tmp_but->mod_ks = button_ks(tmpstr_C); 
 		else if (strcmp(tmpstr_A, "shift_mod_ks") == 0)
@@ -615,8 +624,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 
 
   kb->vbox = kb->kbd_layouts[0];
-  setupKeyboardVariables(kb->display);
-  
+
   return kb;
   
 }
@@ -742,39 +750,17 @@ kb_switch_layout(keyboard *kb, int kbd_layout_num)
 
 void kb_render(keyboard *kb)
 {
-  list *listp;
-  box *tmp_box = NULL;
-  
-  listp = kb->vbox->root_kid;
-  while (listp != NULL)
-    {
-      list *ip;
-      
-      button *tmp_but = NULL;
-      tmp_box = (box *)listp->data;
-      
-      ip = tmp_box->root_kid;
-      
-      while (ip != NULL)
-	{
-	  tmp_but = (button *)ip->data;
-	  if (tmp_but->modifier & kb->state_locked)
-	    {
-
-	      button_render(tmp_but, BUTTON_LOCKED);
-	    }
-	  else if (tmp_but->modifier & kb->state)
-	    {
-
-	      button_render(tmp_but, BUTTON_PRESSED);
-	    } else {
-
-	      button_render(tmp_but, BUTTON_RELEASED);
-	    }
-	  ip = ip->next;
+	list *listp = kb->vbox->root_kid;
+	box *tmp_box;
+	while (listp != NULL) {
+		list *ip = ((box *)listp->data)->root_kid;
+		while (ip != NULL) {
+			button *tmp_but = (button *)ip->data;
+			button_render(tmp_but, (tmp_but->modifier & kb->state_locked)?BUTTON_LOCKED:(tmp_but->modifier & kb->state)?BUTTON_PRESSED:BUTTON_RELEASED);
+			ip = ip->next;
+		}
+		listp = listp->next;
 	}
-      listp = listp->next;
-    }
 }
 
 void kb_paint(keyboard *kb)
@@ -949,29 +935,6 @@ int kb_process_keypress(button *active_but)
   return new_state;
 }
 
-int kb_find_keycode(keyboard *kb, KeySym keysym, 
-		    KeyCode *code_ret, int *col_ret)
-{ /* Thanks carl ! */
-  int col;
-  int keycode;
-  KeySym k;
-  int min_kc, max_kc;
-
-  XDisplayKeycodes(kb->display, &min_kc, &max_kc);
-
-  for (keycode = min_kc; keycode <= max_kc; keycode++) {
-    for (col = 0; (k = XkbKeycodeToKeysym (kb->display, keycode, col, 0)) 
-	   != NoSymbol; col++)
-      if (k == keysym) {
-	*code_ret = keycode;
-	if (col_ret) *col_ret = col;
-	return 1;
-      }
-  }
-  return 0;
-}
-
-
 void kb_send_keypress(button *b)
 {
   KeySym ks = 0;  
@@ -1141,12 +1104,3 @@ void kb_destroy(keyboard *kb)
 
   free(kb);
 }
-
-
-
-
-
-
-
-
-

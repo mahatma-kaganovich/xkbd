@@ -78,6 +78,9 @@ void sendKeySequence(struct keycodeEntry *entries, int controlMode, int metaMode
 
 void sendKey(KeyCode character, enum keyDirection keydirection);
 
+void ksText(KeySym ks, char **txt);
+void ksMap(KeySym ks, KeySym *ks1, char **txt1, unsigned int mod);
+
 #ifdef __cplusplus
 }
 #endif
