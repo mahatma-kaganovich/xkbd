@@ -18,7 +18,7 @@ xkbd_realize(Display *display,
 		     width, height, conf_file,
 		     font_name, flags  );
    xkbd->active_but = NULL;
-   xkbd_sync_state(xkbd, 0);
+   xkbd_sync_state(xkbd);
    kb_size(xkbd->kb);
    return xkbd;
 }
@@ -84,17 +84,12 @@ unsigned int _set_state(unsigned int *s, unsigned int new)
 }
 
 
-void xkbd_sync_state(Xkbd *xkbd, int draw)
+unsigned int xkbd_sync_state(Xkbd *xkbd)
 {
 	unsigned int ch=0;
 	int i=0;
 	Display *dpy = xkbd->kb->display;
 
-	if (!draw && Xkb_sync) {
-		/* vs. some annoying X errors, reset state on start in sync mode */
-		XkbLockModifiers(dpy,XkbUseCoreKbd,0xffff,0);
-		XkbLatchModifiers(dpy,XkbUseCoreKbd,0xffff,0);
-	}
 	XkbGetState(dpy, XkbUseCoreKbd, Xkb_state);
 	// fprintf(stderr,"group=%x mods=%x latch=%x lock=%x\n",Xkb_state->group,Xkb_state->mods,Xkb_state->latched_mods,Xkb_state->locked_mods);
 	ch|=_set_state(&xkbd->kb->state, Xkb_state->mods)|_set_state(&xkbd->kb->state_locked, Xkb_state->locked_mods);
@@ -106,10 +101,6 @@ void xkbd_sync_state(Xkbd *xkbd, int draw)
 		}
 	}
 //	XkbGetIndicatorState(dpy,XkbUseCoreKbd,&i);
-	if(ch) {
-		kb_render(xkbd->kb);
-		kb_paint(xkbd->kb);
-//		xkbd_repaint(xkbd);
-	}
+	return ch;
 }
 

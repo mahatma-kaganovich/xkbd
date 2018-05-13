@@ -266,6 +266,9 @@ int main(int argc, char **argv)
 	mjr = XkbMajorVersion;
 	mnr = XkbMinorVersion;
 	display = XkbOpenDisplay(display_name, &xkbEventType, &xkbError, &mjr, &mnr, &reason_rtrn);
+	/* vs. some annoying X errors, reset state on start in sync mode */
+	XkbLockModifiers(display,XkbUseCoreKbd,0xffff,0);
+	XkbLatchModifiers(display,XkbUseCoreKbd,0xffff,0);
    } else {
 	display = XOpenDisplay(display_name);
     }
@@ -491,7 +494,11 @@ int main(int argc, char **argv)
 		default: if (ev.type == xkbEventType) {
 			switch (((XkbEvent)ev).any.xkb_type) {
 			    case XkbStateNotify :
-				xkbd_sync_state(kb, 1);
+				if (xkbd_sync_state(kb)) {
+					kb_render(kb->kb);
+					kb_paint(kb->kb);
+					// xkbd_repaint(xkbd);
+				}
 				break;
 			}
 		}

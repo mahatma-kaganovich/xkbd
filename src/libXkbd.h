@@ -42,4 +42,4 @@ Bool xkbd_process_repeats(Xkbd *xkbd);
 int xkbd_get_width(Xkbd *xkbd);
 int xkbd_get_height(Xkbd *xkbd);
 void xkbd_destroy(Xkbd *xkbd);
-void xkbd_sync_state(Xkbd *xkbd, int draw);
+unsigned int xkbd_sync_state(Xkbd *xkbd);
