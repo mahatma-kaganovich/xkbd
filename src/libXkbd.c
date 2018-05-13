@@ -75,23 +75,24 @@ xkbd_destroy(Xkbd *kb)
 
 }
 
-int _set_state(unsigned int *s, unsigned int new)
+unsigned int _set_state(unsigned int *s, unsigned int new)
 {
-	unsigned int r = (*s & KB_STATE_KNOWN)^(new & KB_STATE_KNOWN);
-	*s ^= r;
-	return r!=0;
+	unsigned int old = *s & KB_STATE_KNOWN;
+	new &= KB_STATE_KNOWN;
+	*s = (*s & ~KB_STATE_KNOWN)|new;
+	return old^new;
 }
 
 
 void xkbd_sync_state(Xkbd *xkbd, int draw)
 {
-	int ch=0;
+	unsigned int ch=0;
 	int i=0;
 	Display *dpy = xkbd->kb->display;
 
 	XkbGetState(dpy, XkbUseCoreKbd, Xkb_state);
 	// fprintf(stderr,"group=%x mods=%x latch=%x lock=%x\n",Xkb_state->group,Xkb_state->mods,Xkb_state->latched_mods,Xkb_state->locked_mods);
-	ch+=_set_state(&xkbd->kb->state, Xkb_state->mods)+_set_state(&xkbd->kb->state_locked, Xkb_state->locked_mods);
+	ch|=_set_state(&xkbd->kb->state, Xkb_state->mods)|_set_state(&xkbd->kb->state_locked, Xkb_state->locked_mods);
 	for (i=0; i<xkbd->kb->total_layouts; i++){
 		if (xkbd->kb->kbd_layouts[i] == xkbd->kb->vbox && i!=Xkb_state->group) {
 			kb_switch_layout(xkbd->kb,Xkb_state->group);
