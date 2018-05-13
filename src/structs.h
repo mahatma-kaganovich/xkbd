@@ -27,23 +27,23 @@
 #define BUTTON_RELEASED 1
 #define BUTTON_LOCKED   2
 
-#define KB_STATE_NORMAL 0
-#define KB_STATE_SHIFT  1
-#define KB_STATE_CAPS   (1<<1)
-#define KB_STATE_CTRL   (1<<2)
-#define KB_STATE_ALT    (1<<3)
-#define KB_STATE_META   (1<<4)
-#define KB_STATE_MOD    (1<<5)
+#define KB_STATE_NORMAL 0U
+#define KB_STATE_SHIFT  1U
+#define KB_STATE_CAPS   (1U<<1)
+#define KB_STATE_CTRL   (1U<<2)
+#define KB_STATE_ALT    (1U<<3)
+#define KB_STATE_META   (1U<<4)
+#define KB_STATE_MOD    (1U<<5)
 
 #define KB_STATE_KNOWN  (KB_STATE_SHIFT|KB_STATE_CTRL|KB_STATE_ALT|KB_STATE_CAPS)
 
-#define BUT_NORMAL 0
-#define BUT_SHIFT  1
-#define BUT_CAPS   (1<<1)
-#define BUT_CTRL   (1<<2)
-#define BUT_ALT    (1<<3)
-#define BUT_META   (1<<4)
-#define BUT_MOD    (1<<5)
+#define BUT_NORMAL 0U
+#define BUT_SHIFT  1U
+#define BUT_CAPS   (1U<<1)
+#define BUT_CTRL   (1U<<2)
+#define BUT_ALT    (1U<<3)
+#define BUT_META   (1U<<4)
+#define BUT_MOD    (1U<<5)
 
 #define OPT_NORMAL      0
 #define OPT_OBEYCAPS    (1<<0)
