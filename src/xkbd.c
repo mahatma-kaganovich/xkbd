@@ -44,6 +44,7 @@ Window   win;
 int      screen_num;
 
 int Xkb_sync = 0;
+int no_lock = 0;
 XkbStateRec Xkb_state[1];
 
 enum {
@@ -148,6 +149,7 @@ void usage(void)
    printf("  -c  Dock\n");
    printf("  -s  strut\n");
    printf("  -X  Xkb state interaction\n");
+   printf("  -l  disable modifiers lock\n");
    printf("  -v  version\n");
    printf("  -h  this help\n\n");
 }
@@ -241,6 +243,9 @@ int main(int argc, char **argv)
 	       break;
 	    case 'X' :
 	       Xkb_sync = 1;
+	       break;
+	    case 'l' :
+	       no_lock = 1;
 	       break;
 	    case 'n' :
 	       use_normal_win = True;

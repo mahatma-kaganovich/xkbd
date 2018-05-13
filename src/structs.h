@@ -183,6 +183,7 @@ typedef struct _button
 } button;
 
 extern int Xkb_sync;
+extern int no_lock;
 extern XkbStateRec Xkb_state[1];
 
 

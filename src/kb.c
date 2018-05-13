@@ -896,31 +896,43 @@ int kb_process_keypress(button *active_but)
 	state ^= KB_STATE_CAPS;
 	DBG("got caps key - %i \n", state);
     } else if (mod) {
-	if (active_but->kb->state_locked & mod) { /* was locked then unset & unlock */
-		active_but->kb->state_locked ^= mod;
+	if (lock & mod) {
+		lock ^= mod;
 		state ^= mod;
-	} else if (state & mod) { /* was set then lock */
-		active_but->kb->state_locked ^= mod;
-	} else { /* was unset then set */
+	} else if (state ^ mod) {
 		state ^= mod;
+	} else if (no_lock) {
+		state ^= mod;
+		keypress = 0; /* do not activate grp:ctrl_shift_toggle */
+	} else {
+		lock ^= mod;
+		keypress = 0;
 	}
 	DBG("got a modifier key - %i \n", state);
-    } else if (state & !KB_STATE_CAPS) {
+    } else if (state & ~KB_STATE_CAPS) {
 	/* check if the kbd is already in a state and reset it
 	   leaving caps key state alone */
 	state &= KB_STATE_CAPS;
-	state |= active_but->kb->state_locked;
+	state |= lock;
 	DBG("kbd is shifted, unshifting - %i \n", state);
     }
 
-    if (Xkb_sync && (mod & (KB_STATE_KNOWN^KB_STATE_CAPS))) {
-	if (state == active_but->kb->state) return state;
-	XkbLatchModifiers(active_but->kb->display,XkbUseCoreKbd,KB_STATE_KNOWN,state);
-    } 
+    if (mod & ~KB_STATE_CAPS) {
+	/* strange ("unKNOWN") combinations do "X Error"
+	   keep them virtual & change whole KNOWN mask only */
+	if (Xkb_sync && (mod & KB_STATE_KNOWN)) {
+		if (state != active_but->kb->state)
+			XkbLatchModifiers(active_but->kb->display,XkbUseCoreKbd,KB_STATE_KNOWN,state & KB_STATE_KNOWN);
+		if (lock != active_but->kb->state_locked)
+			XkbLockModifiers(active_but->kb->display,XkbUseCoreKbd,KB_STATE_KNOWN,lock & KB_STATE_KNOWN);
+	}
+	active_but->kb->state_locked = lock;
+    }
 
-    /* Xkb_sync caps too */
-    kb_send_keypress(active_but);
-    DBG("%s clicked \n", active_but->default_txt);
+    if (keypress) {
+	kb_send_keypress(active_but);
+	DBG("%s clicked \n", active_but->default_txt);
+    }
 
     /* real precise state for Xkb_sync will be reached by event,
        so try to be just visually pretty sensitive */

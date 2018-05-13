@@ -90,6 +90,11 @@ void xkbd_sync_state(Xkbd *xkbd, int draw)
 	int i=0;
 	Display *dpy = xkbd->kb->display;
 
+	if (!draw && Xkb_sync) {
+		/* vs. some annoying X errors, reset state on start in sync mode */
+		XkbLockModifiers(dpy,XkbUseCoreKbd,0xffff,0);
+		XkbLatchModifiers(dpy,XkbUseCoreKbd,0xffff,0);
+	}
 	XkbGetState(dpy, XkbUseCoreKbd, Xkb_state);
 	// fprintf(stderr,"group=%x mods=%x latch=%x lock=%x\n",Xkb_state->group,Xkb_state->mods,Xkb_state->latched_mods,Xkb_state->locked_mods);
 	ch|=_set_state(&xkbd->kb->state, Xkb_state->mods)|_set_state(&xkbd->kb->state_locked, Xkb_state->locked_mods);
