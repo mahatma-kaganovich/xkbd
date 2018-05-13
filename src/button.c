@@ -1,4 +1,4 @@
-/* 
+/*
    xkbd - xlib based onscreen keyboard.
 
    Copyright (C) 2001 Matthew Allum
@@ -27,12 +27,12 @@
 
 
 
-int max3( int a, int b, int c ) 
-{ 
-  int rval; 
-  rval = a; 
-  if( b>rval ) rval=b; 
-  if( c>rval ) rval=c; 
+int max3( int a, int b, int c )
+{
+  int rval;
+  rval = a;
+  if( b>rval ) rval=b;
+  if( c>rval ) rval=c;
   return( rval );
 }
 
@@ -40,20 +40,20 @@ GC _createGC(Display *display, Window win)
 {
   GC gc;
   unsigned long valuemask = 0;
-  XGCValues values;		
-  unsigned int line_width = 1;	
-  int line_style = LineSolid;	
-  int cap_style = CapRound;	
-  int join_style = JoinRound;	
+  XGCValues values;
+  unsigned int line_width = 1;
+  int line_style = LineSolid;
+  int cap_style = CapRound;
+  int join_style = JoinRound;
 
 
   gc = XCreateGC(display, win, valuemask, &values);
-  XSetForeground(display, gc, 
+  XSetForeground(display, gc,
 		 BlackPixel(display, DefaultScreen(display) ));
-  XSetBackground(display, gc, 
+  XSetBackground(display, gc,
 		 WhitePixel(display, DefaultScreen(display) ));
-  
-  XSetLineAttributes(display, gc, line_width, line_style, 
+
+  XSetLineAttributes(display, gc, line_width, line_style,
 		     cap_style, join_style );
 
   XSetFillStyle(display, gc, FillSolid);
@@ -73,11 +73,11 @@ int _XColorFromStr(Display *display, XColor *col, const char *defstr)
   if ((strchr(defstr, delim[0]) != NULL)
       || (strchr(defstr, delim[1]) != NULL) )
   {
-     token = strsep (&str, delim); 
-     col->red = ( atoi(token) * 65535 ) / 255; 
-     token = strsep (&str, delim); 
+     token = strsep (&str, delim);
+     col->red = ( atoi(token) * 65535 ) / 255;
+     token = strsep (&str, delim);
      col->green = ( atoi(token) * 65535 ) / 255;
-     token = strsep (&str, delim); 
+     token = strsep (&str, delim);
      col->blue = ( atoi(token) * 65535 ) / 255;
 
      return XAllocColor(display,
@@ -145,11 +145,11 @@ void button_set_pixmap(button *b, char *filename)
   valuemask = GCClipMask;
   XChangeGC(b->kb->display, b->mask_gc, valuemask, &gc_vals);
   */
-  XSetForeground(b->kb->display, b->mask_gc, 
+  XSetForeground(b->kb->display, b->mask_gc,
 		 WhitePixel(b->kb->display, DefaultScreen(b->kb->display) ));
-  XSetBackground(b->kb->display, b->mask_gc, 
+  XSetBackground(b->kb->display, b->mask_gc,
 		 BlackPixel(b->kb->display, DefaultScreen(b->kb->display) ));
-  
+
   XSetClipMask(b->kb->display, b->mask_gc, *(b->mask));
 
   b->c_width  = attrib.width;
@@ -178,7 +178,7 @@ void button_set_txt_ks(button *b, char *txt)
   { b->modifier = BUT_MOD; b->default_ks = 0; return; }
 
   if ((b->default_ks = XStringToKeysym(txt)) == (KeySym)NULL)
-    fprintf(stderr, "Cant find keysym for %s \n", txt); 
+    fprintf(stderr, "Cant find keysym for %s \n", txt);
 
   /* for backwards compatibility */
   if (b->default_ks >= 0x061 && b->default_ks <= 0x07a)
@@ -190,7 +190,7 @@ void button_set_slide_ks(button *b, char *txt, int dir)
   KeySym tmp_ks;
   if ( (tmp_ks = XStringToKeysym(txt)) == 0) /* NoSymbol ?? */
     {
-      fprintf(stderr, "Cant find keysym for %s \n", txt); 
+      fprintf(stderr, "Cant find keysym for %s \n", txt);
       return;
     }
 
@@ -214,13 +214,14 @@ KeySym button_ks(char *txt)
 {
   KeySym res;
   if ((res = XStringToKeysym(txt)) == (KeySym)NULL)
-    fprintf(stderr, "Cant find keysym for %s \n", txt); 
+    fprintf(stderr, "Cant find keysym for %s \n", txt);
   return res;
 }
 
 int _button_get_txt_size(button *b, char *txt)
 {
-#ifdef USE_XFT		
+  if (!txt) return 0;
+#ifdef USE_XFT
   if (b->kb->render_type == xft)
     {
       XGlyphInfo       extents;
@@ -232,36 +233,31 @@ int _button_get_txt_size(button *b, char *txt)
     } else {
 #endif
       return XTextWidth(b->kb->font_info, txt, strlen(txt));
-#ifdef USE_XFT		
+#ifdef USE_XFT
     }
 #endif
 }
 
 int button_calc_c_width(button *b)
 {
-  int i = 0, j = 0, k = 0; // ouch - gotta be a better way
+  if (b->pixmap != NULL || b->c_width )
+    return b->c_width; /* already calculated from image or width_param */
 
-  if (b->pixmap != NULL || b->c_width ) 
-    return b->c_width; /* already calculated from image or width_param */ 
-
-  if (b->default_txt != NULL)
-    i = _button_get_txt_size(b, b->default_txt);
-  if (b->shift_txt != NULL)
-    j = _button_get_txt_size(b, b->shift_txt);
-  if (b->mod_txt != NULL)
-    k = _button_get_txt_size(b, b->mod_txt);
-
-  b->c_width = max3( i,j,k );
+  b->c_width = max3(
+	_button_get_txt_size(b, b->default_txt),
+	_button_get_txt_size(b, b->shift_txt),
+	_button_get_txt_size(b, b->mod_txt)
+	);
   return b->c_width;
 }
- 
+
 int button_calc_c_height(button *b)
 {
 
-  if (b->pixmap != NULL || b->c_height ) 
-    return b->c_height; /*already calculated from image or height param */ 
+  if (b->pixmap != NULL || b->c_height )
+    return b->c_height; /*already calculated from image or height param */
 
-#ifdef USE_XFT		
+#ifdef USE_XFT
   if (b->kb->render_type == xft)
     {
       b->c_height =
@@ -269,7 +265,7 @@ int button_calc_c_height(button *b)
     } else {
 #endif
       b->c_height = b->kb->font_info->ascent + b->kb->font_info->descent;
-#ifdef USE_XFT		
+#ifdef USE_XFT
     }
 #endif
   return b->c_height;
@@ -290,12 +286,12 @@ void button_render(button *b, int mode)
 {
   /*
     set up a default gc to point to whatevers gc is not NULL
-     moving up via button -> box -> keyboard 
+     moving up via button -> box -> keyboard
   */
   GC gc_txt;
-  GC gc_solid; 
+  GC gc_solid;
 
-#ifdef USE_XFT          
+#ifdef USE_XFT
   XftColor tmp_col;
 #endif
 
@@ -307,32 +303,32 @@ void button_render(button *b, int mode)
 
 
   if (mode == BUTTON_PRESSED)
-    { 
-      gc_solid = b->fg_gc;         
+    {
+      gc_solid = b->fg_gc;
       gc_txt   = b->kb->txt_gc;
-#ifdef USE_XFT		
+#ifdef USE_XFT
       tmp_col  = b->kb->color_bg;
 #endif
     }
   else if(mode == BUTTON_LOCKED)
-    { 
-      gc_solid = b->fg_gc;         
-      gc_txt   = b->kb->txt_rev_gc; 
-#ifdef USE_XFT		
+    {
+      gc_solid = b->fg_gc;
+      gc_txt   = b->kb->txt_rev_gc;
+#ifdef USE_XFT
       tmp_col  = b->kb->color_bg;
 #endif
     }
   else  /* BUTTON_RELEASED */
-    { 
-      gc_solid = b->bg_gc; 
-      gc_txt   = b->kb->txt_gc; 
-#ifdef USE_XFT		
+    {
+      gc_solid = b->bg_gc;
+      gc_txt   = b->kb->txt_gc;
+#ifdef USE_XFT
       tmp_col = b->kb->color_fg;
 #endif
     }
 
 
-  /* figure out what text to display 
+  /* figure out what text to display
      via keyboard state              */
   switch (b->kb->state) {
     case KB_STATE_SHIFT|KB_STATE_CAPS|KB_STATE_MOD:
@@ -369,27 +365,27 @@ void button_render(button *b, int mode)
   if (txt == NULL) txt = b->default_txt;
 
   if (!(b->default_ks || b->shift_ks || b->mod_ks) &&
-      ( b->default_txt == NULL && b->shift_txt == NULL && b->mod_txt == NULL)  
-      ) 
+      ( b->default_txt == NULL && b->shift_txt == NULL && b->mod_txt == NULL)
+      )
     return;  /* its a 'blank' button - just a spacer */
 
   /* -- but color  gc1*/
-  XFillRectangle( b->kb->display, b->kb->backing, gc_solid, 
+  XFillRectangle( b->kb->display, b->kb->backing, gc_solid,
 		  x, y, b->act_width, b->act_height );
 
   /* -- kb gc */
   if (b->kb->theme != plain)
-    XDrawRectangle( b->kb->display, b->kb->backing, b->kb->bdr_gc, 
+    XDrawRectangle( b->kb->display, b->kb->backing, b->kb->bdr_gc,
 		    x, y, b->act_width, b->act_height );
-  
+
   if (b->kb->theme == rounded)
     {
       XDrawPoint( b->kb->display, b->kb->backing, b->kb->bdr_gc, x+1, y+1);
-      XDrawPoint( b->kb->display, b->kb->backing, 
+      XDrawPoint( b->kb->display, b->kb->backing,
 		  b->kb->bdr_gc, x+b->act_width-1, y+1);
-      XDrawPoint( b->kb->display, b->kb->backing, 
+      XDrawPoint( b->kb->display, b->kb->backing,
 		  b->kb->bdr_gc, x+1, y+b->act_height-1);
-      XDrawPoint( b->kb->display, b->kb->backing, 
+      XDrawPoint( b->kb->display, b->kb->backing,
 		  b->kb->bdr_gc, x+b->act_width-1,
 		  y+b->act_height-1);
     }
@@ -399,20 +395,20 @@ void button_render(button *b, int mode)
       /* TODO: improve alignment of images, kinda hacked at the mo ! */
       XGCValues gc_vals;
       unsigned long valuemask = 0;
-      
+
 
       XSetClipMask(b->kb->display, b->mask_gc,*(b->mask));
-      
+
       gc_vals.clip_x_origin = x+(b->x_pad/2)+b->b_size;
       gc_vals.clip_y_origin = y+b->c_height+(b->y_pad/2) +
 	                              b->b_size-b->c_height +2;
       valuemask =  GCClipXOrigin | GCClipYOrigin ;
       XChangeGC(b->kb->display, b->mask_gc, valuemask, &gc_vals);
 
-      XCopyArea(b->kb->display, *(b->pixmap), b->kb->backing, b->mask_gc, 
-		0, 0, b->c_width, 
+      XCopyArea(b->kb->display, *(b->pixmap), b->kb->backing, b->mask_gc,
+		0, 0, b->c_width,
 		b->c_height, x+(b->x_pad/2)+b->b_size,
-		y +b->c_height+(b->y_pad/2) -b->c_height + b->b_size+2 
+		y +b->c_height+(b->y_pad/2) -b->c_height + b->b_size+2
       );
       return; /* imgs cannot have text aswell ! */
     }
@@ -424,7 +420,7 @@ void button_render(button *b, int mode)
 	  //else
 	  //xspace = x+((b->c_width)/2);
 	  //xspace = x+(b->x_pad/2)+b->b_size;
-#ifdef USE_XFT		
+#ifdef USE_XFT
     if (b->kb->render_type == xft)
       {
 	int y_offset = ((b->c_height + b->y_pad) - b->kb->xftfont->height)/2;
@@ -440,11 +436,11 @@ void button_render(button *b, int mode)
 #endif
       {
 	XDrawString(
-		    b->kb->display, b->kb->backing, gc_txt,  
+		    b->kb->display, b->kb->backing, gc_txt,
 		    /*x+(b->x_pad/2)+b->b_size,*/
 		    xspace,
 		    y+b->c_height+(b->y_pad/2)+b->b_size
-		    -4, 
+		    -4,
 		    txt, strlen(txt)
 		    );
       }
@@ -457,8 +453,8 @@ void button_paint(button *b)
   int x = button_get_abs_x(b) - b->kb->vbox->x;
   int y = button_get_abs_y(b) - b->kb->vbox->y;
 
-  XCopyArea(b->kb->display, b->kb->backing, b->kb->win, b->kb->gc, 
-	    x, y, b->act_width, b->act_height, 
+  XCopyArea(b->kb->display, b->kb->backing, b->kb->win, b->kb->gc,
+	    x, y, b->act_width, b->act_height,
 	    x+b->kb->vbox->x, y+b->kb->vbox->y);
 }
 
@@ -467,7 +463,7 @@ int button_get_abs_x(button *b)
   int total = b->x;
   box *tmp_box = b->parent;
   while (tmp_box != NULL)
-    {      
+    {
       total += tmp_box->x;
       tmp_box = tmp_box->parent;
     }
@@ -481,7 +477,7 @@ int button_get_abs_y(button *b)
   int total = b->y;
   box *tmp_box = b->parent;
   while (tmp_box != NULL)
-    {      
+    {
       total += tmp_box->y;
       tmp_box = tmp_box->parent;
     }
@@ -493,11 +489,11 @@ button* button_new(keyboard *k)
 {
   button *b = calloc(1, sizeof(button));
   b->kb = k;
-  
+
   b->slide = none;
 
   b->modifier    = BUT_NORMAL;
-  b->options = OPT_NORMAL;  
+  b->options = OPT_NORMAL;
   b->fg_gc      = k->gc;
   b->bg_gc      = k->rev_gc;
 

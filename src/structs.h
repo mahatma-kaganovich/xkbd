@@ -1,4 +1,4 @@
-/* 
+/*
    xkbd - xlib based onscreen keyboard.
 
    Copyright (C) 2001 Matthew Allum
@@ -19,6 +19,7 @@
 
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+#include <X11/XKBlib.h>
 #ifdef USE_XFT
 #include <X11/Xft/Xft.h>
 #endif
@@ -26,21 +27,23 @@
 #define BUTTON_RELEASED 1
 #define BUTTON_LOCKED   2
 
-#define KB_STATE_NORMAL 0 
-#define KB_STATE_SHIFT  (1<<1)
-#define KB_STATE_MOD    (1<<2)
-#define KB_STATE_CTRL   (1<<3)
-#define KB_STATE_CAPS   (1<<4)
-#define KB_STATE_META   (1<<5)
-#define KB_STATE_ALT    (1<<6)
+#define KB_STATE_NORMAL 0
+#define KB_STATE_SHIFT  1
+#define KB_STATE_CAPS   (1<<1)
+#define KB_STATE_CTRL   (1<<2)
+#define KB_STATE_ALT    (1<<3)
+#define KB_STATE_META   (1<<4)
+#define KB_STATE_MOD    (1<<5)
 
-#define BUT_NORMAL      0
-#define BUT_SHIFT       (1<<1)
-#define BUT_MOD         (1<<2)
-#define BUT_CTRL        (1<<3)
-#define BUT_CAPS        (1<<4)
-#define BUT_META        (1<<5)
-#define BUT_ALT         (1<<6)
+#define KB_STATE_KNOWN  (KB_STATE_SHIFT|KB_STATE_CTRL|KB_STATE_ALT|KB_STATE_CAPS)
+
+#define BUT_NORMAL 0
+#define BUT_SHIFT  1
+#define BUT_CAPS   (1<<1)
+#define BUT_CTRL   (1<<2)
+#define BUT_ALT    (1<<3)
+#define BUT_META   (1<<4)
+#define BUT_MOD    (1<<5)
 
 #define OPT_NORMAL      0
 #define OPT_OBEYCAPS    (1<<0)
@@ -54,7 +57,7 @@
 #define RIGHT           4
 
 #define MAX_LAYOUTS     3
- 
+
 typedef struct _list
 {
   struct _list *next;
@@ -70,7 +73,7 @@ typedef struct _box
   list *root_kid;
   list *tail_kid;
   int min_width;        /* ( num_kids*(kid_c_width+(kid_border*2) ) */
-  int min_height; 
+  int min_height;
   int act_width;        /* actual calculated width */
   int act_height;       /* ( num_kids*(kid_c_width+padding+(kid_border*2) ) */
   int x;                /* relative to parent ? */
@@ -80,7 +83,7 @@ typedef struct _box
 
 } box;
 
-typedef struct _keyboard 
+typedef struct _keyboard
 {
   int mode;
   box *kbd_layouts[MAX_LAYOUTS];
@@ -98,24 +101,24 @@ typedef struct _keyboard
   GC txt_gc;   /* gc's for button txt */
   GC txt_rev_gc;
   GC bdr_gc;
-  
+
   XFontStruct* font_info;
   int state;  /* shifted | caps | modded | normal */
   int state_locked;  /* shifted | modded | normal */
-  
+
   enum { oldskool, xft } render_type;
   enum { rounded, square, plain } theme;
-  
+
   int slide_margin;
   int key_delay_repeat; /* delay time before key repeat */
   int key_repeat;       /* delay time between key repeats */
   unsigned int key_delay_repeat1;
   unsigned int key_repeat1;
-  
+
 #ifdef USE_XFT
   XftDraw *xftdraw;   /* xft aa bits */
   XftFont *xftfont;
-  XftColor color_bg; 
+  XftColor color_bg;
   XftColor color_fg;
 #endif
 
@@ -125,7 +128,7 @@ typedef struct _button
 {
   int x;             /* actual co-ords relative to window */
   int y;
-  
+
   char *default_txt; /* default button txt */
   KeySym default_ks; /* default button Xkeysym */
   char *shift_txt;
@@ -151,12 +154,12 @@ typedef struct _button
   int x_pad;    /* total padding horiz */
   int y_pad;    /* total padding vert  */
   int b_size;   /* size of border in pixels */
-                /* eg. total width = c_width+pad_x+(2*b_size) */ 
+                /* eg. total width = c_width+pad_x+(2*b_size) */
 
-   Bool is_width_spec; /* width is specified in conf file */ 
+   Bool is_width_spec; /* width is specified in conf file */
    int key_span_width; /* width in number of keys spanned */
-   
-  int act_width; 
+
+  int act_width;
   int act_height;
 
   keyboard *kb;   /* pointer to parent keyboard */
@@ -165,11 +168,11 @@ typedef struct _button
   GC fg_gc;       /* gc's for 'general' button cols */
   GC bg_gc;
 
-  signed int layout_switch; /* Signals the button switches layout 
+  signed int layout_switch; /* Signals the button switches layout
 			       set to -1 for no switch            */
 
 #ifdef USE_XFT
-  XftColor *xft_fg_col;  /* xft */ 
+  XftColor *xft_fg_col;  /* xft */
   XftColor *xft_bg_col;
 #endif
 
@@ -179,11 +182,10 @@ typedef struct _button
 
 } button;
 
+extern int Xkb_sync;
+extern XkbStateRec Xkb_state[1];
+
 
 #endif
-
-
-
-
 
 

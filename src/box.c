@@ -1,4 +1,4 @@
-/* 
+/*
    xkbd - xlib based onscreen keyboard.
 
    Copyright (C) 2001 Matthew Allum
@@ -40,9 +40,9 @@ button *box_add_button(box *bx, button *but)
       bx->tail_kid = bx->root_kid;
       bx->root_kid->data = but;
       bx->root_kid->type = WIDGET_BUTTON;
-      
+
       return but;
-    } 
+    }
 
   new_ptr = bx->tail_kid;
   new_ptr->next = malloc(sizeof(list));
@@ -50,7 +50,7 @@ button *box_add_button(box *bx, button *but)
   new_ptr->next->data = but;
   new_ptr->next->type = WIDGET_BUTTON;
   bx->tail_kid = new_ptr->next;
-  
+
   return but;
 
 }
@@ -69,7 +69,7 @@ box *box_add_box(box *bx, box *b)
       bx->root_kid->data = b;
       bx->root_kid->type = WIDGET_BOX;
       return b;
-    } 
+    }
 
   new_ptr = bx->tail_kid;
   new_ptr->next = malloc(sizeof(list));

@@ -1,4 +1,4 @@
-/* 
+/*
    xkbd - xlib based onscreen keyboard.
 
    Copyright (C) 2001 Matthew Allum
@@ -46,10 +46,10 @@ static Bool
 load_a_single_font(keyboard *kb, char *fontname )
 {
 #ifdef USE_XFT
-  if ((kb->xftfont = XftFontOpenName(kb->display, 
-				     DefaultScreen(kb->display), 
+  if ((kb->xftfont = XftFontOpenName(kb->display,
+				     DefaultScreen(kb->display),
 				     fontname)) != NULL)
-    { 
+    {
       return True;
     }
 #else
@@ -66,12 +66,12 @@ void _kb_load_font(keyboard *kb, char *defstr )
 {
   const char delim[] = "|";
   char *str, *token;
-  
+
   if ((strchr(defstr, delim[0]) != NULL))
     {
       str = strdup(defstr);
       while( (token = strsep (&str, delim)) != NULL )
-	  if (load_a_single_font(kb, token)) 
+	  if (load_a_single_font(kb, token))
 	    return;
     }
   else
@@ -84,7 +84,7 @@ void _kb_load_font(keyboard *kb, char *defstr )
 }
 
 keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
-		 int kb_width, int kb_height, char *conf_file, 
+		 int kb_width, int kb_height, char *conf_file,
 		 char *font_name, int font_is_xft)
 {
   keyboard *kb = NULL;
@@ -92,10 +92,10 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
   int height_tmp = 0;
 
   list *listp;
-  
+
   int max_width = 0; /* required for sizing code */
   //int cy = 0;        /* ditto                    */
-  
+
   FILE *rcfp;
   char rcbuf[255];		/* buffer for conf file */
   char *tp;                     /* tmp pointer */
@@ -106,8 +106,8 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
   box *tmp_box = NULL;
   button *tmp_but = NULL;
   int line_no = 0;
-  enum { none, kbddef, rowdef, keydef } context;  
-   
+  enum { none, kbddef, rowdef, keydef } context;
+
   int font_loaded = 0;
   Colormap cmp;
   int max_single_char_width = 0;
@@ -124,35 +124,35 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 
   cmp = DefaultColormap(display, DefaultScreen(display));
 
-  /* create lots and lots of gc's */ 
+  /* create lots and lots of gc's */
   kb->gc = _createGC(display, win);
-  XSetForeground(display, kb->gc, 
+  XSetForeground(display, kb->gc,
 		 BlackPixel(display, DefaultScreen(display) ));
-  XSetBackground(display, kb->gc, 
+  XSetBackground(display, kb->gc,
 		 WhitePixel(display, DefaultScreen(display) ));
 
   kb->rev_gc = _createGC(display, win);
-  XSetForeground(display, kb->rev_gc, 
+  XSetForeground(display, kb->rev_gc,
 		 WhitePixel(display, DefaultScreen(display) ));
-  XSetBackground(display, kb->rev_gc, 
+  XSetBackground(display, kb->rev_gc,
 		 BlackPixel(display, DefaultScreen(display) ));
 
   kb->txt_gc = _createGC(display, win);
-  XSetForeground(display, kb->txt_gc, 
+  XSetForeground(display, kb->txt_gc,
 		 BlackPixel(display, DefaultScreen(display) ));
-  XSetBackground(display, kb->txt_gc, 
+  XSetBackground(display, kb->txt_gc,
 		 WhitePixel(display, DefaultScreen(display) ));
 
   kb->txt_rev_gc = _createGC(display, win);
-  XSetForeground(display, kb->txt_rev_gc, 
+  XSetForeground(display, kb->txt_rev_gc,
 		 WhitePixel(display, DefaultScreen(display) ));
-  XSetBackground(display, kb->rev_gc, 
+  XSetBackground(display, kb->rev_gc,
 		 BlackPixel(display, DefaultScreen(display) ));
 
   kb->bdr_gc = _createGC(display, win);
-  XSetForeground(display, kb->bdr_gc, 
+  XSetForeground(display, kb->bdr_gc,
 		 BlackPixel(display, DefaultScreen(display) ));
-  XSetBackground(display, kb->bdr_gc, 
+  XSetBackground(display, kb->bdr_gc,
 		 WhitePixel(display, DefaultScreen(display) ));
 
 #ifdef USE_XFT
@@ -168,7 +168,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
       }
       _kb_load_font(kb, font_name );
       font_loaded = 1;
-    } 
+    }
 
 #ifdef USE_XFT
 
@@ -179,17 +179,17 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
   colortmp.blue  = 0xFFFF;
   colortmp.alpha = 0xFFFF;
   XftColorAllocValue(display,
-		     DefaultVisual(display, DefaultScreen(display)), 
+		     DefaultVisual(display, DefaultScreen(display)),
 		     DefaultColormap(display,DefaultScreen(display)),
 		     &colortmp,
 		     &kb->color_bg);
-  
+
   colortmp.red   = 0x0000;
   colortmp.green = 0x0000;
   colortmp.blue  = 0x0000;
-  colortmp.alpha = 0xFFFF;          
+  colortmp.alpha = 0xFFFF;
   XftColorAllocValue(display,
-		     DefaultVisual(display, DefaultScreen(display)), 
+		     DefaultVisual(display, DefaultScreen(display)),
 		     DefaultColormap(display,DefaultScreen(display)),
 		     &colortmp,
 		     &kb->color_fg);
@@ -206,7 +206,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
   kb->slide_margin     = 0;
   kb->key_delay_repeat = 50;
   kb->key_repeat       = -1;
-  
+
   kb->total_layouts = 0;
 
 
@@ -215,34 +215,34 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
   setupKeyboardVariables(kb->display);
 
   if ((rcfp = fopen(conf_file, "r")) == NULL)
-    { 
+    {
       fprintf(stderr, "xkbd: Cant open conf file: %s\n", conf_file);
       exit(1);
     }
-    
+
   context = none;
-    
+
   while(fgets(rcbuf, sizeof(rcbuf), rcfp) != NULL)
     {
       tp = &rcbuf[0];
-      
+
       /* strip init spaces */
       while(*tp == ' ' || *tp == '\t') tp++;
-      
+
       /* ignore comments and blank lines */
       if (*tp == '\n' || *tp == '#') { DBG("Config: got hash\n"); continue; }
-      
+
       if (*tp == '<') /* a 'tag' - set the context */
 	{
 	  if (*(tp+1) == '/') /* closing tag */
-	    { 
+	    {
 	      switch (context) {
 		case kbddef:
 		  if (!font_loaded)
 		    _kb_load_font(kb, "fixed" );
 		  break;
 		case rowdef:
-		  
+
 		  break;
 		case keydef:
 		  button_calc_c_width(tmp_but);
@@ -258,8 +258,8 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		case none:
 		  break;
 	      }
-	      context = none; 
-	      continue; 
+	      context = none;
+	      continue;
 	    }
 	  if (sscanf(tp, "<%s", tmpstr_A) == 1)  /* get tag name */
 	    {
@@ -285,10 +285,10 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		{
 		  if (kb->total_layouts == 0)
 		    {
-		      /* 
+		      /*
 			 Minor Kludge :-)
 			 So older configs work we can work with
-			 out a <layout> tag 
+			 out a <layout> tag
 		      */
 		      kb->total_layouts++;
 		      kb->kbd_layouts[kb->total_layouts-1] = box_new();
@@ -302,7 +302,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		    }
 		  context=rowdef;
 		  tmp_box = box_add_box(kb->vbox, box_new());
-		  
+
 		  continue;
 		}
 	      if (strncmp(tmpstr_A, "key", 3) == 0)
@@ -312,7 +312,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		  context=keydef;
 		  continue;
 		}
-	      
+
 	    } else {
 	      fprintf(stderr,"Config file parse failed (tag) at line: %i\n",
 		      line_no);
@@ -322,11 +322,11 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
       else             /* a key=value setting */
 	{
 	  if (sscanf(tp, "%s %s", tmpstr_A,tmpstr_C) == 2) {
-	    
+
 	    switch (context) {
 	      case none:
 		break;
-	      case kbddef: /* 
+	      case kbddef: /*
 		if (strcmp(tmpstr_A, "render") == 0)
 		  {
 		    if ((strncmp(tmpstr_C, "xft", 3) == 0)
@@ -335,7 +335,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 			kb->render_type = xft;
 		      }
 		  }
-		else 
+		else
 			   */
 		if ((strcmp(tmpstr_A, "font") == 0)
 			 && !font_loaded)
@@ -379,15 +379,15 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		  }
 		else if (strcmp(tmpstr_A, "width") == 0)
 		  {
-		    /* TODO fix! seg's as kb->vbox does not yet exist 
-		     if (!kb->vbox->act_width) 
+		    /* TODO fix! seg's as kb->vbox does not yet exist
+		     if (!kb->vbox->act_width)
 			kb->vbox->act_width = atoi(tmpstr_C);
 		    */
 		  }
 		else if (strcmp(tmpstr_A, "height") == 0)
 		  {
-		    /* TODO fix! seg's as kb->vbox does not yet exist 
-		     if (!kb->vbox->act_height) 
+		    /* TODO fix! seg's as kb->vbox does not yet exist
+		     if (!kb->vbox->act_height)
 			kb->vbox->act_height = atoi(tmpstr_C);
 		    */
 
@@ -413,23 +413,23 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		      {
 			perror("color allocation failed\n"); exit(1);
 		      }
-#ifdef USE_XFT		
+#ifdef USE_XFT
 		    if (kb->render_type == oldskool)
 		      {
 #endif
 			XSetForeground(kb->display, kb->txt_gc, col.pixel );
-#ifdef USE_XFT		
+#ifdef USE_XFT
 		      }
 		    else
 		      {
-			
+
 			colortmp.red   = col.red;
 			colortmp.green = col.green;
 			colortmp.blue  = col.blue;
-			colortmp.alpha = 0xFFFF;          
+			colortmp.alpha = 0xFFFF;
 			XftColorAllocValue(display,
-					   DefaultVisual(display, 
-						      DefaultScreen(display)), 
+					   DefaultVisual(display,
+						      DefaultScreen(display)),
 					   DefaultColormap(display,
 						      DefaultScreen(display)),
 					   &colortmp,
@@ -449,7 +449,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		else if (strcmp(tmpstr_A, "switch") == 0)
 		  button_set_layout(tmp_but, tmpstr_C);
 		else if (strcmp(tmpstr_A, "mod") == 0)
-		  tmp_but->mod_txt = button_set(tmpstr_C); 
+		  tmp_but->mod_txt = button_set(tmpstr_C);
 		else if (strcmp(tmpstr_A, "shift_mod") == 0)
 		  tmp_but->shift_mod_txt = button_set(tmpstr_C);
 		else if (strcmp(tmpstr_A, "default_ks") == 0)
@@ -457,7 +457,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		else if (strcmp(tmpstr_A, "shift_ks") == 0)
 		  tmp_but->shift_ks = button_ks(tmpstr_C);
 		else if (strcmp(tmpstr_A, "mod_ks") == 0)
-		  tmp_but->mod_ks = button_ks(tmpstr_C); 
+		  tmp_but->mod_ks = button_ks(tmpstr_C);
 		else if (strcmp(tmpstr_A, "shift_mod_ks") == 0)
 		  tmp_but->shift_mod_ks = button_ks(tmpstr_C);
 #ifdef USE_XPM
@@ -502,12 +502,12 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		}
 		break;
 	    }
-	    
+
 	  } else {
 	     fprintf(stderr,"Config file parse failed at line: %i\n",
 		     line_no);
 	     exit(1);
-	  } 
+	  }
 	}
       line_no++;
     }
@@ -521,12 +521,12 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
   if(height_tmp)
     kb->vbox->act_height = height_tmp;
   /* pass 1 - calculate min dimentions  */
-  
+
   listp = kb->vbox->root_kid;
 
 
   /* find the max single char width */
-  
+
   while (listp != NULL)
     {
       list *ip;
@@ -567,17 +567,17 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
     {
       kb->vbox = kb->kbd_layouts[j];
       listp = kb->vbox->root_kid;
-  
+
       while (listp != NULL)
 	{
 	  list *ip;
 	  int tmp_width = 0;
 	  int tmp_height = 0;
 	  int max_height = 0;
-       
+
 	  tmp_box = (box *)listp->data;
 	  ip = tmp_box->root_kid;
-	  
+
 	  while (ip != NULL)
 	    {
 	      button *b;
@@ -596,10 +596,10 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 	      //printf("width is %i\n", b->c_width);
 	      if (b->key_span_width)
 		b->c_width = b->key_span_width * max_single_char_width;
-	      
-	      tmp_width += ( ((button *)ip->data)->c_width + 
+
+	      tmp_width += ( ((button *)ip->data)->c_width +
 			     (((button *)ip->data)->b_size*2) );
-	      tmp_height = ( ((button *)ip->data)->c_height + 
+	      tmp_height = ( ((button *)ip->data)->c_height +
 			     (((button *)ip->data)->b_size*2));
 	      if (tmp_height >= max_height) max_height = tmp_height;
 	      ip = ip->next;
@@ -619,14 +619,14 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 
       kb->vbox->min_width = max_width;
     }
-  
+
   /* TODO: copy all temp vboxs  */
 
 
   kb->vbox = kb->kbd_layouts[0];
 
   return kb;
-  
+
 }
 
 void kb_size(keyboard *kb)
@@ -636,32 +636,32 @@ void kb_size(keyboard *kb)
    list *listp;
    int cy = 0;
    box *tmp_box = NULL;
-   
+
    if ( kb->vbox->act_width == 0)
-      kb->vbox->act_width = kb->vbox->min_width ; /* by default add a 
-						     little to this on init */ 
+      kb->vbox->act_width = kb->vbox->min_width ; /* by default add a
+						     little to this on init */
    if ( kb->vbox->act_height == 0)
       kb->vbox->act_height = kb->vbox->min_height ;
-   
+
    if (kb->backing != None)
       XFreePixmap(kb->display, kb->backing);
-   
-   kb->backing = XCreatePixmap(kb->display, kb->win, 
-			       kb->vbox->act_width, kb->vbox->act_height, 
+
+   kb->backing = XCreatePixmap(kb->display, kb->win,
+			       kb->vbox->act_width, kb->vbox->act_height,
 			       DefaultDepth(kb->display,
 		                            DefaultScreen(kb->display)) );
-   
-   XFillRectangle(kb->display, kb->backing, 
-		  kb->rev_gc, 0, 0, 
+
+   XFillRectangle(kb->display, kb->backing,
+		  kb->rev_gc, 0, 0,
 		  kb->vbox->act_width, kb->vbox->act_height);
 
-#ifdef USE_XFT		   
+#ifdef USE_XFT
    if (kb->xftdraw != NULL) XftDrawDestroy(kb->xftdraw);
 
 
-   kb->xftdraw = XftDrawCreate(kb->display, (Drawable) kb->backing, 
+   kb->xftdraw = XftDrawCreate(kb->display, (Drawable) kb->backing,
 			       DefaultVisual(kb->display,
-					     DefaultScreen(kb->display)), 
+					     DefaultScreen(kb->display)),
 			       DefaultColormap(kb->display,
 					       DefaultScreen(kb->display)));
 #endif
@@ -679,11 +679,11 @@ void kb_size(keyboard *kb)
       tmp_box->y = cy;
       tmp_box->x = 0;
       ip = tmp_box->root_kid;
-      y_pad =  (int)( 
-		     ( (float)(tmp_box->min_height)/kb->vbox->min_height ) 
-		     * kb->vbox->act_height ); 
+      y_pad =  (int)(
+		     ( (float)(tmp_box->min_height)/kb->vbox->min_height )
+		     * kb->vbox->act_height );
 
-      
+
       while (ip != NULL)
 	{
 	  int but_total_width;
@@ -699,7 +699,7 @@ void kb_size(keyboard *kb)
 
 	  tmp_but->x_pad -= but_total_width;
 
-	  tmp_but->act_width = tmp_but->c_width + tmp_but->x_pad 
+	  tmp_but->act_width = tmp_but->c_width + tmp_but->x_pad
 	                       + (2*tmp_but->b_size);
 
 	  cx += (tmp_but->act_width );
@@ -710,39 +710,39 @@ void kb_size(keyboard *kb)
 	  ip = ip->next;
 
 	  /*  hack for using all screen space */
-	  if (listp->next == NULL) tmp_but->act_height--; 
+	  if (listp->next == NULL) tmp_but->act_height--;
 
 	}
-      
+
       /*  another hack for using up all space */
       tmp_but->x_pad += (kb->vbox->act_width-cx) -1 ;
       tmp_but->act_width += (kb->vbox->act_width-cx) -1;
 
-      cy += y_pad ; //+ 1;    
+      cy += y_pad ; //+ 1;
       tmp_box->act_height = y_pad;
       tmp_box->act_width = kb->vbox->act_width;
-      
+
       listp = listp->next;
 
     }
 
 }
 
-void 
+void
 kb_switch_layout(keyboard *kb, int kbd_layout_num)
 {
-  int w = kb->vbox->act_width; 
+  int w = kb->vbox->act_width;
   int h = kb->vbox->act_height;
-  int mw = kb->vbox->min_width; 
+  int mw = kb->vbox->min_width;
   int mh = kb->vbox->min_height;
 
   kb->vbox = kb->kbd_layouts[kbd_layout_num];
 
-  kb->vbox->act_width = w; 
+  kb->vbox->act_width = w;
   kb->vbox->act_height = h;
-  kb->vbox->min_width = mw; 
+  kb->vbox->min_width = mw;
   kb->vbox->min_height = mh;
-  
+
   kb_size(kb);
   kb_render(kb);
   kb_paint(kb);
@@ -765,27 +765,27 @@ void kb_render(keyboard *kb)
 
 void kb_paint(keyboard *kb)
 {
-  XCopyArea(kb->display, kb->backing, kb->win, kb->gc, 
-	    0, 0, kb->vbox->act_width, kb->vbox->act_height, 
+  XCopyArea(kb->display, kb->backing, kb->win, kb->gc,
+	    0, 0, kb->vbox->act_width, kb->vbox->act_height,
 	    kb->vbox->x, kb->vbox->y);
 }
 
-button *kb_handle_events(keyboard *kb, XEvent an_event) 
+button *kb_handle_events(keyboard *kb, XEvent an_event)
 {
   static button *active_but;
-  
-  switch (an_event.type) 
+
+  switch (an_event.type)
     {
       case ButtonPress:
-	active_but = kb_find_button(kb, 
-				    an_event.xmotion.x, 
+	active_but = kb_find_button(kb,
+				    an_event.xmotion.x,
 				    an_event.xmotion.y );
 	if (active_but != NULL)
 	  {
 	    button_render(active_but, BUTTON_PRESSED);
 	    button_paint(active_but);
-	    /* process state here 
-	       send keypress via kbd state 
+	    /* process state here
+	       send keypress via kbd state
 	    */
 	  }
 	break;
@@ -793,8 +793,8 @@ button *kb_handle_events(keyboard *kb, XEvent an_event)
 	if (active_but != NULL)
 	  {
 	    int new_state;
-	    
-	    kb_set_slide(active_but, an_event.xmotion.x, 
+
+	    kb_set_slide(active_but, an_event.xmotion.x,
 			 an_event.xmotion.y );
 
 	    new_state = kb_process_keypress(active_but);
@@ -804,7 +804,7 @@ button *kb_handle_events(keyboard *kb, XEvent an_event)
 	      {
 		/* if the states changed repaint the entire kbd
 		   as its chars have probably changed */
-		
+
 		active_but->kb->state = new_state;
 		kb_render(active_but->kb);
 		kb_paint(active_but->kb);
@@ -819,13 +819,16 @@ button *kb_handle_events(keyboard *kb, XEvent an_event)
 	    if (active_but->layout_switch > -1)
 	      {
 		DBG("switching layout\n");
-		kb_switch_layout(active_but->kb, active_but->layout_switch);
+		if (Xkb_sync)
+			XkbLockGroup(active_but->kb->display, XkbUseCoreKbd, active_but->layout_switch);
+		else
+			kb_switch_layout(active_but->kb, active_but->layout_switch);
 	      }
-	    
+
 	    active_but = NULL;
 	  }
 	break;
-    }    
+    }
 
   return active_but;
 }
@@ -853,12 +856,12 @@ Bool kb_do_repeat(keyboard *kb, button *active_but)
 {
   static int timer;
   static Bool delay;
-  
+
   if (!kb->key_repeat)
     return False;
-  if (active_but == NULL) 
+  if (active_but == NULL)
     {
-      timer = 0; 
+      timer = 0;
       delay = False;
       return False; /* reset everything */
     }
@@ -882,62 +885,55 @@ Bool kb_do_repeat(keyboard *kb, button *active_but)
 
 int kb_process_keypress(button *active_but)
 {
-  /* holder for new keyboard state */
-  int new_state = active_but->kb->state;
-  
-  DBG("got release state %i %i %i %i \n", 
-      new_state, KB_STATE_SHIFT, KB_STATE_MOD, KB_STATE_CTRL );
-  
+    unsigned int state = active_but->kb->state;
+    unsigned int lock = active_but->kb->state_locked;
+    const unsigned int mod = active_but->modifier;
+    int keypress = 1;
 
-  if  (active_but->modifier/* is a shift / ctrl / mod pressed */
-       && !(active_but->modifier & BUT_CAPS) ) 
-    {
-      if (active_but->kb->state_locked & active_but->modifier)
-	{
-	  /* was locked then unset & unlock */
-	  active_but->kb->state_locked ^= active_but->modifier;
-	  new_state ^= active_but->modifier;
+    DBG("got release state %i %i %i %i \n", new_state, KB_STATE_SHIFT, KB_STATE_MOD, KB_STATE_CTRL );
+
+    if (mod & BUT_CAPS) {
+	state ^= KB_STATE_CAPS;
+	DBG("got caps key - %i \n", state);
+    } else if (mod) {
+	if (active_but->kb->state_locked & mod) { /* was locked then unset & unlock */
+		active_but->kb->state_locked ^= mod;
+		state ^= mod;
+	} else if (state & mod) { /* was set then lock */
+		active_but->kb->state_locked ^= mod;
+	} else { /* was unset then set */
+		state ^= mod;
 	}
-      else if (new_state & active_but->modifier)
-	{
-	  /* was set then lock */
-	  active_but->kb->state_locked ^= active_but->modifier;
-	}
-      else
-	{
-	  /* was unset then set */
-	  new_state ^= active_but->modifier;
-	}
-      DBG("got a modifier key - %i \n", new_state);
-    } 
-  else if (active_but->modifier & BUT_CAPS)
-    /* deal with caps key - maybe this can go above now ?*/
-    {
-      new_state ^= KB_STATE_CAPS; /* turn caps on/off */
-      DBG("got caps key - %i \n", new_state);
+	DBG("got a modifier key - %i \n", state);
+    } else if (state & !KB_STATE_CAPS) {
+	/* check if the kbd is already in a state and reset it
+	   leaving caps key state alone */
+	state &= KB_STATE_CAPS;
+	state |= active_but->kb->state_locked;
+	DBG("kbd is shifted, unshifting - %i \n", state);
     }
-  else if (    (active_but->kb->state & KB_STATE_SHIFT)
-	       || (active_but->kb->state & KB_STATE_MOD)
-	       || (active_but->kb->state & KB_STATE_CTRL)
-	       || (active_but->kb->state & KB_STATE_META)
-	       || (active_but->kb->state & KB_STATE_ALT) )
-    /* check if the kbd is already in a state and reset it
-       leaving caps key state alone */
-    {
-      new_state &= KB_STATE_CAPS;
-      new_state |= active_but->kb->state_locked;
-      DBG("kbd is shifted, unshifting - %i \n", new_state);
+
+    if (Xkb_sync && (mod & KB_STATE_KNOWN)) {
+	if (mod & KB_STATE_CAPS) {
+		kb_send_keypress(active_but);
+	} else if (state != active_but->kb->state) {
+		XkbLatchModifiers(active_but->kb->display,XkbUseCoreKbd,KB_STATE_KNOWN,state);
+		if (state & mod)
+			kb_send_keypress(active_but);
+		return state;
+	}
+	XkbGetState(active_but->kb->display, XkbUseCoreKbd, Xkb_state);
+	return (Xkb_state->mods & KB_STATE_KNOWN)|(state & !KB_STATE_KNOWN);
     }
-  
-  kb_send_keypress(active_but);
-  DBG("%s clicked \n", active_but->default_txt);
-  
-  return new_state;
+
+    kb_send_keypress(active_but);
+    DBG("%s clicked \n", active_but->default_txt);
+    return state;
 }
 
 void kb_send_keypress(button *b)
 {
-  KeySym ks = 0;  
+  KeySym ks = 0;
   int slide_flag = 0;
 
   struct keycodeEntry vk_keycodes[10];
@@ -1042,10 +1038,10 @@ button * kb_find_button(keyboard *kb, int x, int y)
       while (listp != NULL)
 	{
 	  list *ip;
-	  
+
 	  button *tmp_but = NULL;
 	  tmp_box = (box *)listp->data;
-	  if (y >= (offset_y + tmp_box->y) && 
+	  if (y >= (offset_y + tmp_box->y) &&
 	      y <= (offset_y + tmp_box->y + tmp_box->act_height))
 	    {
 	      ip = tmp_box->root_kid;
@@ -1074,7 +1070,7 @@ button * kb_find_button(keyboard *kb, int x, int y)
 				return NULL;
 		        but = tmp_but;
 		    }
-		  
+
 		  ip = ip->next;
 		}
 	    }
@@ -1084,7 +1080,7 @@ button * kb_find_button(keyboard *kb, int x, int y)
   if (!but)
 	fprintf(stderr, "xkbd: no button %i,%i\n",x,y);
   return but;
-    
+
 }
 
 void kb_destroy(keyboard *kb)
@@ -1093,12 +1089,12 @@ void kb_destroy(keyboard *kb)
   /* -- to do -- somwthing like this
   while (listp != NULL)
     {
-    
-      
+
+
       button *tmp_but = NULL;
       tmp_box = (box *)listp->data;
       box_destroy(tmp_box) -- this will destroy the buttons
-    
+
     }
   */
 

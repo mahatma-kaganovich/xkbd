@@ -1,4 +1,4 @@
-/* 
+/*
    xkbd - xlib based onscreen keyboard.
 
    Copyright (C) 2001 Matthew Allum
@@ -39,9 +39,12 @@
 #define WIN_OVERIDE_AWAYS_TOP 0
 #define WIN_OVERIDE_NOT_AWAYS_TOP 1
 
-Display* display; /* ack globals due to sighandlers - another way ? */	
+Display* display; /* ack globals due to sighandlers - another way ? */
 Window   win;
-int      screen_num;	
+int      screen_num;
+
+int Xkb_sync = 0;
+XkbStateRec Xkb_state[1];
 
 enum {
   WM_UNKNOWN,
@@ -64,7 +67,7 @@ get_current_window_manager_name (void)
 
   atom_check = XInternAtom (display, "_NET_SUPPORTING_WM_CHECK", False);
 
-  XGetWindowProperty (display, 
+  XGetWindowProperty (display,
 		      RootWindow(display, DefaultScreen(display)),
 		      atom_check,
 		      0, 16L, False, XA_WINDOW, &type, &format,
@@ -119,10 +122,10 @@ void handle_sig(int sig)
 void version()
 {
    printf("Version: %s \n", VERSION);
-#ifdef USE_XFT 
+#ifdef USE_XFT
    printf("XFT supported\n");
 #endif
-#ifdef USE_XPM 
+#ifdef USE_XPM
    printf("XPM supported\n");
 #endif
 }
@@ -133,7 +136,7 @@ void usage(void)
    printf("Options:\n");
    printf("  -display  <display>\n");
    printf("  -geometry <geometry>\n");
-#ifdef USE_XFT 
+#ifdef USE_XFT
    printf("  -font <font name>  Select the xft AA font for xkbd\n");
 #else
    printf("  -font <font name>  Select the X11 font for xkbd\n");
@@ -144,6 +147,7 @@ void usage(void)
    printf("  -xid used for gtk embedding   \n");
    printf("  -c  Dock\n");
    printf("  -s  strut\n");
+   printf("  -X  Xkb state interaction\n");
    printf("  -v  version\n");
    printf("  -h  this help\n\n");
 }
@@ -167,14 +171,14 @@ int main(int argc, char **argv)
      long                inputMode;
      unsigned long       status;
    } PropMotifWmHints ;
-   
+
    PropMotifWmHints *mwm_hints;
 
    XSizeHints size_hints;
    XWMHints *wm_hints;
 
-   char *display_name = (char *)getenv("DISPLAY");  
-   
+   char *display_name = (char *)getenv("DISPLAY");
+
    Xkbd *kb = NULL;
 
    char *wm_name;
@@ -188,8 +192,9 @@ int main(int argc, char **argv)
    int embed = 0;
    int dock = 0;
    Bool use_normal_win = False;
-   
-   XEvent an_event;
+
+   XEvent ev;
+   int  xkbEventType, xkbError, reason_rtrn, mjr, mnr;
 
    int i;
    char userconffile[256];
@@ -209,10 +214,10 @@ int main(int argc, char **argv)
 	    case 'g' :
 	       geometry = argv[i+1];
 	       i++;
-	       break; 
+	       break;
 	    case 'f':
 	       font_name = argv[i+1];
-#ifdef USE_XFT 
+#ifdef USE_XFT
 	       cmd_xft_selected = 1;
 #endif
 	       break;
@@ -234,6 +239,9 @@ int main(int argc, char **argv)
 	    case 's' :
 	       dock |= 2;
 	       break;
+	    case 'X' :
+	       Xkb_sync = 1;
+	       break;
 	    case 'n' :
 	       use_normal_win = True;
 	       break;
@@ -246,28 +254,30 @@ int main(int argc, char **argv)
 	       exit(0);
 	       break;
 	 }
-      }	
+      }
    }
 
-   display = XOpenDisplay(display_name);
+   if (Xkb_sync) {
+	mjr = XkbMajorVersion;
+	mnr = XkbMinorVersion;
+	display = XkbOpenDisplay(display_name, &xkbEventType, &xkbError, &mjr, &mnr, &reason_rtrn);
+   } else {
+	display = XOpenDisplay(display_name);
+    }
+    memset(Xkb_state, 1, sizeof(Xkb_state));
 
-   if (display != NULL) 
+   if (display != NULL)
    {
-      Atom wm_protocols[]={ 
+      Atom wm_protocols[]={
 	 XInternAtom(display, "WM_DELETE_WINDOW",False),
 	 XInternAtom(display, "WM_PROTOCOLS",False),
 	 XInternAtom(display, "WM_NORMAL_HINTS", False),
       };
 
-      Atom window_type_atom =
-	 XInternAtom(display, "_NET_WM_WINDOW_TYPE" , False);
       Atom window_type_toolbar_atom =
 	 XInternAtom(display, "_NET_WM_WINDOW_TYPE_TOOLBAR",False);
       Atom mwm_atom =
 	XInternAtom(display, "_MOTIF_WM_HINTS",False);
-
-      Atom window_type_dock_atom = 
-	XInternAtom(display, "_NET_WM_WINDOW_TYPE_DOCK",False);
 
       /* HACK to get libvirtkeys to work without mode_switch */
 
@@ -275,25 +285,25 @@ int main(int argc, char **argv)
 
       if  (XKeysymToKeycode(display, XK_Mode_switch) == 0)
 	{
-	  int keycode; 	
+	  int keycode;
 	  int min_kc, max_kc;
-	
+
 	  XDisplayKeycodes(display, &min_kc, &max_kc);
-	  
+
 	  for (keycode = min_kc; keycode <= max_kc; keycode++)
 	    if (XkbKeycodeToKeysym (display, keycode, 0, 0) == NoSymbol)
 	      {
 		mode_switch_ksym = XStringToKeysym("Mode_switch");
-		XChangeKeyboardMapping(display, 
+		XChangeKeyboardMapping(display,
 				       keycode, 1,
 				       &mode_switch_ksym, 1);
 		XSync(display, False);
 	      }
       }
-      
+
       wm_name = get_current_window_manager_name ();
       use_normal_win = True;
-      
+
       if (wm_name)
 	{
 	  wm_type = WM_EHWM_UNKNOWN;
@@ -306,7 +316,7 @@ int main(int argc, char **argv)
 	      wm_type = WM_MATCHBOX;
 	    }
 	}
-       
+
       win = XCreateSimpleWindow(display,
 				RootWindow(display, screen_num),
 				0, 0,
@@ -331,7 +341,7 @@ int main(int argc, char **argv)
 	  if( flags & YNegative )
 	      yret += DisplayHeight( display, screen_num ) - hret;
 	}
-      
+
       /* check for user selected keyboard conf file */
 
       if (conf_file == NULL)
@@ -355,14 +365,14 @@ int main(int argc, char **argv)
 	    }
 	}
 
-      kb = xkbd_realize(display, win, conf_file, font_name, 0, 0, 
+      kb = xkbd_realize(display, win, conf_file, font_name, 0, 0,
 			wret, hret, cmd_xft_selected);
-    
+
       XResizeWindow(display, win, xkbd_get_width(kb), xkbd_get_height(kb));
-    
+
       if (xret || yret)
 	 XMoveWindow(display,win,xret,yret);
-    
+
       size_hints.flags = PPosition | PSize | PMinSize;
       size_hints.x = 0;
       size_hints.y = 0;
@@ -370,11 +380,11 @@ int main(int argc, char **argv)
       size_hints.height     =  xkbd_get_height(kb);
       size_hints.min_width  =  xkbd_get_width(kb);
       size_hints.min_height =  xkbd_get_height(kb);
-    
-      XSetStandardProperties(display, win, window_name, 
+
+      XSetStandardProperties(display, win, window_name,
 			     icon_name, 0,
 			     argv, argc, &size_hints);
-    
+
       wm_hints = XAllocWMHints();
       wm_hints->input = False;
       wm_hints->flags = InputHint;
@@ -387,27 +397,28 @@ int main(int argc, char **argv)
 
       /* Tell the WM we dont want no borders */
       mwm_hints = calloc(1, sizeof(PropMotifWmHints));
-      
+
       mwm_hints->flags = MWM_HINTS_DECORATIONS;
       mwm_hints->decorations = 0;
 
 
 
-      XChangeProperty(display, win, mwm_atom, 
-		      XA_ATOM, 32, PropModeReplace, 
-		      (unsigned char *)mwm_hints, 
+      XChangeProperty(display, win, mwm_atom,
+		      XA_ATOM, 32, PropModeReplace,
+		      (unsigned char *)mwm_hints,
 		      PROP_MOTIF_WM_HINTS_ELEMENTS);
-      
-      free(mwm_hints);
-    
 
-      XSetWMProtocols(display, win, wm_protocols, sizeof(wm_protocols) / 
+      free(mwm_hints);
+
+
+      XSetWMProtocols(display, win, wm_protocols, sizeof(wm_protocols) /
 		      sizeof(Atom));
 
       if (use_normal_win == False)
-	XChangeProperty(display, win, window_type_atom, XA_ATOM, 32, 
-			PropModeReplace, 
-			(unsigned char *) &window_type_toolbar_atom, 1);
+	XChangeProperty(display, win,
+		XInternAtom(display, "_NET_WM_WINDOW_TYPE" , False),
+		XA_ATOM, 32, PropModeReplace,
+		(unsigned char *) &window_type_toolbar_atom, 1);
 
       if (dock & 2) {
 	/* learned from tint2 */
@@ -432,48 +443,57 @@ int main(int argc, char **argv)
       } else {
 	 XMapWindow(display, win);
       }
-    
+
       signal(SIGUSR1, handle_sig); /* for extenal mapping / unmapping */
-    
-      XSelectInput(display, win, 
+
+      XSelectInput(display, win,
 		   ExposureMask |
 		   ButtonPressMask |
 		   ButtonReleaseMask |
 		   Button1MotionMask |
 		   StructureNotifyMask |
 		   VisibilityChangeMask);
-       
+      if (Xkb_sync)
+//	XkbSelectEvents(display,XkbUseCoreKbd,XkbAllEventsMask,XkbAllEventsMask);
+	XkbSelectEvents(display,XkbUseCoreKbd,XkbStateNotifyMask ,XkbStateNotifyMask );
+
       while (1)
       {
-	    XNextEvent(display, &an_event);
-	    xkbd_process(kb, &an_event);
-	    switch (an_event.type) {
-	       case ClientMessage:
-		  if ((an_event.xclient.message_type == wm_protocols[1])
-		      && (an_event.xclient.data.l[0] == wm_protocols[0])) 
+	    XNextEvent(display, &ev);
+	    xkbd_process(kb, &ev);
+	    switch (ev.type) {
+	    case ClientMessage:
+		  if ((ev.xclient.message_type == wm_protocols[1])
+		      && (ev.xclient.data.l[0] == wm_protocols[0]))
 		  {
 			xkbd_destroy(kb);
 			XCloseDisplay(display);
 			exit(0);
 		  }
 		  break;
-	       case ConfigureNotify:
-		  if ( an_event.xconfigure.width != xkbd_get_width(kb)
-		       || an_event.xconfigure.height != xkbd_get_height(kb))
+		case ConfigureNotify:
+		  if ( ev.xconfigure.width != xkbd_get_width(kb)
+		       || ev.xconfigure.height != xkbd_get_height(kb))
 		  {
 		     xkbd_resize(kb,
-				 an_event.xconfigure.width,
-				 an_event.xconfigure.height );
+				 ev.xconfigure.width,
+				 ev.xconfigure.height );
 		  }
 		  break;
-	       case Expose:
+		case Expose:
 		  xkbd_repaint(kb);
 		  break;
+		default: if (ev.type == xkbEventType) {
+			switch (((XkbEvent)ev).any.xkb_type) {
+			    case XkbStateNotify :
+				xkbd_sync_state(kb, 1);
+				break;
+			}
+		}
 	    }
 	    while (xkbd_process_repeats(kb) && !XPending(display))
 		usleep(10000L); /* sleep for a 10th of a second */
       }
-       
    } else {
       fprintf(stderr, "%s: cannot connect to X server '%s'\n",
 	      argv[0], display_name);

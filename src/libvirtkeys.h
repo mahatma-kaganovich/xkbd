@@ -1,13 +1,13 @@
 /*
  * virtkeyslib.h - Definitions for the virtkeys library.
  * Copyright (c) 2000, Merle F. McClelland for CompanionLink
- * 
+ *
  * See the files COPYRIGHT and LICENSE for distribution information.
  *
  * Note that these routines are somewhat oriented to a virtual keyboard
  * design, but are also intended to support handwriting input windows
  * that have very similar needs.
- * 
+ *
  */
 
 #define SHOWSEQUENCES
@@ -43,7 +43,7 @@ struct keyDescriptionEntry
 	int		width;
 
 	// The following array is not used for the modifier keys Shift, Caps, and SpecialChar, as pressing
-	// these keys do not actually send key codes. 
+	// these keys do not actually send key codes.
 
 	struct 		keycodeEntry outputSequence[numModes][MAXKEYCODES];	// Terminated with 0
 	void		*objectData;	// Can be used to hold a pointer to data associated with the key

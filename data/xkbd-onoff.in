@@ -4,4 +4,4 @@ killall -qw xkbd -u "$USER" && exit
 f="$HOME/.cache/xkbd.conf"
 c="$(xkbd-config)"
 [ "$c" = "$(< "$f")" ] || echo "$c" >"$f"
-exec xkbd -s -k "$f"
+exec xkbd -X -s -k "$f"

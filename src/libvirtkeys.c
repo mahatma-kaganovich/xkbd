@@ -1,12 +1,12 @@
 /*
  * virtkeyslib - Routines to support virtual keyboards and handwriting input under X.
  * Copyright (c) 2000, Merle F. McClelland for CompanionLink
- * 
+ *
  * See the files COPYRIGHT and LICENSE for distribution information.
- * 
+ *
  */
 
-/***************************************************************************** 
+/*****************************************************************************
  * Includes
  ****************************************************************************/
 #include <stdio.h>
@@ -107,7 +107,7 @@ static int createModifierTable()
 	// character.
 
 	ModeSwitchKeyCode = kc;
-	
+
 	// Get get the list of all modifiers from the server. Note that a single modifier
 	// can be represented by multiple KeyCodes. For example, there are two Shift keys, each with
 	// its own KeyCode. Pressing either indicates the "Shift" modifier state. We just need to
@@ -117,7 +117,7 @@ static int createModifierTable()
 
 	modifiers = XGetModifierMapping(dpy);
 
-	kp = modifiers->modifiermap;    
+	kp = modifiers->modifiermap;
 
 	// Now, iterate through the list, finding the first non-zero keycode for each
 	// modifier index. If no modifier keycode is found, that's ok, since not all
@@ -133,7 +133,7 @@ static int createModifierTable()
 
 		for (modifier_key = 0; modifier_key < modifiers->max_keypermod; modifier_key++)
 		{
-			int keycode = kp[modifier_index * modifiers->max_keypermod + modifier_key]; 
+			int keycode = kp[modifier_index * modifiers->max_keypermod + modifier_key];
 
   			if (keycode != 0)
 			{
@@ -182,7 +182,7 @@ static int createModifierTable()
 			case XK_Mode_switch:
 
 				ModeModifierIndex = modifier_index;
-				ModeModifierMask = (1 << modifier_index);	// Create a mask for the ModeModifier 
+				ModeModifierMask = (1 << modifier_index);	// Create a mask for the ModeModifier
 				break;
 #endif
 			}
@@ -217,7 +217,7 @@ static int createModifierTable()
 // set up for use with the Mode_Shift key. If so, we just return it as-is. If not, a copy is made of the
 // table into a new table that has empty definitions for the extra columns.
 
-int loadKeySymTable() 
+int loadKeySymTable()
 {
 	if (dpy == NULL)
 		return FALSE;
@@ -226,8 +226,8 @@ int loadKeySymTable()
 
 	XDisplayKeycodes(dpy, &minKeycode, &maxKeycode);
 	if (keymap) free(keymap);
-	keymap = XGetKeyboardMapping(dpy, minKeycode, 
-				 	(maxKeycode - minKeycode + 1), 
+	keymap = XGetKeyboardMapping(dpy, minKeycode,
+				 	(maxKeycode - minKeycode + 1),
 				 	&keysymsPerKeycode);
 
 	if (debug)
@@ -320,7 +320,7 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 	{
 
 		if (debug)
-			fprintf(stderr, "KeySym not found - will assign at Keycode %d, Column %d\n", 
+			fprintf(stderr, "KeySym not found - will assign at Keycode %d, Column %d\n",
 				(availableKeycode + minKeycode), availableColumn);
 
 		// We assign the KeySym to the next available NoSymbol entry, assuming there
@@ -340,7 +340,7 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 		// We point to only the row that we are changing, and say that we are chaing just one. Note that
 		// the keycode index passed must be based on minKeycode.
 
-		XChangeKeyboardMapping(dpy, (availableKeycode + minKeycode), 
+		XChangeKeyboardMapping(dpy, (availableKeycode + minKeycode),
 				keysymsPerKeycode, &keymap[(availableKeycode * keysymsPerKeycode)], 1);
 
 		assignedKeycode = availableKeycode;
@@ -356,7 +356,7 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 
 #ifdef USEMODIFIERS
 	modifiers = 0;
-	ModeModifier = modifierTable[ModeModifierIndex]; 
+	ModeModifier = modifierTable[ModeModifierIndex];
 #else
 	ModeModifier = ModeSwitchKeyCode;
 #endif
@@ -371,7 +371,7 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 
 		break;
 
-	case 1:	// Shifted case - we have to simulate pressing down the shift modifier, 
+	case 1:	// Shifted case - we have to simulate pressing down the shift modifier,
 		// then the character key, then releasing shift
 
 		table[0].keycode = modifierTable[ShiftMapIndex];// Store the keycode for the shift key
@@ -461,7 +461,7 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 		(*labelBuffer)[len] = '\0';
 
 		if (debug)
-			fprintf(stderr, "modifiers = %x, keycode = %d, len = %d, labelBuffer = '%s'\n", 
+			fprintf(stderr, "modifiers = %x, keycode = %d, len = %d, labelBuffer = '%s'\n",
 				modifiers, fakeEvent.xkey.keycode, len, (len > 0 ? *labelBuffer : "(null)"));
 	}
 #else
@@ -580,31 +580,31 @@ void sendKey(KeyCode character, enum keyDirection keydirection)
     	switch (keydirection)
     	{
     	case keyDown:
-	
+
         	if (debug)
                 	fprintf(stderr, "sending %04x key down\n", character);
-	
+
 		XTestFakeKeyEvent(dpy, (unsigned int) character, TRUE, 0);
         	break;
-	
+
     	case keyUp:
-	
+
         	if (debug)
                 	fprintf(stderr, "sending %04x key up\n", character);
-	
+
 		XTestFakeKeyEvent(dpy, (unsigned int) character, FALSE, 0);
         	break;
-	
+
     	case keyDownUp:
-	
+
         	if (debug)
                 	fprintf(stderr, "sending %04x key down\n", character);
-	
+
 		XTestFakeKeyEvent(dpy, (unsigned int) character, TRUE, 0);
-	
+
         	if (debug)
                 	fprintf(stderr, "sending %04x key up\n", character);
-	
+
 		XTestFakeKeyEvent(dpy, (unsigned int) character, FALSE, 0);
         	break;
     	}
@@ -631,7 +631,7 @@ int setupKeyboardVariables(Display *display)
 	// the X display variable.
 
 	dpy = display;
-	
+
 	// Call to test for and set up the XTest extension
 
 	if (debug)
@@ -644,7 +644,7 @@ int setupKeyboardVariables(Display *display)
 
 	if (debug)
 		fprintf(stderr, "Creating modifier table\n");
-	
+
 	if (createModifierTable() == FALSE)
 		return FALSE;
 

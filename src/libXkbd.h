@@ -15,14 +15,14 @@
 #include "button.h"
 #include "box.h"
 
-#define XFT_FONT 1 
+#define XFT_FONT 1
 
 typedef struct _xkbd
 {
    struct _keyboard *kb;
    struct _button    *active_but;
    int i;
-   
+
 } Xkbd;
 
 Xkbd* xkbd_realize(Display *display,
@@ -42,3 +42,4 @@ Bool xkbd_process_repeats(Xkbd *xkbd);
 int xkbd_get_width(Xkbd *xkbd);
 int xkbd_get_height(Xkbd *xkbd);
 void xkbd_destroy(Xkbd *xkbd);
+void xkbd_sync_state(Xkbd *xkbd, int draw);
