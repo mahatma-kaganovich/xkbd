@@ -913,21 +913,19 @@ int kb_process_keypress(button *active_but)
 	DBG("kbd is shifted, unshifting - %i \n", state);
     }
 
-    if (Xkb_sync && (mod & KB_STATE_KNOWN)) {
-	if (mod & KB_STATE_CAPS) {
-		kb_send_keypress(active_but);
-	} else if (state != active_but->kb->state) {
+    if (Xkb_sync && (mod & (KB_STATE_KNOWN^KB_STATE_CAPS))) {
+	if (state != active_but->kb->state) {
 		XkbLatchModifiers(active_but->kb->display,XkbUseCoreKbd,KB_STATE_KNOWN,state);
 		if (state & mod)
 			kb_send_keypress(active_but);
-		return state;
 	}
-	XkbGetState(active_but->kb->display, XkbUseCoreKbd, Xkb_state);
-	return (Xkb_state->mods & KB_STATE_KNOWN)|(state & !KB_STATE_KNOWN);
+    } else {
+	    /* Xkb_sync caps too */
+	    kb_send_keypress(active_but);
+	    DBG("%s clicked \n", active_but->default_txt);
     }
-
-    kb_send_keypress(active_but);
-    DBG("%s clicked \n", active_but->default_txt);
+    /* real precise state for Xkb_sync will be reached by event,
+       so try to be just visually pretty sensitive */
     return state;
 }
 
