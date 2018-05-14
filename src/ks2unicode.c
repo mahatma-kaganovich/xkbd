@@ -1435,7 +1435,7 @@ wide:
 		s[0] = (char) (0xF0 | wc);
 	} else {
 		*txt=XKeysymToString(ks);
-		if (!*txt) sprintf(*txt=malloc(6),"U+%04X",wc);
+		if (!*txt) sprintf(*txt=malloc(7),"U+%04X",wc);
 		return;
 	}
 	s[n]=0;
@@ -1445,7 +1445,7 @@ wide:
 	return;
 notfound:
 	*txt=XKeysymToString(ks);
-	if (!*txt) sprintf(*txt=malloc(9),"?%lx",ks);
+	if (!*txt) sprintf(*txt=malloc(10),"?%lx",ks);
 	return;
 }
 
