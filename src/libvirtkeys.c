@@ -23,7 +23,6 @@
 #include <X11/Xos.h>
 #include <X11/Xproto.h>
 #include <ctype.h>
-#include <ks2unicode.h>
 
 // Note that we use this local copy here, because the installed version may or
 // may not exist, and may not (yet) be up to date.
@@ -655,52 +654,6 @@ int setupKeyboardVariables(Display *display)
 		return FALSE;
 
 	return TRUE;
-}
-
-void ksText(KeySym ks, char **txt)
-{
-	char s[4];
-	unsigned int n;
-	unsigned int wc;
-	struct ks2unicode *k2u;
-
-	if (!ks || *txt) return;
-	if (ks > 0x01000000){
-		wc = ks - 0x01000000;
-	} else {
-		for(k2u = (struct ks2unicode*)&ks2u; k2u->ks && k2u->ks!=ks; k2u+=sizeof(*k2u)){};
-		if(!(wc=k2u->u)) {
-			*txt=XKeysymToString(ks);
-			return;
-		}
-	}
-	if (wc < 0x000080) {
-		n=1;
-		s[0]=(char)wc;
-	} else if (wc < 0x000800) {
-		n=2;
-		s[1] = (char) (0x80 | (wc & 0x3F)); wc >>= 6;
-		s[0] = (char) (0xC0 | wc);
-	} else if (wc < 0x010000) {
-		n=3;
-		s[2] = (char) (0x80 | (wc & 0x3F)); wc >>= 6;
-		s[1] = (char) (0x80 | (wc & 0x3F)); wc >>= 6;
-		s[0] = (char) (0xE0 | wc);
-	} else if (wc < 0x200000) {
-		n=4;
-		s[3] = (char) (0x80 | (wc & 0x3F)); wc >>= 6;
-		s[2] = (char) (0x80 | (wc & 0x3F)); wc >>= 6;
-		s[1] = (char) (0x80 | (wc & 0x3F)); wc >>= 6;
-		s[0] = (char) (0xF0 | wc);
-	} else {
-		*txt=XKeysymToString(ks);
-		return;
-	}
-	s[n]=0;
-	*txt = malloc(n);
-	memcpy(*txt,s,n);
-	(*txt)[n] = 0;
-	return;
 }
 
 void ksMap(KeySym ks, KeySym *ks1, char **txt1, unsigned int mods)
