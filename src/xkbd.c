@@ -45,7 +45,7 @@ int      screen_num;
 
 int Xkb_sync = 0;
 int no_lock = 0;
-XkbStateRec Xkb_state[1];
+XkbStateRec Xkb_state[1] = {};
 
 enum {
   WM_UNKNOWN,
@@ -154,7 +154,6 @@ Options:\n\
 #endif
 }
 
-
 int main(int argc, char **argv)
 {
    char *window_name = "xkbd";
@@ -196,7 +195,7 @@ int main(int argc, char **argv)
    Bool use_normal_win = False;
 
    XEvent ev;
-   int  xkbEventType, xkbError, reason_rtrn, mjr, mnr;
+   int  xkbEventType = Expose; // any used berfore
 
    int i;
    char userconffile[256];
@@ -263,19 +262,20 @@ int main(int argc, char **argv)
    }
 
    if (Xkb_sync) {
-	mjr = XkbMajorVersion;
-	mnr = XkbMinorVersion;
+	int xkbError, reason_rtrn, mjr = XkbMajorVersion, mnr = XkbMinorVersion;
+
 	display = XkbOpenDisplay(display_name, &xkbEventType, &xkbError, &mjr, &mnr, &reason_rtrn);
+	if (!display) goto no_dpy;
 	/* vs. some annoying X errors, reset state on start in sync mode */
 	XkbLockModifiers(display,XkbUseCoreKbd,0xffff,0);
 	XkbLatchModifiers(display,XkbUseCoreKbd,0xffff,0);
+//	XkbSelectEvents(display,XkbUseCoreKbd,XkbAllEventsMask,XkbAllEventsMask);
+	XkbSelectEvents(display,XkbUseCoreKbd,XkbStateNotifyMask,XkbStateNotifyMask);
    } else {
 	display = XOpenDisplay(display_name);
-    }
-    memset(Xkb_state, 1, sizeof(Xkb_state));
+	if (!display) goto no_dpy;
+   }
 
-   if (display != NULL)
-   {
       Atom wm_protocols[]={
 	 XInternAtom(display, "WM_DELETE_WINDOW",False),
 	 XInternAtom(display, "WM_PROTOCOLS",False),
@@ -461,9 +461,6 @@ int main(int argc, char **argv)
 		   Button1MotionMask |
 		   StructureNotifyMask |
 		   VisibilityChangeMask);
-      if (Xkb_sync)
-//	XkbSelectEvents(display,XkbUseCoreKbd,XkbAllEventsMask,XkbAllEventsMask);
-	XkbSelectEvents(display,XkbUseCoreKbd,XkbStateNotifyMask ,XkbStateNotifyMask );
 
       while (1)
       {
@@ -493,12 +490,9 @@ int main(int argc, char **argv)
 		  break;
 		default: if (ev.type == xkbEventType) {
 			switch (((XkbEvent)ev).any.xkb_type) {
-			    case XkbStateNotify :
-				if (xkbd_sync_state(kb)) {
-					kb_render(kb->kb);
-					kb_paint(kb->kb);
-					// xkbd_repaint(xkbd);
-				}
+			    case XkbStateNotify:
+				if (xkbd_sync_state(kb))
+					xkbd_repaint(kb);
 				break;
 			}
 		}
@@ -506,23 +500,9 @@ int main(int argc, char **argv)
 	    while (xkbd_process_repeats(kb) && !XPending(display))
 		usleep(10000L); /* sleep for a 10th of a second */
       }
-   } else {
-      fprintf(stderr, "%s: cannot connect to X server '%s'\n",
-	      argv[0], display_name);
-      exit(1);
-   }
-
+no_dpy:
+	fprintf(stderr, "%s: cannot connect to X server '%s'\n", argv[0], display_name);
+	exit(1);
 }
-
-
-
-
-
-
-
-
-
-
-
 
 
