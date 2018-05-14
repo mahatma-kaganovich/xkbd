@@ -52,16 +52,14 @@ void ksText(KeySym ks, char **txt)
 	if (ks < ks2u[p1].ks || ks > ks2u[p2].ks) goto notfound;
 
 next:
-	if (p1 == p2) goto notfound;
 	p = (p1+p2)>>1;
+	if (p == p1) goto notfound;
 	k = ks2u[p].ks;
 	if (ks > k) {
-		if (p1 == p) goto notfound;
 		p1 = p;
 		goto next;
 	}
 	if (ks < k) {
-		if (p2 == p) goto notfound;
 		p2 = p;
 		goto next;
 	}
