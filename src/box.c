@@ -89,7 +89,7 @@ void box_list_contents(box *bx)
     {
       /*      if (ptr->type == WIDGET_BUTTON)
 	      printf("listing %s\n", ((button *)ptr->data)->txt); */
-      printf("size is %i\n", sizeof(*(ptr->data)));
+      printf("size is %lu\n", sizeof(*(ptr->data)));
       ptr = ptr->next;
     }
 }

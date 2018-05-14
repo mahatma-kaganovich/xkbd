@@ -8,5 +8,7 @@ xkbd_SOURCES = xkbd.c libXkbd.c box.c button.c kb.c libvirtkeys.c ks2unicode.c \
                       structs.h box.h  button.h  kb.h  libvirtkeys.h ks2unicode.h \
                       libXkbd.h
 xkbd_LDADD   = $(LDADD)
-        
 
+CLEANFILES = ks2unicode.c
+ks2unicode.c:
+	perl ks2unicode.pl
