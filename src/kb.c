@@ -899,6 +899,7 @@ int kb_process_keypress(button *active_but)
 	if (lock & mod) {
 		lock ^= mod;
 		state ^= mod;
+		keypress = 0;
 	} else if (state ^ mod) {
 		state ^= mod;
 	} else if (no_lock) {
@@ -923,13 +924,10 @@ int kb_process_keypress(button *active_but)
 	if (Xkb_sync && (mod & KB_STATE_KNOWN)) {
 		if (state != active_but->kb->state)
 			XkbLatchModifiers(active_but->kb->display,XkbUseCoreKbd,KB_STATE_KNOWN,state & KB_STATE_KNOWN);
-		if (lock != active_but->kb->state_locked) {
+		if (lock != active_but->kb->state_locked)
 			XkbLockModifiers(active_but->kb->display,XkbUseCoreKbd,KB_STATE_KNOWN,lock & KB_STATE_KNOWN);
-			active_but->kb->state_locked = lock;
-			return state;
-		}
-	} else
-		active_but->kb->state_locked = lock;
+	}
+	active_but->kb->state_locked = lock;
     }
 
     if (keypress) {
