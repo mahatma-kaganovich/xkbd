@@ -133,25 +133,25 @@ void version()
 
 void usage(void)
 {
-   printf("Usage: xkbd <options>\n");
-   printf("Options:\n");
-   printf("  -display  <display>\n");
-   printf("  -geometry <geometry>\n");
+   printf("Usage: xkbd <options>\n\
+Options:\n\
+  -display  <display>\n\
+  -geometry <geometry>\n\
+     ( NOTE: The above will overide the configs font )\n\
+  -k  <keyboard file> Select the keyboard definition file\n\
+                      other than" DEFAULTCONFIG "\n\
+  -xid used for gtk embedding\n\
+  -c  Dock\n\
+  -s  strut\n\
+  -X  Xkb state interaction\n\
+  -l  disable modifiers lock\n\
+  -v  version\n\
+  -h  this help\n");
 #ifdef USE_XFT
    printf("  -font <font name>  Select the xft AA font for xkbd\n");
 #else
    printf("  -font <font name>  Select the X11 font for xkbd\n");
 #endif
-   printf("     ( NOTE: The above will overide the configs font )\n");
-   printf("  -k  <keybaord file> Select the keyboard definition file\n");
-   printf("                      other than" DEFAULTCONFIG "\n");
-   printf("  -xid used for gtk embedding   \n");
-   printf("  -c  Dock\n");
-   printf("  -s  strut\n");
-   printf("  -X  Xkb state interaction\n");
-   printf("  -l  disable modifiers lock\n");
-   printf("  -v  version\n");
-   printf("  -h  this help\n\n");
 }
 
 
