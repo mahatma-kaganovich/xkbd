@@ -45,7 +45,6 @@ int      screen_num;
 
 int Xkb_sync = 0;
 int no_lock = 0;
-XkbStateRec Xkb_state[1] = {};
 
 enum {
   WM_UNKNOWN,
@@ -221,11 +220,6 @@ int main(int argc, char **argv)
 #ifdef USE_XFT
 	       cmd_xft_selected = 1;
 #endif
-	       break;
-	    case 'o' : /* wm override */
-	    case 't' :
-	       fprintf( stderr, "Overide redirect support deprciated\n");
-	       exit(1);
 	       break;
 	    case 'k' :
 	       conf_file = argv[i+1];
@@ -491,7 +485,7 @@ int main(int argc, char **argv)
 		default: if (ev.type == xkbEventType) {
 			switch (((XkbEvent)ev).any.xkb_type) {
 			    case XkbStateNotify:
-				if (xkbd_sync_state(kb))
+				if (xkbd_sync_state(kb,((XkbEvent)ev).state.mods,((XkbEvent)ev).state.locked_mods,((XkbEvent)ev).state.group))
 					xkbd_repaint(kb);
 				break;
 			}

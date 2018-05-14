@@ -11,14 +11,19 @@ xkbd_realize(Display *display,
 	     int height,
 	     int flags)
 {
-   Xkbd *xkbd;
-   xkbd = malloc(sizeof(Xkbd));
+   XkbStateRec Xkb_state[1] = {};
+   Xkbd *xkbd = malloc(sizeof(Xkbd));
 
    xkbd->kb = kb_new(dest, display, x, y,
 		     width, height, conf_file,
 		     font_name, flags  );
    xkbd->active_but = NULL;
-   xkbd_sync_state(xkbd);
+
+//   if (Xkb_sync)
+	XkbGetState(display, XkbUseCoreKbd, Xkb_state);
+   if(Xkb_state)
+	xkbd_sync_state(xkbd,Xkb_state->mods,Xkb_state->locked_mods,Xkb_state->group);
+
    kb_size(xkbd->kb);
    return xkbd;
 }
@@ -84,18 +89,16 @@ unsigned int _set_state(unsigned int *s, unsigned int new)
 }
 
 
-unsigned int xkbd_sync_state(Xkbd *xkbd)
+unsigned int xkbd_sync_state(Xkbd *xkbd, unsigned int mods, unsigned int locked_mods, int group)
 {
 	unsigned int ch=0;
 	int i=0;
 	Display *dpy = xkbd->kb->display;
 
-	XkbGetState(dpy, XkbUseCoreKbd, Xkb_state);
-	// fprintf(stderr,"group=%x mods=%x latch=%x lock=%x\n",Xkb_state->group,Xkb_state->mods,Xkb_state->latched_mods,Xkb_state->locked_mods);
-	ch|=_set_state(&xkbd->kb->state, Xkb_state->mods)|_set_state(&xkbd->kb->state_locked, Xkb_state->locked_mods);
+	ch|=_set_state(&xkbd->kb->state, mods)|_set_state(&xkbd->kb->state_locked, locked_mods);
 	for (i=0; i<xkbd->kb->total_layouts; i++){
-		if (xkbd->kb->kbd_layouts[i] == xkbd->kb->vbox && i!=Xkb_state->group) {
-			kb_switch_layout(xkbd->kb,Xkb_state->group);
+		if (xkbd->kb->kbd_layouts[i] == xkbd->kb->vbox && i!=group) {
+			kb_switch_layout(xkbd->kb,group);
 			ch=0;
 			break;
 		}

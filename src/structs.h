@@ -184,8 +184,6 @@ typedef struct _button
 
 extern int Xkb_sync;
 extern int no_lock;
-extern XkbStateRec Xkb_state[1];
-
 
 #endif
 
