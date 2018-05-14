@@ -1433,8 +1433,7 @@ wide:
 		s[1] = (char) (0x80 | (wc & 0x3F)); wc >>= 6;
 		s[0] = (char) (0xF0 | wc);
 	} else {
-		*txt=XKeysymToString(ks);
-		return;
+		goto notfound;
 	}
 	s[n]=0;
 	*txt = malloc(n);
