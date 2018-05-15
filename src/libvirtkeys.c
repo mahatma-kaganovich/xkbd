@@ -218,32 +218,44 @@ static int createModifierTable()
 
 int loadKeySymTable()
 {
+	KeySym *keymap1 = NULL;
+	int minKeycode1,maxKeycode1,keysymsPerKeycode1;
+	int n = 0;
+
 	if (dpy == NULL)
 		return FALSE;
 
 	// Now we load other variables fromthe server that we use in the other routines.
 
-	XDisplayKeycodes(dpy, &minKeycode, &maxKeycode);
-	if (keymap) free(keymap);
-	keymap = XGetKeyboardMapping(dpy, minKeycode,
-				 	(maxKeycode - minKeycode + 1),
-				 	&keysymsPerKeycode);
 
-	if (debug)
-	{
-		int k;
-		int n;
+	XDisplayKeycodes(dpy, &minKeycode1, &maxKeycode1);
+	keymap1 = XGetKeyboardMapping(dpy, minKeycode1,
+				 	(maxKeycode1 - minKeycode1 + 1),
+				 	&keysymsPerKeycode1);
 
-		for (k = 0; k < (maxKeycode - minKeycode + 1); k++)
-		{
-			fprintf(stderr, "%-10d", (k + minKeycode));
-			for (n = 0; n < keysymsPerKeycode; n++)
-				fprintf(stderr, "%-10s\t", XKeysymToString(keymap[(k * keysymsPerKeycode + n)]));
-			fprintf(stderr, "\n");
+	if (!keymap || minKeycode1 != minKeycode || maxKeycode1 != maxKeycode ||
+	    keysymsPerKeycode1 != keysymsPerKeycode ||
+	    memcmp(keymap, keymap1, (maxKeycode-minKeycode+1)*keysymsPerKeycode1)) {
+		if (keymap) free(keymap);
+		keymap = keymap1;
+		minKeycode = minKeycode1;
+		maxKeycode = maxKeycode1;
+		keysymsPerKeycode = keysymsPerKeycode1;
+		if (debug) {
+			int k,n;
+
+			for (k = 0; k < (maxKeycode - minKeycode + 1); k++) {
+				fprintf(stderr, "%-10d", (k + minKeycode));
+				for (n = 0; n < keysymsPerKeycode; n++)
+					fprintf(stderr, "%-10s\t", XKeysymToString(keymap[(k * keysymsPerKeycode + n)]));
+				fprintf(stderr, "\n");
+			}
 		}
+		return TRUE;
 	}
-
-	return TRUE;
+	free(keymap1);
+	/* keymap not changed */
+	return FALSE;
 }
 
 // This routine takes a KeySym, a pointer to a keycodeEntry table array, and an optional labelBuffer

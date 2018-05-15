@@ -30,6 +30,7 @@
 #include "../config.h"
 
 #include "libXkbd.h"
+#include "libvirtkeys.h"
 
 #define DEBUG 1
 
@@ -41,6 +42,7 @@
 
 Display* display; /* ack globals due to sighandlers - another way ? */
 Window   win;
+Atom mwm_atom;
 int      screen_num;
 
 int Xkb_sync = 0;
@@ -140,8 +142,11 @@ Options:\n\
   -k  <keyboard file> Select the keyboard definition file\n\
                       other than" DEFAULTCONFIG "\n\
   -xid used for gtk embedding\n\
-  -c  Dock\n\
+  -c  dock\n\
   -s  strut\n\
+  -D  Dock/options bitmask: 1=dock, 2=strut, 4=_NET_WM_WINDOW_TYPE_DOCK,\n\
+      8=_NET_WM_WINDOW_TYPE_TOOLBAR, 16=_NET_WM_STATE_STICKY.\n\
+      For OpenBox I use 22 = $[2+4+16].\n\
   -X  Xkb state interaction\n\
   -l  disable modifiers lock\n\
   -v  version\n\
@@ -151,6 +156,15 @@ Options:\n\
 #else
    printf("  -font <font name>  Select the X11 font for xkbd\n");
 #endif
+}
+
+void _prop32(char *prop, Atom type, unsigned char *data, int n){
+	XChangeProperty(display,win,prop?XInternAtom(display,prop,False):mwm_atom,type,32,PropModeReplace,data,n); 
+}
+
+void _propAtom32(char *prop, char *data){
+	Atom a=XInternAtom(display,data,False);
+	_prop32(prop,XA_ATOM,(unsigned char *)&a,1);
 }
 
 int main(int argc, char **argv)
@@ -163,16 +177,14 @@ int main(int argc, char **argv)
 #define MWM_HINTS_DECORATIONS          (1L << 1)
 #define MWM_DECOR_BORDER               (1L << 1)
 
-   typedef struct
+   struct PropMotifWmHints
    {
      unsigned long       flags;
      unsigned long       functions;
      unsigned long       decorations;
      long                inputMode;
      unsigned long       status;
-   } PropMotifWmHints ;
-
-   PropMotifWmHints *mwm_hints;
+   } mwm_hints = { MWM_HINTS_DECORATIONS,0,0,0,0 };
 
    XSizeHints size_hints;
    XWMHints *wm_hints;
@@ -181,8 +193,8 @@ int main(int argc, char **argv)
 
    Xkbd *kb = NULL;
 
-   char *wm_name;
-   int wm_type = WM_UNKNOWN;
+//   char *wm_name;
+//   int wm_type = WM_UNKNOWN;
 
    char *geometry = NULL;
    int xret=0, yret=0, wret=0, hret=0;
@@ -191,7 +203,6 @@ int main(int argc, char **argv)
    int cmd_xft_selected = 0; /* ugly ! */
    int embed = 0;
    int dock = 0;
-   Bool use_normal_win = False;
 
    XEvent ev;
    int  xkbEventType = Expose; // any used berfore
@@ -208,22 +219,19 @@ int main(int argc, char **argv)
       if (*arg=='-') {
 	 switch (arg[1]) {
 	    case 'd' : /* display */
-	       display_name = argv[i+1];
-	       i++;
+	       display_name = argv[++i];
 	       break;
 	    case 'g' :
-	       geometry = argv[i+1];
-	       i++;
+	       geometry = argv[++i];
 	       break;
 	    case 'f':
-	       font_name = argv[i+1];
+	       font_name = argv[++i];
 #ifdef USE_XFT
 	       cmd_xft_selected = 1;
 #endif
 	       break;
 	    case 'k' :
-	       conf_file = argv[i+1];
-	       i++;
+	       conf_file = argv[++i];
 	       break;
 	    case 'x' :
 	       embed = 1;
@@ -234,14 +242,14 @@ int main(int argc, char **argv)
 	    case 's' :
 	       dock |= 2;
 	       break;
+	    case 'D' :
+	       dock = atoi(argv[++i]);
+	       break;
 	    case 'X' :
 	       Xkb_sync = 1;
 	       break;
 	    case 'l' :
 	       no_lock = 1;
-	       break;
-	    case 'n' :
-	       use_normal_win = True;
 	       break;
 	    case 'v' :
 	       version();
@@ -273,10 +281,7 @@ int main(int argc, char **argv)
 	 XInternAtom(display, "WM_NORMAL_HINTS", False),
       };
 
-      Atom window_type_toolbar_atom =
-	 XInternAtom(display, "_NET_WM_WINDOW_TYPE_TOOLBAR",False);
-      Atom mwm_atom =
-	XInternAtom(display, "_MOTIF_WM_HINTS",False);
+      mwm_atom = XInternAtom(display, "_MOTIF_WM_HINTS",False);
 
       /* HACK to get libvirtkeys to work without mode_switch */
 
@@ -300,8 +305,8 @@ int main(int argc, char **argv)
 	      }
       }
 
+/*
       wm_name = get_current_window_manager_name ();
-      use_normal_win = True;
 
       if (wm_name)
 	{
@@ -311,17 +316,17 @@ int main(int argc, char **argv)
 	  else if (!strcmp(wm_name, "matchbox"))
 	    {
 
-	      use_normal_win = False;
 	      wm_type = WM_MATCHBOX;
 	    }
 	}
-
+*/
       win = XCreateSimpleWindow(display,
 				RootWindow(display, screen_num),
 				0, 0,
 				300, 300,
 				0, BlackPixel(display, screen_num),
 				WhitePixel(display, screen_num));
+
 
       wret = DisplayWidth(display, screen_num);
       hret = DisplayHeight(display, screen_num)/4;
@@ -364,6 +369,7 @@ int main(int argc, char **argv)
 	    }
 	}
 
+
       kb = xkbd_realize(display, win, conf_file, font_name, 0, 0,
 			wret, hret, cmd_xft_selected);
 
@@ -381,9 +387,8 @@ int main(int argc, char **argv)
       size_hints.min_height =  xkbd_get_height(kb);
 
       XSetStandardProperties(display, win, window_name,
-			     icon_name, 0,
+			     icon_name, None,
 			     argv, argc, &size_hints);
-
       wm_hints = XAllocWMHints();
       wm_hints->input = False;
       wm_hints->flags = InputHint;
@@ -394,30 +399,17 @@ int main(int argc, char **argv)
       }
       XSetWMHints(display, win, wm_hints );
 
-      /* Tell the WM we dont want no borders */
-      mwm_hints = calloc(1, sizeof(PropMotifWmHints));
-
-      mwm_hints->flags = MWM_HINTS_DECORATIONS;
-      mwm_hints->decorations = 0;
-
-
-
-      XChangeProperty(display, win, mwm_atom,
-		      XA_ATOM, 32, PropModeReplace,
-		      (unsigned char *)mwm_hints,
-		      PROP_MOTIF_WM_HINTS_ELEMENTS);
-
-      free(mwm_hints);
-
+      _prop32(NULL,XA_ATOM,(unsigned char *)&mwm_hints,PROP_MOTIF_WM_HINTS_ELEMENTS);
 
       XSetWMProtocols(display, win, wm_protocols, sizeof(wm_protocols) /
 		      sizeof(Atom));
 
-      if (use_normal_win == False)
-	XChangeProperty(display, win,
-		XInternAtom(display, "_NET_WM_WINDOW_TYPE" , False),
-		XA_ATOM, 32, PropModeReplace,
-		(unsigned char *) &window_type_toolbar_atom, 1);
+      if(dock & 4)
+	_propAtom32("_NET_WM_WINDOW_TYPE","_NET_WM_WINDOW_TYPE_DOCK");
+      if (dock & 8)
+	_propAtom32("_NET_WM_WINDOW_TYPE","_NET_WM_WINDOW_TYPE_TOOLBAR");
+      if (dock & 16)
+	_propAtom32("_NET_WM_STATE","_NET_WM_STATE_STICKY");
 
       if (dock & 2) {
 	/* learned from tint2 */
@@ -425,16 +417,9 @@ int main(int argc, char **argv)
 	XChangeProperty(display,win, mwm_atom, mwm_atom,32,PropModeReplace,(unsigned char *)&prop,5);
         prop[0]=0;
 	prop[3] = xkbd_get_height(kb); // -1 ?
-	XChangeProperty(display,
-		win,
-		XInternAtom(display, "_NET_WM_STRUT",False),
-		XA_CARDINAL, 32, PropModeReplace, (unsigned char *)&prop, 4);
-	XChangeProperty(display, win,
-		XInternAtom(display, "_NET_WM_STRUT_PARTIAL",False),
-		XA_CARDINAL, 32, PropModeReplace, (unsigned char *)&prop, 12);
-
+	_prop32("_NET_WM_STRUT",XA_CARDINAL,(unsigned char *)&prop,4);
+	_prop32("_NET_WM_STRUT_PARTIAL",XA_CARDINAL,(unsigned char *)&prop,12);
       }
-
       if (embed)
       {
 	 fprintf(stdout, "%li\n", win);
@@ -481,15 +466,25 @@ int main(int argc, char **argv)
 		  xkbd_repaint(kb);
 		  break;
 		default: if (ev.type == xkbEventType) {
-			switch (((XkbEvent)ev).any.xkb_type) {
+#define e ((XkbEvent)ev)
+			switch (e.any.xkb_type) {
 			    case XkbStateNotify:
-				if (xkbd_sync_state(kb,((XkbEvent)ev).state.mods,((XkbEvent)ev).state.locked_mods,((XkbEvent)ev).state.group))
+#undef e
+#define e (((XkbEvent)ev).state)
+				if (xkbd_sync_state(kb,e.mods,e.locked_mods,e.group))
 					xkbd_repaint(kb);
 				break;
-			    //case XkbMapNotify:
 			    case XkbNewKeyboardNotify:
-				// reconfigure here. just restart
-				execvp(argv[0],argv);
+#undef e
+#define e (((XkbEvent)ev).new_kbd)
+				// Xkbd send false notify, so we must compare maps
+				if (e.min_key_code != e.old_min_key_code || e.max_key_code != e.old_max_key_code || e.device != e.old_device
+				    || loadKeySymTable()
+				    ) {
+					xkbd_destroy(kb);
+					XCloseDisplay(display);
+					execvp(argv[0],argv);
+				}
 				break;
 			}
 		}
