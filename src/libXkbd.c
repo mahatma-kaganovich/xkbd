@@ -19,10 +19,19 @@ xkbd_realize(Display *display,
 		     font_name, flags  );
    xkbd->active_but = NULL;
 
+    /* we can read current state or reset (& pass to event)
+       reset solve some errors (XkbGetState stuck failed on some combination)
+       even if we not use XkbGetState, keeping X server happy is good */
+
 //   if (Xkb_sync)
-	XkbGetState(display, XkbUseCoreKbd, Xkb_state);
-   if(Xkb_state)
-	xkbd_sync_state(xkbd,Xkb_state->mods,Xkb_state->locked_mods,Xkb_state->group);
+//	XkbGetState(display, XkbUseCoreKbd, Xkb_state);
+//   if(Xkb_state)
+//	xkbd_sync_state(xkbd,Xkb_state->mods,Xkb_state->locked_mods,Xkb_state->group);
+
+   /* to event -> working starting here */
+   XkbLockModifiers(display,XkbUseCoreKbd,0xffff,0);
+   XkbLatchModifiers(display,XkbUseCoreKbd,0xffff,0);
+   XkbLockGroup(display,XkbUseCoreKbd,0);
 
    kb_size(xkbd->kb);
    return xkbd;

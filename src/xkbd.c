@@ -261,9 +261,6 @@ int main(int argc, char **argv)
 
 	display = XkbOpenDisplay(display_name, &xkbEventType, &xkbError, &mjr, &mnr, &reason_rtrn);
 	if (!display) goto no_dpy;
-	/* vs. some annoying X errors, reset state on start in sync mode */
-	XkbLockModifiers(display,XkbUseCoreKbd,0xffff,0);
-	XkbLatchModifiers(display,XkbUseCoreKbd,0xffff,0);
 	XkbSelectEvents(display,XkbUseCoreKbd,mask,mask);
    } else {
 	display = XOpenDisplay(display_name);
@@ -456,6 +453,7 @@ int main(int argc, char **argv)
 		   StructureNotifyMask |
 		   VisibilityChangeMask);
 
+//	XkbLatchModifiers(display,XkbUseCoreKbd,0xffff,1);
       while (1)
       {
 	    XNextEvent(display, &ev);
