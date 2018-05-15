@@ -257,14 +257,14 @@ int main(int argc, char **argv)
 
    if (Xkb_sync) {
 	int xkbError, reason_rtrn, mjr = XkbMajorVersion, mnr = XkbMinorVersion;
+	unsigned short mask = XkbStateNotifyMask|XkbNewKeyboardNotifyMask;
 
 	display = XkbOpenDisplay(display_name, &xkbEventType, &xkbError, &mjr, &mnr, &reason_rtrn);
 	if (!display) goto no_dpy;
 	/* vs. some annoying X errors, reset state on start in sync mode */
 	XkbLockModifiers(display,XkbUseCoreKbd,0xffff,0);
 	XkbLatchModifiers(display,XkbUseCoreKbd,0xffff,0);
-//	XkbSelectEvents(display,XkbUseCoreKbd,XkbAllEventsMask,XkbAllEventsMask);
-	XkbSelectEvents(display,XkbUseCoreKbd,XkbStateNotifyMask,XkbStateNotifyMask);
+	XkbSelectEvents(display,XkbUseCoreKbd,mask,mask);
    } else {
 	display = XOpenDisplay(display_name);
 	if (!display) goto no_dpy;
@@ -487,6 +487,11 @@ int main(int argc, char **argv)
 			    case XkbStateNotify:
 				if (xkbd_sync_state(kb,((XkbEvent)ev).state.mods,((XkbEvent)ev).state.locked_mods,((XkbEvent)ev).state.group))
 					xkbd_repaint(kb);
+				break;
+			    //case XkbMapNotify:
+			    case XkbNewKeyboardNotify:
+				// reconfigure here. just restart
+				execvp(argv[0],argv);
 				break;
 			}
 		}
