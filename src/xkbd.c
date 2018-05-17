@@ -247,11 +247,11 @@ int main(int argc, char **argv)
    if (Xkb_sync) {
 	int xkbError, reason_rtrn, mjr = XkbMajorVersion, mnr = XkbMinorVersion;
 	unsigned short mask = XkbStateNotifyMask|XkbNewKeyboardNotifyMask;
-	const char *arg = { NULL };
+	char *arg[] = { NULL };
 
 	/* loaded in xorg.conf map too variable (old-style map) & cause multiple restarting */
 	/* reload it */
-	if(!vfork()) execvp("/usr/bin/setxkbmap",arg);
+	if(!vfork()) execvp("/usr/bin/setxkbmap", arg);
 
 	display = XkbOpenDisplay(display_name, &xkbEventType, &xkbError, &mjr, &mnr, &reason_rtrn);
 	if (!display) goto no_dpy;
@@ -378,6 +378,7 @@ int main(int argc, char **argv)
       XSetWMHints(display, win, wm_hints );
       XSetWMProtocols(display, win, wm_protocols, sizeof(wm_protocols) /
 		      sizeof(Atom));
+		      
       long prop[12] = {2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
       XChangeProperty(display,win, mwm_atom, mwm_atom,32,PropModeReplace,(unsigned char *)&prop,5);
       if(dock & 4)
@@ -391,22 +392,13 @@ int main(int argc, char **argv)
 //      Atom version = 4;
 //      _prop(32,"XdndAware",XA_ATOM,&version,1);
       if (dock & 2) {
-        prop[0]=0;
+        prop[0] = 0;
 	prop[3] = hret; // heigh
 	_prop(32,"_NET_WM_STRUT",XA_CARDINAL,&prop,4);
-	prop[10] = yret + hret - 1;
-	prop[11] = xret + wret - 1;
+//	[10] [11] -> xret, xret + wret - 1
+	prop[11] = screen_width - 1
 	_prop(32,"_NET_WM_STRUT_PARTIAL",XA_CARDINAL,&prop,12);
       }
-      if (embed)
-      {
-	 fprintf(stdout, "%li\n", win);
-	 fclose(stdout);
-      } else {
-	 XMapWindow(display, win);
-      }
-
-      signal(SIGUSR1, handle_sig); /* for extenal mapping / unmapping */
 
       XSelectInput(display, win,
 		   ExposureMask |
@@ -416,7 +408,14 @@ int main(int argc, char **argv)
 		   StructureNotifyMask |
 		   VisibilityChangeMask);
 
-//	XkbLatchModifiers(display,XkbUseCoreKbd,0xffff,1);
+      if (embed) {
+	 fprintf(stdout, "%li\n", win);
+	 fclose(stdout);
+      } else {
+	 XMapWindow(display, win);
+      }
+      signal(SIGUSR1, handle_sig); /* for extenal mapping / unmapping */
+
       while (1)
       {
 	    XNextEvent(display, &ev);
