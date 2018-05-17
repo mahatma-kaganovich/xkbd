@@ -42,8 +42,9 @@
 
 Display* display; /* ack globals due to sighandlers - another way ? */
 Window   win;
+Window rootWin;
 Atom mwm_atom;
-int      screen_num;
+int screen_num;
 
 int Xkb_sync = 0;
 int no_lock = 0;
@@ -67,11 +68,7 @@ get_current_window_manager_name (void)
   unsigned char *val;
   Window *xwindow = NULL;
 
-  atom_check = XInternAtom (display, "_NET_SUPPORTING_WM_CHECK", False);
-
-  XGetWindowProperty (display,
-		      RootWindow(display, DefaultScreen(display)),
-		      atom_check,
+  XGetWindowProperty (display,rootWin,XInternAtom (display, "_NET_SUPPORTING_WM_CHECK", False),
 		      0, 16L, False, XA_WINDOW, &type, &format,
 		      &nitems, &bytes_after, (unsigned char **)&xwindow);
 
@@ -80,11 +77,8 @@ get_current_window_manager_name (void)
 
 
   utf8_string = XInternAtom (display, "UTF8_STRING", False);
-  atom = XInternAtom (display, "_NET_WM_NAME", False);
 
-  result = XGetWindowProperty (display,
-		  	       *xwindow,
-			       atom,
+  result = XGetWindowProperty (display,*xwindow,XInternAtom (display, "_NET_WM_NAME", False),
 			       0, 1000L,
 			       False, utf8_string,
 			       &type, &format, &nitems,
@@ -158,13 +152,13 @@ Options:\n\
 #endif
 }
 
-void _prop32(char *prop, Atom type, unsigned char *data, int n){
-	XChangeProperty(display,win,prop?XInternAtom(display,prop,False):mwm_atom,type,32,PropModeReplace,data,n); 
+void _prop(int i, char *prop, Atom type, void *data, int n){
+	XChangeProperty(display,win,prop?XInternAtom(display,prop,False):mwm_atom,type,i,PropModeReplace,(unsigned char *)data,n); 
 }
 
 void _propAtom32(char *prop, char *data){
 	Atom a=XInternAtom(display,data,False);
-	_prop32(prop,XA_ATOM,(unsigned char *)&a,1);
+	_prop(32,prop,XA_ATOM,&a,1);
 }
 
 int main(int argc, char **argv)
@@ -172,19 +166,6 @@ int main(int argc, char **argv)
    char *window_name = "xkbd";
 
    char *icon_name = "xkbd";
-
-#define PROP_MOTIF_WM_HINTS_ELEMENTS    5
-#define MWM_HINTS_DECORATIONS          (1L << 1)
-#define MWM_DECOR_BORDER               (1L << 1)
-
-   struct PropMotifWmHints
-   {
-     unsigned long       flags;
-     unsigned long       functions;
-     unsigned long       decorations;
-     long                inputMode;
-     unsigned long       status;
-   } mwm_hints = { MWM_HINTS_DECORATIONS,0,0,0,0 };
 
    XSizeHints size_hints;
    XWMHints *wm_hints;
@@ -266,6 +247,11 @@ int main(int argc, char **argv)
    if (Xkb_sync) {
 	int xkbError, reason_rtrn, mjr = XkbMajorVersion, mnr = XkbMinorVersion;
 	unsigned short mask = XkbStateNotifyMask|XkbNewKeyboardNotifyMask;
+	const char *arg = { NULL };
+
+	/* loaded in xorg.conf map too variable (old-style map) & cause multiple restarting */
+	/* reload it */
+	if(!vfork()) execvp("/usr/bin/setxkbmap",arg);
 
 	display = XkbOpenDisplay(display_name, &xkbEventType, &xkbError, &mjr, &mnr, &reason_rtrn);
 	if (!display) goto no_dpy;
@@ -274,6 +260,12 @@ int main(int argc, char **argv)
 	display = XOpenDisplay(display_name);
 	if (!display) goto no_dpy;
    }
+   screen_num = DefaultScreen(display);
+   rootWin = RootWindow(display, screen_num);
+   Window d2;
+   int d3;
+   unsigned int d1, screen_width, screen_height;
+   XGetGeometry(display, rootWin, &d2, &d3, &d3, &screen_width, &screen_height, &d1, &d1);
 
       Atom wm_protocols[]={
 	 XInternAtom(display, "WM_DELETE_WINDOW",False),
@@ -281,12 +273,10 @@ int main(int argc, char **argv)
 	 XInternAtom(display, "WM_NORMAL_HINTS", False),
       };
 
-      mwm_atom = XInternAtom(display, "_MOTIF_WM_HINTS",False);
+    mwm_atom = XInternAtom(display, "_MOTIF_WM_HINTS",False);
 
       /* HACK to get libvirtkeys to work without mode_switch */
-
-      screen_num = DefaultScreen(display);
-
+/*
       if  (XKeysymToKeycode(display, XK_Mode_switch) == 0)
 	{
 	  int keycode;
@@ -304,6 +294,7 @@ int main(int argc, char **argv)
 		XSync(display, False);
 	      }
       }
+*/
 
 /*
       wm_name = get_current_window_manager_name ();
@@ -320,31 +311,20 @@ int main(int argc, char **argv)
 	    }
 	}
 */
-      win = XCreateSimpleWindow(display,
-				RootWindow(display, screen_num),
-				0, 0,
-				300, 300,
-				0, BlackPixel(display, screen_num),
-				WhitePixel(display, screen_num));
 
-
-      wret = DisplayWidth(display, screen_num);
-      hret = DisplayHeight(display, screen_num)/4;
+      wret = screen_width;
+      hret = screen_height/4;
       xret = 0;
-      yret = DisplayHeight(display, screen_num) - hret;
+      yret = screen_height - hret;
+      if (geometry) {
+	int flags = XParseGeometry(geometry, &xret, &yret, &wret, &hret );
+	if( flags & XNegative ) xret += screen_width - wret;
+	if( flags & YNegative ) yret += screen_height - hret;
+      }
 
-      // deactivate geometry for 0.8.16 release - mb
-//      geometry = NULL;
-      if (geometry != NULL)
-	{
-	  int flags;
-
-	  flags = XParseGeometry(geometry, &xret, &yret, &wret, &hret );
-	  if( flags & XNegative )
-	      xret += DisplayWidth( display, screen_num ) - wret;
-	  if( flags & YNegative )
-	      yret += DisplayHeight( display, screen_num ) - hret;
-	}
+      win = XCreateSimpleWindow(display, rootWin, xret, yret, wret, hret, 0,
+				BlackPixel(display, screen_num),
+				WhitePixel(display, screen_num));
 
       /* check for user selected keyboard conf file */
 
@@ -369,26 +349,24 @@ int main(int argc, char **argv)
 	    }
 	}
 
-
       kb = xkbd_realize(display, win, conf_file, font_name, 0, 0,
 			wret, hret, cmd_xft_selected);
-
-      XResizeWindow(display, win, xkbd_get_width(kb), xkbd_get_height(kb));
-
-      if (xret || yret)
-	 XMoveWindow(display,win,xret,yret);
-
+      if (wret != xkbd_get_width(kb) || hret != xkbd_get_height(kb))
+        XResizeWindow(display, win, wret = xkbd_get_width(kb), hret = xkbd_get_height(kb));
+//      if (xret || yret)
+//	 XMoveWindow(display,win,xret,yret);
       size_hints.flags = PPosition | PSize | PMinSize;
       size_hints.x = 0;
       size_hints.y = 0;
-      size_hints.width      =  xkbd_get_width(kb);
-      size_hints.height     =  xkbd_get_height(kb);
-      size_hints.min_width  =  xkbd_get_width(kb);
-      size_hints.min_height =  xkbd_get_height(kb);
-
+      size_hints.width      =  wret;
+      size_hints.height     =  hret;
+      size_hints.min_width  =  wret;
+      size_hints.min_height =  hret;
       XSetStandardProperties(display, win, window_name,
 			     icon_name, None,
 			     argv, argc, &size_hints);
+      XStoreName(display, win, window_name);
+      XSetIconName(display, win, icon_name);
       wm_hints = XAllocWMHints();
       wm_hints->input = False;
       wm_hints->flags = InputHint;
@@ -398,27 +376,27 @@ int main(int argc, char **argv)
 	wm_hints->icon_window = wm_hints->window_group = win;
       }
       XSetWMHints(display, win, wm_hints );
-
-      _prop32(NULL,XA_ATOM,(unsigned char *)&mwm_hints,PROP_MOTIF_WM_HINTS_ELEMENTS);
-
       XSetWMProtocols(display, win, wm_protocols, sizeof(wm_protocols) /
 		      sizeof(Atom));
-
+      long prop[12] = {2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+      XChangeProperty(display,win, mwm_atom, mwm_atom,32,PropModeReplace,(unsigned char *)&prop,5);
       if(dock & 4)
 	_propAtom32("_NET_WM_WINDOW_TYPE","_NET_WM_WINDOW_TYPE_DOCK");
       if (dock & 8)
 	_propAtom32("_NET_WM_WINDOW_TYPE","_NET_WM_WINDOW_TYPE_TOOLBAR");
-      if (dock & 16)
+      if (dock & 16) 
 	_propAtom32("_NET_WM_STATE","_NET_WM_STATE_STICKY");
-
+//      _propAtom32("_NET_WM_STATE","_NET_WM_STATE_ABOVE");
+//      _propAtom32("_NET_WM_STATE","_NET_WM_STATE_FOCUSED");
+//      Atom version = 4;
+//      _prop(32,"XdndAware",XA_ATOM,&version,1);
       if (dock & 2) {
-	/* learned from tint2 */
-	long prop[12] = {2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-	XChangeProperty(display,win, mwm_atom, mwm_atom,32,PropModeReplace,(unsigned char *)&prop,5);
         prop[0]=0;
-	prop[3] = xkbd_get_height(kb); // -1 ?
-	_prop32("_NET_WM_STRUT",XA_CARDINAL,(unsigned char *)&prop,4);
-	_prop32("_NET_WM_STRUT_PARTIAL",XA_CARDINAL,(unsigned char *)&prop,12);
+	prop[3] = hret; // heigh
+	_prop(32,"_NET_WM_STRUT",XA_CARDINAL,&prop,4);
+	prop[10] = yret + hret - 1;
+	prop[11] = xret + wret - 1;
+	_prop(32,"_NET_WM_STRUT_PARTIAL",XA_CARDINAL,&prop,12);
       }
       if (embed)
       {
