@@ -281,7 +281,7 @@ int main(int argc, char **argv)
     mwm_atom = XInternAtom(display, "_MOTIF_WM_HINTS",False);
 
       /* HACK to get libvirtkeys to work without mode_switch */
-/*
+
       if  (XKeysymToKeycode(display, XK_Mode_switch) == 0)
 	{
 	  int keycode;
@@ -299,7 +299,7 @@ int main(int argc, char **argv)
 		XSync(display, False);
 	      }
       }
-*/
+
 
 /*
       wm_name = get_current_window_manager_name ();

@@ -97,7 +97,6 @@ unsigned int _set_state(unsigned int *s, unsigned int new)
 	return old^new;
 }
 
-
 unsigned int xkbd_sync_state(Xkbd *xkbd, unsigned int mods, unsigned int locked_mods, int group)
 {
 	unsigned int ch=0;
@@ -105,12 +104,9 @@ unsigned int xkbd_sync_state(Xkbd *xkbd, unsigned int mods, unsigned int locked_
 	Display *dpy = xkbd->kb->display;
 
 	ch|=_set_state(&xkbd->kb->state, mods)|_set_state(&xkbd->kb->state_locked, locked_mods);
-	for (i=0; i<xkbd->kb->total_layouts; i++){
-		if (xkbd->kb->kbd_layouts[i] == xkbd->kb->vbox && i!=group) {
-			kb_switch_layout(xkbd->kb,group);
-			ch=0;
-			break;
-		}
+	if (group!=xkbd->kb->group){
+		kb_switch_layout(xkbd->kb,group);
+		ch=0;
 	}
 //	XkbGetIndicatorState(dpy,XkbUseCoreKbd,&i);
 	return ch;

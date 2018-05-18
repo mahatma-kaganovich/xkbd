@@ -266,7 +266,7 @@ int loadKeySymTable()
 // key. Not all programs care about this, so passing NULL for the pointer means no label will be
 // returned.
 
-int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuffer)
+int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuffer, unsigned int group, unsigned int level)
 {
 	int keycode;
 	int column;
@@ -275,6 +275,7 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 	int assignedKeycode;
 	int assignedColumn;
 	int found = FALSE;
+	unsigned int invariant = 0;
 #ifdef USEMODIFIERS
 	int len;
 	XEvent fakeEvent;
@@ -300,15 +301,26 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 
 	for (keycode = 0; ((keycode < (maxKeycode - minKeycode + 1)) && !found); keycode++)
 	{
-		for (column = 0; ((column < (keysymsPerKeycode > 4 ? 4 : keysymsPerKeycode)) && !found); column++)
+		for (column = 0; column < keysymsPerKeycode; column++)
 		{
 			if (keymap[(keycode * keysymsPerKeycode + column)] == ks)
 			{
 				found = TRUE;
 				assignedKeycode = keycode;
 				assignedColumn = column;
+				if (Xkb_sync) {
+					/* check server can translate it without modifiers */
+					if (ks == XkbKeycodeToKeysym(dpy,keycode+minKeycode,group,level)) {
+						assignedColumn = 0;
+					} else {
+						invariant++;
+						found = FALSE;
+						continue;
+					}
+				}
+				break;
 			}
-			else if (availableColumn == -1)
+			if (availableColumn == -1)
 			{
 				// We only save the first one we find, but only if the unshifted column
 				// is NOT one of the modifier keys. This is extremely important. If we tack-on
@@ -327,7 +339,7 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 		}
 	}
 
-	if (!found)
+	if (!found && ! (Xkb_sync && assignedKeycode != -1))
 	{
 
 		if (debug)
@@ -371,6 +383,16 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 #else
 	ModeModifier = ModeSwitchKeyCode;
 #endif
+
+	/* if something wrong - debug it */
+	if (Xkb_sync && !found) {
+		fprintf(stderr,"KeySym %lu (wanted in level %i) as keycode %i in group %i found incorrect invariant=%u",ks,level,keycode+minKeycode,group,invariant);
+		for(level=0; level<16; level++) {
+			if (ks==XkbKeycodeToKeysym(dpy,keycode+minKeycode,group,level))
+				fprintf(stderr," found in level %i",level);
+		}
+		fprintf(stderr,"\n");
+	}
 
 	switch (assignedColumn)
 	{

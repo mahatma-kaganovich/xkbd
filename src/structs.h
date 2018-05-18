@@ -88,6 +88,7 @@ typedef struct _keyboard
   int mode;
   box *kbd_layouts[MAX_LAYOUTS];
   int total_layouts;
+  int group;
   box *vbox;  /* container */
 
   int x;      /* but vbox contains this ? */

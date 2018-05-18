@@ -15,6 +15,7 @@
 #include "ks2unicode.h"
 
 extern int debug;
+extern int Xkb_sync;
 
 #ifndef TRUE
 #define	TRUE	1
@@ -62,7 +63,7 @@ extern "C" {
 
 int setupKeyboardVariables(Display *dpy);
 
-int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *keycodeEntryTable, char **labelBuffer);
+int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *keycodeEntryTable, char **labelBuffer, unsigned int group, unsigned int level);
 
 int loadKeySymTable();
 

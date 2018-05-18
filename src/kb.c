@@ -272,7 +272,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		{
 		  kb->total_layouts++;
 		  kb->kbd_layouts[kb->total_layouts-1] = box_new();
-		  kb->vbox = kb->kbd_layouts[kb->total_layouts-1];
+		  kb->vbox = kb->kbd_layouts[kb->group = kb->total_layouts-1];
 		  kb->vbox->act_width  = kb_width;
 		  kb->vbox->act_height = kb_height;
 		  kb->vbox->min_height = 0;
@@ -292,7 +292,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		      */
 		      kb->total_layouts++;
 		      kb->kbd_layouts[kb->total_layouts-1] = box_new();
-		      kb->vbox = kb->kbd_layouts[kb->total_layouts-1];
+		      kb->vbox = kb->kbd_layouts[kb->group = kb->total_layouts-1];
 		      kb->vbox->act_width  = kb_width;
 		      kb->vbox->act_height = kb_height;
 		      kb->vbox->min_height = 0;
@@ -517,7 +517,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
   kb->key_delay_repeat1 = kb->key_delay_repeat;
   kb->key_repeat1 = kb->key_repeat;
 
-  kb->vbox = kb->kbd_layouts[0];
+  kb->vbox = kb->kbd_layouts[kb->group = 0];
   if(height_tmp)
     kb->vbox->act_height = height_tmp;
   /* pass 1 - calculate min dimentions  */
@@ -565,7 +565,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 
   for(j=0;j<kb->total_layouts;j++)
     {
-      kb->vbox = kb->kbd_layouts[j];
+      kb->vbox = kb->kbd_layouts[kb->group = j];
       listp = kb->vbox->root_kid;
 
       while (listp != NULL)
@@ -623,7 +623,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
   /* TODO: copy all temp vboxs  */
 
 
-  kb->vbox = kb->kbd_layouts[0];
+  kb->vbox = kb->kbd_layouts[kb->group = 0];
 
   return kb;
 
@@ -736,7 +736,7 @@ kb_switch_layout(keyboard *kb, int kbd_layout_num)
   int mw = kb->vbox->min_width;
   int mh = kb->vbox->min_height;
 
-  kb->vbox = kb->kbd_layouts[kbd_layout_num];
+  kb->vbox = kb->kbd_layouts[kb->group = kbd_layout_num];
 
   kb->vbox->act_width = w;
   kb->vbox->act_height = h;
@@ -944,6 +944,7 @@ void kb_send_keypress(button *b)
 {
   KeySym ks = 0;
   int slide_flag = 0;
+  unsigned int level = 0;
 
   struct keycodeEntry vk_keycodes[10];
 
@@ -1012,10 +1013,15 @@ void kb_send_keypress(button *b)
     }
 
   if (ks == 0) ks = b->default_ks;
+  else if (ks == b->shift_ks) level = 1;
+  // 2test
+  else if (ks == b->mod_ks) level = 2;
+  else if (ks == b->shift_mod_ks) level = 3;
+  
 
   if (ks == 0) return; /* no keysym defined, abort */
 
-  if (lookupKeyCodeSequence(ks, vk_keycodes, NULL))
+  if (lookupKeyCodeSequence(ks, vk_keycodes, NULL, b->kb->group, level))
      sendKeySequence(vk_keycodes,
 	  ( (b->kb->state & KB_STATE_CTRL)  || (slide_flag == KB_STATE_CTRL) ),
 	  ( (b->kb->state & KB_STATE_META)  || (slide_flag == KB_STATE_META) ),
