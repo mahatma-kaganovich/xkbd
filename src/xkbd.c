@@ -396,7 +396,7 @@ int main(int argc, char **argv)
 	prop[3] = hret; // heigh
 	_prop(32,"_NET_WM_STRUT",XA_CARDINAL,&prop,4);
 //	[10] [11] -> xret, xret + wret - 1
-	prop[11] = screen_width - 1
+	prop[11] = screen_width - 1;
 	_prop(32,"_NET_WM_STRUT_PARTIAL",XA_CARDINAL,&prop,12);
       }
 
