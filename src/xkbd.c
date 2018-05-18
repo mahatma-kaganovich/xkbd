@@ -262,10 +262,15 @@ int main(int argc, char **argv)
    }
    screen_num = DefaultScreen(display);
    rootWin = RootWindow(display, screen_num);
-   Window d2;
-   int d3;
-   unsigned int d1, screen_width, screen_height;
-   XGetGeometry(display, rootWin, &d2, &d3, &d3, &screen_width, &screen_height, &d1, &d1);
+/*
+    // if you know where & how to use relative root window
+   Window rootWin0;
+   int sx,sy;
+   unsigned int screen_width, screen_height, sbord. sdeph;
+   XGetGeometry(display, rootWin, &rootWin0, &sx, &sy, &screen_width, &screen_height, &sbord, &sdepth);
+*/
+   unsigned int screen_width = DisplayWidth(display, screen_num);
+   unsigned int screen_height = DisplayHeight(display, screen_num);
 
       Atom wm_protocols[]={
 	 XInternAtom(display, "WM_DELETE_WINDOW",False),
@@ -393,10 +398,10 @@ int main(int argc, char **argv)
 //      _prop(32,"XdndAware",XA_ATOM,&version,1);
       if (dock & 2) {
         prop[0] = 0;
-	prop[3] = hret; // heigh
+	prop[3] = screen_height - yret; // hret unless shifted geometry
 	_prop(32,"_NET_WM_STRUT",XA_CARDINAL,&prop,4);
-//	[10] [11] -> xret, xret + wret - 1
-	prop[11] = screen_width - 1;
+	prop[10] = xret; prop[11] = xret + wret - 1;
+//	prop[11] = screen_width - 1;
 	_prop(32,"_NET_WM_STRUT_PARTIAL",XA_CARDINAL,&prop,12);
       }
 
