@@ -356,9 +356,9 @@ int main(int argc, char **argv)
       kb = xkbd_realize(display, win, conf_file, font_name, 0, 0,
 			wret, hret, cmd_xft_selected);
       if (wret != xkbd_get_width(kb) || hret != xkbd_get_height(kb)) {
-        XResizeWindow(display, win, wret = xkbd_get_width(kb), hret = xkbd_get_height(kb));
-        yret = screen_height - hret;
+	yret += hret - xkbd_get_height(kb);
         XMoveWindow(display,win,xret,yret);
+        XResizeWindow(display, win, wret = xkbd_get_width(kb), hret = xkbd_get_height(kb));
       }
 //      if (xret || yret)
 //	 XMoveWindow(display,win,xret,yret);

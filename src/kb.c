@@ -245,8 +245,6 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 
 		  break;
 		case keydef:
-		  button_calc_c_width(tmp_but);
-		  button_calc_c_height(tmp_but);
 		  ksMap(tmp_but->default_ks, &tmp_but->shift_ks, &tmp_but->shift_txt, BUT_SHIFT);
 		  ksMap(tmp_but->default_ks, &tmp_but->mod_ks, &tmp_but->mod_txt, BUT_MOD);
 		  ksMap(tmp_but->shift_ks, &tmp_but->shift_mod_ks, &tmp_but->shift_mod_txt, BUT_SHIFT);
@@ -254,6 +252,8 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		  ksText(tmp_but->shift_ks, &tmp_but->shift_txt);
 		  ksText(tmp_but->mod_ks, &tmp_but->mod_txt);
 		  ksText(tmp_but->shift_mod_ks, &tmp_but->shift_mod_txt);
+		  button_calc_c_width(tmp_but);
+		  button_calc_c_height(tmp_but);
 		  break;
 		case none:
 		  break;
