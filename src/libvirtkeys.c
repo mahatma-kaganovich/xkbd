@@ -266,7 +266,7 @@ int loadKeySymTable()
 // key. Not all programs care about this, so passing NULL for the pointer means no label will be
 // returned.
 
-int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuffer, unsigned int group, unsigned int level)
+int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuffer, unsigned int group, unsigned int level, unsigned int level2)
 {
 	int keycode;
 	int column;
@@ -311,7 +311,8 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 				if (Xkb_sync) {
 					/* check server can translate it without modifiers */
 					if (ks == XkbKeycodeToKeysym(dpy,keycode+minKeycode,group,level)) {
-						assignedColumn = 0;
+						assignedColumn = level2;
+						invariant = 0;
 					} else {
 						invariant++;
 						found = FALSE;
@@ -339,7 +340,7 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 		}
 	}
 
-	if (!found && ! (Xkb_sync && assignedKeycode != -1))
+	if (!found && !invariant)
 	{
 
 		if (debug)
@@ -385,7 +386,7 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 #endif
 
 	/* if something wrong - debug it */
-	if (Xkb_sync && !found) {
+	if (invariant) {
 		fprintf(stderr,"KeySym %lu (wanted in level %i) as keycode %i in group %i found incorrect invariant=%u",ks,level,keycode+minKeycode,group,invariant);
 		for(level=0; level<16; level++) {
 			if (ks==XkbKeycodeToKeysym(dpy,keycode+minKeycode,group,level))

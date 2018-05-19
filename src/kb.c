@@ -944,7 +944,8 @@ void kb_send_keypress(button *b)
 {
   KeySym ks = 0;
   int slide_flag = 0;
-  unsigned int level = 0;
+  unsigned int l = 0;
+  unsigned int l2 = 0;
 
   struct keycodeEntry vk_keycodes[10];
 
@@ -1013,15 +1014,19 @@ void kb_send_keypress(button *b)
     }
 
   if (ks == 0) ks = b->default_ks;
-  else if (ks == b->shift_ks) level = 1;
-  // 2test
-  else if (ks == b->mod_ks) level = 2;
-  else if (ks == b->shift_mod_ks) level = 3;
   
-
   if (ks == 0) return; /* no keysym defined, abort */
 
-  if (lookupKeyCodeSequence(ks, vk_keycodes, NULL, b->kb->group, level))
+  if (Xkb_sync) {
+	if (ks == b->default_ks) l = 0;
+	else if (ks == b->shift_ks) l = 1;
+	// 2test
+//	else if (ks == b->mod_ks) level = 2;
+//	else if (ks == b->shift_mod_ks) level = 3;
+
+	if (b->kb->state & KB_STATE_SHIFT) l2 = 1;
+  }
+  if (lookupKeyCodeSequence(ks, vk_keycodes, NULL, b->kb->group, l, l2))
      sendKeySequence(vk_keycodes,
 	  ( (b->kb->state & KB_STATE_CTRL)  || (slide_flag == KB_STATE_CTRL) ),
 	  ( (b->kb->state & KB_STATE_META)  || (slide_flag == KB_STATE_META) ),

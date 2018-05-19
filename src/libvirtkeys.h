@@ -63,7 +63,7 @@ extern "C" {
 
 int setupKeyboardVariables(Display *dpy);
 
-int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *keycodeEntryTable, char **labelBuffer, unsigned int group, unsigned int level);
+int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *keycodeEntryTable, char **labelBuffer, unsigned int group, unsigned int level, unsigned int level2);
 
 int loadKeySymTable();
 
