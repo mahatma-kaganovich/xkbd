@@ -355,8 +355,11 @@ int main(int argc, char **argv)
 
       kb = xkbd_realize(display, win, conf_file, font_name, 0, 0,
 			wret, hret, cmd_xft_selected);
-      if (wret != xkbd_get_width(kb) || hret != xkbd_get_height(kb))
+      if (wret != xkbd_get_width(kb) || hret != xkbd_get_height(kb)) {
         XResizeWindow(display, win, wret = xkbd_get_width(kb), hret = xkbd_get_height(kb));
+        yret = screen_height - hret;
+        XMoveWindow(display,win,xret,yret);
+      }
 //      if (xret || yret)
 //	 XMoveWindow(display,win,xret,yret);
       size_hints.flags = PPosition | PSize | PMinSize;
