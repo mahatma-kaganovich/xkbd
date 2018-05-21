@@ -900,7 +900,7 @@ int kb_process_keypress(button *active_but)
 		lock ^= mod;
 		state ^= mod;
 		keypress = 0;
-	} else if (state ^ mod) {
+	} else if ((state & mod)!=mod) {
 		state ^= mod;
 	} else if (no_lock) {
 		state ^= mod;

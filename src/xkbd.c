@@ -20,6 +20,9 @@
 #include <unistd.h>
 #include <signal.h>
 
+#include <sys/types.h>
+#include <sys/wait.h>
+
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/Xatom.h>
@@ -248,10 +251,12 @@ int main(int argc, char **argv)
 	int xkbError, reason_rtrn, mjr = XkbMajorVersion, mnr = XkbMinorVersion;
 	unsigned short mask = XkbStateNotifyMask|XkbNewKeyboardNotifyMask;
 	char *arg[] = { NULL };
+	pid_t pid;
 
 	/* loaded in xorg.conf map too variable (old-style map) & cause multiple restarting */
 	/* reload it */
-	if(!vfork()) execvp("/usr/bin/setxkbmap", arg);
+	if(pid=vfork()) waitpid(pid,0,0);
+	else execvp("/usr/bin/setxkbmap", arg);
 
 	display = XkbOpenDisplay(display_name, &xkbEventType, &xkbError, &mjr, &mnr, &reason_rtrn);
 	if (!display) goto no_dpy;
