@@ -118,7 +118,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
   XRenderColor colortmp;
 #endif
 
-  kb = malloc(sizeof(keyboard));
+  kb = calloc(1,sizeof(keyboard));
   kb->win = win;
   kb->display = display;
 
@@ -200,10 +200,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 #endif
 
   /* Defaults */
-  kb->state            = KB_STATE_NORMAL;
-  kb->state_locked     = KB_STATE_NORMAL;
   kb->theme            = rounded;
-  kb->slide_margin     = 0;
   kb->key_delay_repeat = 50;
   kb->key_repeat       = -1;
 
@@ -245,13 +242,13 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 
 		  break;
 		case keydef:
-		  ksMap(tmp_but->default_ks, &tmp_but->shift_ks, &tmp_but->shift_txt, BUT_SHIFT);
-		  ksMap(tmp_but->default_ks, &tmp_but->mod_ks, &tmp_but->mod_txt, BUT_MOD);
-		  ksMap(tmp_but->shift_ks, &tmp_but->shift_mod_ks, &tmp_but->shift_mod_txt, BUT_SHIFT);
-		  ksText(tmp_but->default_ks, &tmp_but->default_txt);
-		  ksText(tmp_but->shift_ks, &tmp_but->shift_txt);
-		  ksText(tmp_but->mod_ks, &tmp_but->mod_txt);
-		  ksText(tmp_but->shift_mod_ks, &tmp_but->shift_mod_txt);
+		  ksMap(DEFAULT_KS(tmp_but), &SHIFT_KS(tmp_but), &SHIFT_TXT(tmp_but), STATE(KBIT_SHIFT));
+		  ksMap(DEFAULT_KS(tmp_but), &MOD_KS(tmp_but), &MOD_TXT(tmp_but), STATE(KBIT_MOD));
+		  ksMap(SHIFT_KS(tmp_but), &SHIFT_MOD_KS(tmp_but), &SHIFT_MOD_TXT(tmp_but), STATE(KBIT_SHIFT));
+		  ksText(DEFAULT_KS(tmp_but), &DEFAULT_TXT(tmp_but));
+		  ksText(SHIFT_KS(tmp_but), &SHIFT_TXT(tmp_but));
+		  ksText(MOD_KS(tmp_but), &MOD_TXT(tmp_but));
+		  ksText(SHIFT_MOD_KS(tmp_but), &SHIFT_MOD_TXT(tmp_but));
 		  button_calc_c_width(tmp_but);
 		  button_calc_c_height(tmp_but);
 		  break;
@@ -443,23 +440,23 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		break;
 	      case keydef:
 		if (strcmp(tmpstr_A, "default") == 0)
-		  tmp_but->default_txt = button_set(tmpstr_C);
+		  DEFAULT_TXT(tmp_but) = button_set(tmpstr_C);
 		else if (strcmp(tmpstr_A, "shift") == 0)
-		  tmp_but->shift_txt = button_set(tmpstr_C);
+		  SHIFT_TXT(tmp_but) = button_set(tmpstr_C);
 		else if (strcmp(tmpstr_A, "switch") == 0)
 		  button_set_layout(tmp_but, tmpstr_C);
 		else if (strcmp(tmpstr_A, "mod") == 0)
-		  tmp_but->mod_txt = button_set(tmpstr_C);
+		  MOD_TXT(tmp_but) = button_set(tmpstr_C);
 		else if (strcmp(tmpstr_A, "shift_mod") == 0)
-		  tmp_but->shift_mod_txt = button_set(tmpstr_C);
+		  SHIFT_MOD_TXT(tmp_but) = button_set(tmpstr_C);
 		else if (strcmp(tmpstr_A, "default_ks") == 0)
 		  button_set_txt_ks(tmp_but, tmpstr_C);
 		else if (strcmp(tmpstr_A, "shift_ks") == 0)
-		  tmp_but->shift_ks = button_ks(tmpstr_C);
+		  SHIFT_KS(tmp_but) = button_ks(tmpstr_C);
 		else if (strcmp(tmpstr_A, "mod_ks") == 0)
-		  tmp_but->mod_ks = button_ks(tmpstr_C);
+		  MOD_KS(tmp_but) = button_ks(tmpstr_C);
 		else if (strcmp(tmpstr_A, "shift_mod_ks") == 0)
-		  tmp_but->shift_mod_ks = button_ks(tmpstr_C);
+		  SHIFT_MOD_KS(tmp_but) = button_ks(tmpstr_C);
 #ifdef USE_XPM
 		else if (strcmp(tmpstr_A, "img") == 0)
 		  { button_set_pixmap(tmp_but, tmpstr_C); }
@@ -539,9 +536,9 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 	   b = (button *)ip->data;
 	   if (b->is_width_spec  == False)
 	   {
-	      if ( ( b->default_txt == NULL || (strlen(b->default_txt) == 1))
-		   && (b->shift_txt == NULL || (strlen(b->shift_txt) == 1))
-		   && (b->mod_txt == NULL || (strlen(b->mod_txt) == 1))
+	      if ( ( DEFAULT_TXT(b) == NULL || (strlen(DEFAULT_TXT(b)) == 1))
+		   && (SHIFT_TXT(b) == NULL || (strlen(SHIFT_TXT(b)) == 1))
+		   && (MOD_TXT(b) == NULL || (strlen(MOD_TXT(b)) == 1))
 		     && b->pixmap == NULL
 		   )
 	      {
@@ -584,9 +581,9 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 	      b = (button *)ip->data;
 	      if (!b->is_width_spec)
 		{
-		  if ((b->default_txt == NULL || (strlen(b->default_txt) == 1))
-		      && (b->shift_txt == NULL || (strlen(b->shift_txt) == 1))
-		      && (b->mod_txt == NULL || (strlen(b->mod_txt) == 1))
+		  if ((DEFAULT_TXT(b) == NULL || (strlen(DEFAULT_TXT(b)) == 1))
+		      && (SHIFT_TXT(b) == NULL || (strlen(SHIFT_TXT(b)) == 1))
+		      && (MOD_TXT(b) == NULL || (strlen(MOD_TXT(b)) == 1))
 		      && b->pixmap == NULL )
 		    {
 		      b->c_width = max_single_char_width;
@@ -890,10 +887,10 @@ int kb_process_keypress(button *active_but)
     const unsigned int mod = active_but->modifier;
     int keypress = 1;
 
-    DBG("got release state %i %i %i %i \n", new_state, KB_STATE_SHIFT, KB_STATE_MOD, KB_STATE_CTRL );
+    DBG("got release state %i %i %i %i \n", new_state, STATE(KBIT_SHIFT), STATE(KBIT_MOD), STATE(KBIT_CTRL) );
 
-    if (mod & BUT_CAPS) {
-	state ^= KB_STATE_CAPS;
+    if (mod & STATE(KBIT_CAPS)) {
+	state ^= STATE(KBIT_CAPS);
 	DBG("got caps key - %i \n", state);
     } else if (mod) {
 	if (lock & mod) {
@@ -910,15 +907,15 @@ int kb_process_keypress(button *active_but)
 		keypress = 0;
 	}
 	DBG("got a modifier key - %i \n", state);
-    } else if (state & ~KB_STATE_CAPS) {
+    } else if (state & ~STATE(KBIT_CAPS)) {
 	/* check if the kbd is already in a state and reset it
 	   leaving caps key state alone */
-	state &= KB_STATE_CAPS;
+	state &= STATE(KBIT_CAPS);
 	state |= lock;
 	DBG("kbd is shifted, unshifting - %i \n", state);
     }
 
-    if (mod & ~KB_STATE_CAPS) {
+    if (mod & ~STATE(KBIT_CAPS)) {
 	/* strange ("unKNOWN") combinations do "X Error"
 	   keep them virtual & change whole KNOWN mask only */
 	if (Xkb_sync && (mod & KB_STATE_KNOWN)) {
@@ -932,7 +929,7 @@ int kb_process_keypress(button *active_but)
 
     if (keypress) {
 	kb_send_keypress(active_but);
-	DBG("%s clicked \n", active_but->default_txt);
+	DBG("%s clicked \n", DEFAULT_TXT(active_but));
     }
 
     /* real precise state for Xkb_sync will be reached by event,
@@ -944,43 +941,12 @@ void kb_send_keypress(button *b)
 {
   KeySym ks = 0;
   int slide_flag = 0;
-  unsigned int l = 0;
+  unsigned int l = KBLEVEL(b->kb);
   unsigned int l2 = 0;
 
   struct keycodeEntry vk_keycodes[10];
 
-  switch (b->kb->state) {
-    case KB_STATE_SHIFT|KB_STATE_CAPS|KB_STATE_MOD:
-	if (b->options & OPT_OBEYCAPS || !b->shift_mod_ks)
-		ks = b->mod_ks;
-	else
-		ks = b->shift_mod_ks;
-	if (ks) break;
-    case KB_STATE_SHIFT|KB_STATE_CAPS:
-	if (!(b->options & OPT_OBEYCAPS))
-		ks = b->shift_ks;
-	break;
-    case KB_STATE_CAPS|KB_STATE_MOD:
-	if (b->options & OPT_OBEYCAPS && b->shift_mod_ks)
-		ks = b->shift_mod_ks;
-	else
-		ks = b->mod_ks;
-	if (ks) break;
-    case KB_STATE_CAPS:
-	/* xkbd track self? */
-//	if (b->options & OPT_OBEYCAPS)
-//		ks = b->shift_ks;
-	break;
-    case KB_STATE_SHIFT|KB_STATE_MOD:
-	ks = b->shift_mod_ks?:b->mod_ks;
-	if (ks) break;
-    case KB_STATE_SHIFT:
-	ks = b->shift_ks;
-	break;
-    case KB_STATE_MOD:
-	ks = b->mod_ks;
-	break;
-  }
+  ks = GET_KS(b,l);
 
   if (b->slide != none)
     {
@@ -988,21 +954,21 @@ void kb_send_keypress(button *b)
 	{
 	  case up :
 	    ks = b->slide_up_ks;
-//	    if (ks == 0) ks = b->shift_ks;
-	    if (ks == 0 && (b->kb->state & KB_STATE_SHIFT)) ks = b->shift_ks;
+//	    if (ks == 0) ks = SHIFT_KS(b);
+	    if (ks == 0 && (b->kb->state & STATE(KBIT_SHIFT))) ks = SHIFT_KS(b);
 	    break;
 	  case down : /* hold ctrl */
 	    ks = b->slide_down_ks;
-//	    if (ks == 0) slide_flag = KB_STATE_CTRL;
-	    if (!ks && (b->kb->state & KB_STATE_CTRL)) slide_flag = KB_STATE_CTRL;
+//	    if (ks == 0) slide_flag = STATE(KBIT_CTRL);
+	    if (!ks && (b->kb->state & STATE(KBIT_CTRL))) slide_flag = STATE(KBIT_CTRL);
 	    break;
 	  case left : /* hold alt */
 	    ks = b->slide_left_ks;
 //	    if (ks == 0)
-	    if (ks == 0 && (b->kb->state & KB_STATE_MOD))
+	    if (ks == 0 && (b->kb->state & STATE(KBIT_MOD)))
 	      {
-		ks = b->mod_ks;
-		slide_flag = KB_STATE_MOD;
+		ks = MOD_KS(b);
+		slide_flag = STATE(KBIT_MOD);
 	      }
 	    break;
 	  case right : /* hold alt */
@@ -1013,25 +979,20 @@ void kb_send_keypress(button *b)
 	}
     }
 
-  if (ks == 0) ks = b->default_ks;
+  if (ks == 0) ks = DEFAULT_KS(b);
   
   if (ks == 0) return; /* no keysym defined, abort */
 
   if (Xkb_sync) {
-	if (ks == b->default_ks) l = 0;
-	else if (ks == b->shift_ks) l = 1;
-	// 2test
-//	else if (ks == b->mod_ks) level = 2;
-//	else if (ks == b->shift_mod_ks) level = 3;
-
-	if (b->kb->state & KB_STATE_SHIFT) l2 = 1;
+	l &= 1;
+	l2 = !((b->kb->state & STATE(KBIT_SHIFT))==0);
   }
   if (lookupKeyCodeSequence(ks, vk_keycodes, NULL, b->kb->group, l, l2))
      sendKeySequence(vk_keycodes,
-	  ( (b->kb->state & KB_STATE_CTRL)  || (slide_flag == KB_STATE_CTRL) ),
-	  ( (b->kb->state & KB_STATE_META)  || (slide_flag == KB_STATE_META) ),
-	  ( (b->kb->state & KB_STATE_ALT)   || (slide_flag == KB_STATE_ALT)  ),
-		     0 /* ( (b->kb->state & KB_STATE_SHIFT) || (slide_flag == KB_STATE_SHIFT) ) */
+	  ( (b->kb->state & STATE(KBIT_CTRL))  || (slide_flag == STATE(KBIT_CTRL)) ),
+	  ( (b->kb->state & STATE(KBIT_META))  || (slide_flag == STATE(KBIT_META)) ),
+	  ( (b->kb->state & STATE(KBIT_ALT))   || (slide_flag == STATE(KBIT_ALT))  ),
+		     0 /* ( (b->kb->state & STATE(KBIT_SHIFT)) || (slide_flag == STATE(KBIT_SHIFT)) ) */
 		  );
 
 }
@@ -1075,18 +1036,8 @@ button * kb_find_button(keyboard *kb, int x, int y)
 		      )
 		    {
 			/* if pressed invariant/border - check buttons are identical */
-			if (but && !(
-			    but->default_ks==tmp_but->default_ks &&
-			    but->shift_ks==tmp_but->shift_ks &&
-			    but->mod_ks==tmp_but->mod_ks &&
-			    but->slide_up_ks==tmp_but->slide_up_ks &&
-			    but->slide_down_ks==tmp_but->slide_down_ks &&
-			    but->slide_left_ks==tmp_but->slide_left_ks &&
-			    but->slide_right_ks==tmp_but->slide_right_ks &&
-			    but->slide==tmp_but->slide &&
-			    but->modifier==tmp_but->modifier &&
-			    but->options==tmp_but->options
-			    ))
+			if (but && memcmp(&but,&tmp_but,(char*)&but->options - (char*)&but->ks) + sizeof(but->options)
+				)
 				return NULL;
 		        but = tmp_but;
 		    }

@@ -165,23 +165,23 @@ void button_set_layout(button *b, char *txt)
 void button_set_txt_ks(button *b, char *txt)
 {
   if (strcmp(txt, "Caps_Lock") == 0 )
-    b->modifier = BUT_CAPS;
+    b->modifier = STATE(KBIT_CAPS);
   else if (strncmp(txt, "Shift", 5) == 0 )
-    b->modifier = BUT_SHIFT;
+    b->modifier = STATE(KBIT_SHIFT);
   else if (strncmp(txt, "Control", 7) == 0 )
-    b->modifier = BUT_CTRL;
+    b->modifier = STATE(KBIT_CTRL);
   else if (strncmp(txt, "Alt", 3) == 0 )
-      b->modifier = BUT_ALT;
+      b->modifier = STATE(KBIT_ALT);
   else if (strncmp(txt, "Meta", 4) == 0 )
-      b->modifier = BUT_META;
+      b->modifier = STATE(KBIT_META);
   else if (strncmp(txt, "!Mod", 3) == 0 )
-  { b->modifier = BUT_MOD; b->default_ks = 0; return; }
+  { b->modifier = STATE(KBIT_MOD); DEFAULT_KS(b) = 0; return; }
 
-  if ((b->default_ks = XStringToKeysym(txt)) == (KeySym)NULL)
+  if ((DEFAULT_KS(b) = XStringToKeysym(txt)) == (KeySym)NULL)
     fprintf(stderr, "Cant find keysym for %s \n", txt);
 
   /* for backwards compatibility */
-  if (b->default_ks >= 0x061 && b->default_ks <= 0x07a)
+  if (DEFAULT_KS(b) >= 0x061 && DEFAULT_KS(b) <= 0x07a)
     b->options |= OPT_OBEYCAPS;
 }
 
@@ -244,9 +244,9 @@ int button_calc_c_width(button *b)
     return b->c_width; /* already calculated from image or width_param */
 
   b->c_width = max3(
-	_button_get_txt_size(b, b->default_txt),
-	_button_get_txt_size(b, b->shift_txt),
-	_button_get_txt_size(b, b->mod_txt)
+	_button_get_txt_size(b, DEFAULT_TXT(b)),
+	_button_get_txt_size(b, SHIFT_TXT(b)),
+	_button_get_txt_size(b, MOD_TXT(b))
 	);
   return b->c_width;
 }
@@ -330,42 +330,11 @@ void button_render(button *b, int mode)
 
   /* figure out what text to display
      via keyboard state              */
-  switch (b->kb->state) {
-    case KB_STATE_SHIFT|KB_STATE_CAPS|KB_STATE_MOD:
-	if (b->options & OPT_OBEYCAPS || !b->shift_mod_txt)
-		txt = b->mod_txt;
-	else
-		txt = b->shift_mod_txt;
-	if (txt) break;
-    case KB_STATE_SHIFT|KB_STATE_CAPS:
-	if (!(b->options & OPT_OBEYCAPS))
-		txt = b->shift_txt;
-	break;
-    case KB_STATE_CAPS|KB_STATE_MOD:
-	if (b->options & OPT_OBEYCAPS && b->shift_mod_txt)
-		txt = b->shift_mod_txt;
-	else
-		txt = b->mod_txt;
-	if (txt) break;
-    case KB_STATE_CAPS:
-	if (b->options & OPT_OBEYCAPS)
-		txt = b->shift_txt;
-	break;
-    case KB_STATE_SHIFT|KB_STATE_MOD:
-	txt = b->shift_mod_txt?:b->mod_txt;
-	break;
-    case KB_STATE_SHIFT:
-	txt = b->shift_txt;
-	if (txt) break;
-    case KB_STATE_MOD:
-	txt = b->mod_txt;
-	break;
-  }
 
-  if (txt == NULL) txt = b->default_txt;
+  txt = GET_TXT(b,KBLEVEL(b->kb))?:DEFAULT_TXT(b);
 
-  if (!(b->default_ks || b->shift_ks || b->mod_ks) &&
-      ( b->default_txt == NULL && b->shift_txt == NULL && b->mod_txt == NULL)
+  if (!(DEFAULT_KS(b) || SHIFT_KS(b) || MOD_KS(b)) &&
+      ( DEFAULT_TXT(b) == NULL && SHIFT_TXT(b) == NULL && MOD_TXT(b) == NULL)
       )
     return;  /* its a 'blank' button - just a spacer */
 
@@ -492,8 +461,6 @@ button* button_new(keyboard *k)
 
   b->slide = none;
 
-  b->modifier    = BUT_NORMAL;
-  b->options = OPT_NORMAL;
   b->fg_gc      = k->gc;
   b->bg_gc      = k->rev_gc;
 

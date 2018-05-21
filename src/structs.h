@@ -27,23 +27,22 @@
 #define BUTTON_RELEASED 1
 #define BUTTON_LOCKED   2
 
-#define KB_STATE_NORMAL 0U
-#define KB_STATE_SHIFT  1U
-#define KB_STATE_CAPS   (1U<<1)
-#define KB_STATE_CTRL   (1U<<2)
-#define KB_STATE_ALT    (1U<<3)
-#define KB_STATE_META   (1U<<4)
-#define KB_STATE_MOD    (1U<<5)
+#define KBIT_SHIFT	0
+#define KBIT_CAPS	1
+#define KBIT_CTRL	2
+#define KBIT_ALT	3
+#define KBIT_META	4
+#define KBIT_MOD	5
 
-#define KB_STATE_KNOWN  (KB_STATE_SHIFT|KB_STATE_CTRL|KB_STATE_ALT|KB_STATE_CAPS)
+#define STATE(b)	(1U<<b)
+#define BIT_MV(m,b,b2)	(((m) & STATE(b))>>(b-b2))
+inline unsigned int LEVEL(m,l){
+//	return ((BIT_MV(m,KBIT_SHIFT,0)^BIT_MV(l,KBIT_CAPS,0))|(BIT_MV(m,KBIT_MOD,1)^BIT_MV(m,KBIT_ALT,1)));
+	return ((BIT_MV(m,KBIT_SHIFT,0)^BIT_MV(m,KBIT_CAPS,0))|BIT_MV(m,KBIT_MOD,1));
+}
+#define KBLEVEL(kb)	LEVEL(kb->state,kb->state_locked)
 
-#define BUT_NORMAL 0U
-#define BUT_SHIFT  1U
-#define BUT_CAPS   (1U<<1)
-#define BUT_CTRL   (1U<<2)
-#define BUT_ALT    (1U<<3)
-#define BUT_META   (1U<<4)
-#define BUT_MOD    (1U<<5)
+#define KB_STATE_KNOWN  (STATE(KBIT_SHIFT)|STATE(KBIT_CAPS)|STATE(KBIT_CTRL)|STATE(KBIT_ALT))
 
 #define OPT_NORMAL      0
 #define OPT_OBEYCAPS    (1<<0)
@@ -130,14 +129,21 @@ typedef struct _button
   int x;             /* actual co-ords relative to window */
   int y;
 
-  char *default_txt; /* default button txt */
-  KeySym default_ks; /* default button Xkeysym */
-  char *shift_txt;
-  KeySym shift_ks;
-  char *mod_txt;
-  KeySym mod_ks;
-  char *shift_mod_txt;
-  KeySym shift_mod_ks;
+  char *txt[4];
+  KeySym ks[4];
+
+#define GET_TXT(b,i)	(b->txt[i])
+#define GET_KS(b,i)	(b->ks[i])
+
+#define DEFAULT_TXT(b) GET_TXT(b,0)
+#define SHIFT_TXT(b) GET_TXT(b,1)
+#define MOD_TXT(b) GET_TXT(b,2)
+#define SHIFT_MOD_TXT(b) GET_TXT(b,3)
+
+#define DEFAULT_KS(b) GET_KS(b,0)
+#define SHIFT_KS(b) GET_KS(b,1)
+#define MOD_KS(b) GET_KS(b,2)
+#define SHIFT_MOD_KS(b) GET_KS(b,3)
 
   KeySym slide_up_ks;
   KeySym slide_down_ks;
