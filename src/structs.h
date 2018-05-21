@@ -45,7 +45,9 @@ inline unsigned int LEVEL(m,l){
 #define KB_STATE_KNOWN  (STATE(KBIT_SHIFT)|STATE(KBIT_CAPS)|STATE(KBIT_CTRL)|STATE(KBIT_ALT))
 
 #define OPT_NORMAL      0
-#define OPT_OBEYCAPS    (1<<0)
+
+#define OBIT_OBEYCAPS	0
+#define OBIT_WIDTH_SPEC	1
 
 #define TRUE            1
 #define FALSE           0
@@ -103,8 +105,8 @@ typedef struct _keyboard
   GC bdr_gc;
 
   XFontStruct* font_info;
-  int state;  /* shifted | caps | modded | normal */
-  int state_locked;  /* shifted | modded | normal */
+  unsigned int state;  /* shifted | caps | modded | normal */
+  unsigned int state_locked;  /* shifted | modded | normal */
 
   enum { oldskool, xft } render_type;
   enum { rounded, square, plain } theme;
@@ -130,10 +132,11 @@ typedef struct _button
   int y;
 
   char *txt[4];
-  KeySym ks[4];
+  KeySym ks[8];
 
 #define GET_TXT(b,i)	(b->txt[i])
 #define GET_KS(b,i)	(b->ks[i])
+#define SET_KS(b,i,k)	{ b->ks[i] = k; }
 
 #define DEFAULT_TXT(b) GET_TXT(b,0)
 #define SHIFT_TXT(b) GET_TXT(b,1)
@@ -145,16 +148,16 @@ typedef struct _button
 #define MOD_KS(b) GET_KS(b,2)
 #define SHIFT_MOD_KS(b) GET_KS(b,3)
 
-  KeySym slide_up_ks;
-  KeySym slide_down_ks;
-  KeySym slide_left_ks;
-  KeySym slide_right_ks;
+#define SLIDE_UP	4
+#define SLIDE_DOWN	5
+#define SLIDE_LEFT	6
+#define SLIDE_RIGHT	7
 
-  enum { none, up, down, left, right } slide;
+  short slide;
 
-  int modifier; /* set to BUT_ if key is shift,ctrl,caps etc */
+  unsigned int modifier; /* set to BUT_ if key is shift,ctrl,caps etc */
 
-  int options; /* bit-field of OPT_* */
+  unsigned int options; /* bit-field of OPT_* */
 
   int c_width;  /* width  of contents ( min width ) */
   int c_height; /* height of contents ( min height ) */
@@ -163,7 +166,6 @@ typedef struct _button
   int b_size;   /* size of border in pixels */
                 /* eg. total width = c_width+pad_x+(2*b_size) */
 
-   Bool is_width_spec; /* width is specified in conf file */
    int key_span_width; /* width in number of keys spanned */
 
   int act_width;

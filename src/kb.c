@@ -452,11 +452,11 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		else if (strcmp(tmpstr_A, "default_ks") == 0)
 		  button_set_txt_ks(tmp_but, tmpstr_C);
 		else if (strcmp(tmpstr_A, "shift_ks") == 0)
-		  SHIFT_KS(tmp_but) = button_ks(tmpstr_C);
+		  SET_KS(tmp_but,1,button_ks(tmpstr_C))
 		else if (strcmp(tmpstr_A, "mod_ks") == 0)
-		  MOD_KS(tmp_but) = button_ks(tmpstr_C);
+		  SET_KS(tmp_but,2,button_ks(tmpstr_C))
 		else if (strcmp(tmpstr_A, "shift_mod_ks") == 0)
-		  SHIFT_MOD_KS(tmp_but) = button_ks(tmpstr_C);
+		  SET_KS(tmp_but,3,button_ks(tmpstr_C))
 #ifdef USE_XPM
 		else if (strcmp(tmpstr_A, "img") == 0)
 		  { button_set_pixmap(tmp_but, tmpstr_C); }
@@ -475,12 +475,12 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		  button_set_slide_ks(tmp_but, tmpstr_C, RIGHT);
 		else if (strcmp(tmpstr_A, "width") == 0)
 		{
-		   tmp_but->is_width_spec = True;
+		   tmp_but->options |= STATE(OBIT_WIDTH_SPEC);
 		    tmp_but->c_width = atoi(tmpstr_C);
 		}
 		else if (strcmp(tmpstr_A, "key_span_width") == 0)
 		{
-		   tmp_but->is_width_spec = True;
+		   tmp_but->options |= STATE(OBIT_WIDTH_SPEC);
 		   tmp_but->key_span_width = atoi(tmpstr_C);
 		}
 
@@ -489,9 +489,9 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
                 else if (strcmp(tmpstr_A, "obey_capslock") == 0)
 		{
 		  if (strcmp(tmpstr_C, "yes") == 0)
-		    tmp_but->options |= OPT_OBEYCAPS;
+		    tmp_but->options |= STATE(OBIT_OBEYCAPS);
 		  else if (strcmp(tmpstr_C, "no") == 0)
-		    tmp_but->options &= ~OPT_OBEYCAPS;
+		    tmp_but->options &= ~STATE(OBIT_OBEYCAPS);
 		  else
 		  {
 		    perror("invalid value for obey_capslock\n"); exit(1);
@@ -534,7 +534,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 	{
 	   button *b;
 	   b = (button *)ip->data;
-	   if (b->is_width_spec  == False)
+	   if (!(b->options & STATE(OBIT_WIDTH_SPEC)))
 	   {
 	      if ( ( DEFAULT_TXT(b) == NULL || (strlen(DEFAULT_TXT(b)) == 1))
 		   && (SHIFT_TXT(b) == NULL || (strlen(SHIFT_TXT(b)) == 1))
@@ -579,7 +579,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 	    {
 	      button *b;
 	      b = (button *)ip->data;
-	      if (!b->is_width_spec)
+	      if (!(b->options & STATE(OBIT_WIDTH_SPEC)))
 		{
 		  if ((DEFAULT_TXT(b) == NULL || (strlen(DEFAULT_TXT(b)) == 1))
 		      && (SHIFT_TXT(b) == NULL || (strlen(SHIFT_TXT(b)) == 1))
@@ -811,7 +811,7 @@ button *kb_handle_events(keyboard *kb, XEvent an_event)
 	      }
 	    /* check for slide */
 
-	    active_but->slide = none;
+	    active_but->slide = 0;
 
 	    if (active_but->layout_switch > -1)
 	      {
@@ -833,18 +833,18 @@ button *kb_handle_events(keyboard *kb, XEvent an_event)
 void kb_set_slide(button *active_but, int x, int y)
 {
   if (x < (button_get_abs_x(active_but)-active_but->kb->slide_margin))
-    { active_but->slide = left; return; }
+    { active_but->slide = SLIDE_LEFT; return; }
 
   if (x > ( button_get_abs_x(active_but)
 	    + active_but->act_width + -active_but->kb->slide_margin ))
-    { active_but->slide = right; return; }
+    { active_but->slide = SLIDE_RIGHT; return; }
 
   if (y < (button_get_abs_y(active_but)-active_but->kb->slide_margin))
-    { active_but->slide = up; return; }
+    { active_but->slide = SLIDE_UP; return; }
 
   if (y > ( button_get_abs_y(active_but) + active_but->act_height )
       + -active_but->kb->slide_margin )
-    { active_but->slide = down; return; }
+    { active_but->slide = SLIDE_DOWN; return; }
 
 
 }
@@ -939,31 +939,26 @@ int kb_process_keypress(button *active_but)
 
 void kb_send_keypress(button *b)
 {
-  KeySym ks = 0;
   int slide_flag = 0;
   unsigned int l = KBLEVEL(b->kb);
   unsigned int l2 = 0;
+  KeySym ks = GET_KS(b,l);
 
   struct keycodeEntry vk_keycodes[10];
 
-  ks = GET_KS(b,l);
-
-  if (b->slide != none)
-    {
+  if (b->slide) { // 2do grok slides ;)
+      ks = GET_KS(b,b->slide);
       switch (b->slide)
 	{
-	  case up :
-	    ks = b->slide_up_ks;
+	  case SLIDE_UP :
 //	    if (ks == 0) ks = SHIFT_KS(b);
 	    if (ks == 0 && (b->kb->state & STATE(KBIT_SHIFT))) ks = SHIFT_KS(b);
 	    break;
-	  case down : /* hold ctrl */
-	    ks = b->slide_down_ks;
+	  case SLIDE_DOWN : /* hold ctrl */
 //	    if (ks == 0) slide_flag = STATE(KBIT_CTRL);
 	    if (!ks && (b->kb->state & STATE(KBIT_CTRL))) slide_flag = STATE(KBIT_CTRL);
 	    break;
-	  case left : /* hold alt */
-	    ks = b->slide_left_ks;
+	  case SLIDE_LEFT : /* hold alt */
 //	    if (ks == 0)
 	    if (ks == 0 && (b->kb->state & STATE(KBIT_MOD)))
 	      {
@@ -971,10 +966,7 @@ void kb_send_keypress(button *b)
 		slide_flag = STATE(KBIT_MOD);
 	      }
 	    break;
-	  case right : /* hold alt */
-	    ks = b->slide_right_ks;
-	    break;
-	  case none:
+	  case SLIDE_RIGHT : /* hold alt */
 	    break;
 	}
     }

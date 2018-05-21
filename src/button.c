@@ -175,14 +175,16 @@ void button_set_txt_ks(button *b, char *txt)
   else if (strncmp(txt, "Meta", 4) == 0 )
       b->modifier = STATE(KBIT_META);
   else if (strncmp(txt, "!Mod", 3) == 0 )
-  { b->modifier = STATE(KBIT_MOD); DEFAULT_KS(b) = 0; return; }
+  { b->modifier = STATE(KBIT_MOD); SET_KS(b,0,0); return; }
 
-  if ((DEFAULT_KS(b) = XStringToKeysym(txt)) == (KeySym)NULL)
+  KeySym ks = XStringToKeysym(txt);
+  SET_KS(b,0,ks);
+  if (!ks)
     fprintf(stderr, "Cant find keysym for %s \n", txt);
 
   /* for backwards compatibility */
   if (DEFAULT_KS(b) >= 0x061 && DEFAULT_KS(b) <= 0x07a)
-    b->options |= OPT_OBEYCAPS;
+    b->options |= STATE(OBIT_OBEYCAPS);
 }
 
 void button_set_slide_ks(button *b, char *txt, int dir)
@@ -196,10 +198,10 @@ void button_set_slide_ks(button *b, char *txt, int dir)
 
   switch(dir)
     {
-      case UP    : b->slide_up_ks = tmp_ks; break;
-      case DOWN  : b->slide_down_ks = tmp_ks; break;
-      case LEFT  : b->slide_left_ks = tmp_ks; break;
-      case RIGHT : b->slide_right_ks = tmp_ks; break;
+      case UP    : SET_KS(b,SLIDE_UP,tmp_ks); break;
+      case DOWN  : SET_KS(b,SLIDE_DOWN,tmp_ks); break;
+      case LEFT  : SET_KS(b,SLIDE_LEFT,tmp_ks); break;
+      case RIGHT : SET_KS(b,SLIDE_RIGHT,tmp_ks); break;
     }
 }
 
@@ -458,8 +460,6 @@ button* button_new(keyboard *k)
 {
   button *b = calloc(1, sizeof(button));
   b->kb = k;
-
-  b->slide = none;
 
   b->fg_gc      = k->gc;
   b->bg_gc      = k->rev_gc;
