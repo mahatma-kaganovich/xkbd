@@ -473,8 +473,8 @@ stop_argv:
 				if (e.min_key_code != e.old_min_key_code || e.max_key_code != e.old_max_key_code || e.device != e.old_device
 				    || loadKeySymTable()
 				    ) {
-					//XCloseDisplay(display);
-					//xkbd_destroy(kb);
+					XCloseDisplay(display);
+					xkbd_destroy(kb);
 					execvp(exec_cmd[0], exec_cmd);
 				}
 				break;

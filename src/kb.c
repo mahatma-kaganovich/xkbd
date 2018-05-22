@@ -910,7 +910,6 @@ int kb_process_keypress(button *active_but)
     unsigned int state = active_but->kb->state;
     unsigned int lock = active_but->kb->state_locked;
     const unsigned int mod = active_but->modifier;
-    int keypress = 1;
 
     DBG("got release state %i %i %i %i \n", new_state, STATE(KBIT_SHIFT), STATE(KBIT_MOD), STATE(KBIT_CTRL) );
 
@@ -921,15 +920,12 @@ int kb_process_keypress(button *active_but)
 	if (lock & mod) {
 		lock ^= mod;
 		state ^= mod;
-		keypress = 0;
 	} else if ((state & mod)!=mod) {
 		state ^= mod;
 	} else if (no_lock) {
 		state ^= mod;
-		keypress = 0; /* do not activate grp:ctrl_shift_toggle */
 	} else {
 		lock ^= mod;
-		keypress = 0;
 	}
 	DBG("got a modifier key - %i \n", state);
     } else if (state & ~STATE(KBIT_CAPS)) {
@@ -954,10 +950,8 @@ int kb_process_keypress(button *active_but)
 	active_but->kb->state_locked = lock;
     }
 
-    if (keypress) {
-	kb_send_keypress(active_but);
-	DBG("%s clicked \n", DEFAULT_TXT(active_but));
-    }
+    kb_send_keypress(active_but);
+    DBG("%s clicked \n", DEFAULT_TXT(active_but));
 
     /* real precise state for Xkb_sync will be reached by event,
        so try to be just visually pretty sensitive */
