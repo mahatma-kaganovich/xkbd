@@ -33,6 +33,10 @@
 
 #include "libvirtkeys.h"
 
+#ifndef MINIMAL
+#include "ks2unicode.h"
+#endif
+
 #ifdef DEBUG
 #define DBG(txt, args... ) fprintf(stderr, "DEBUG" txt "\n", ##args )
 #else
@@ -99,7 +103,9 @@ void button_update(button *b) {
 			XkbTranslateKeySym(dpy,&ks,mods[l],buf,1,&n);
 		if (!(txt = b->txt[l])) {
 			for (l1 = 0; l1<l && !txt; l1++) if (ks == b->ks[l1]) txt = b->txt[l1];
+#ifndef MINIMAL
 			ksText_(ks,&txt);
+#endif
 			b->txt[l] = txt;
 		}
 		b->ks[l] = ks;

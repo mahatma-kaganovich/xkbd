@@ -12,7 +12,6 @@
 
 #define SHOWSEQUENCES
 #include <sys/param.h>
-#include "ks2unicode.h"
 
 extern int debug;
 #ifndef MINIMAL

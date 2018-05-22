@@ -40,6 +40,14 @@ if test x$enable_xpm != xno; then
       XPM_LIBS=" -lXpm"
 fi
 
+AC_ARG_ENABLE(minimal,
+  [  --enable-minimal         minimal build (disable: X sync mode, keycodes, slides), [default=no]],
+  enable_xpm=$enableval, enable_minimal=yes)
+
+if test x$enable_minimal != xno; then
+      CPPFLAGS="$CPPFLAGS -DMINIMAL"
+fi
+
 dnl check for debug build
 AC_ARG_ENABLE(debug,
   [  --enable-debug         enable debug build],
