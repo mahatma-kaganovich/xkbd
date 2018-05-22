@@ -20,9 +20,6 @@
 #include <unistd.h>
 #include <signal.h>
 
-#include <sys/types.h>
-#include <sys/wait.h>
-
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/Xatom.h>
@@ -149,6 +146,7 @@ Options:\n\
   -X  Xkb state interaction\n\
   -l  disable modifiers lock\n\
   -v  version\n\
+  -e {<...>}   exec on restart (to end of line)\n\
   -h  this help\n");
 #ifdef USE_XFT
    printf("  -font <font name>  Select the xft AA font for xkbd\n");
@@ -198,7 +196,7 @@ int main(int argc, char **argv)
    FILE *fp;
    KeySym mode_switch_ksym;
 
-
+   char **exec_cmd = argv;
 
    for (i=1; argv[i]; i++) {
       char *arg = argv[i];
@@ -231,11 +229,14 @@ int main(int argc, char **argv)
 	    case 'D' :
 	       dock = atoi(argv[++i]);
 	       break;
-	    case 'X' :
 #ifndef MINIMAL
+	    case 'X' :
 	       Xkb_sync = 1;
-#endif
 	       break;
+#endif
+	    case 'e' :
+	       exec_cmd = &argv[++i];
+	       goto stop_argv;
 	    case 'l' :
 	       no_lock = 1;
 	       break;
@@ -250,18 +251,12 @@ int main(int argc, char **argv)
 	 }
       }
    }
+stop_argv:
 
 #ifndef MINIMAL
    if (Xkb_sync) {
 	int xkbError, reason_rtrn, mjr = XkbMajorVersion, mnr = XkbMinorVersion;
 	unsigned short mask = XkbStateNotifyMask|XkbNewKeyboardNotifyMask;
-	char *arg[] = { NULL };
-	pid_t pid;
-
-	/* loaded in xorg.conf map too variable (old-style map) & cause multiple restarting */
-	/* reload it */
-	if(pid=vfork()) waitpid(pid,0,0);
-	else execvp("/usr/bin/setxkbmap", arg);
 
 	display = XkbOpenDisplay(display_name, &xkbEventType, &xkbError, &mjr, &mnr, &reason_rtrn);
 	if (!display) goto no_dpy;
@@ -478,15 +473,15 @@ int main(int argc, char **argv)
 				if (e.min_key_code != e.old_min_key_code || e.max_key_code != e.old_max_key_code || e.device != e.old_device
 				    || loadKeySymTable()
 				    ) {
-					xkbd_destroy(kb);
-					XCloseDisplay(display);
-					execvp(argv[0],argv);
+					//XCloseDisplay(display);
+					//xkbd_destroy(kb);
+					execvp(exec_cmd[0], exec_cmd);
 				}
 				break;
 			}
 		}
-	    }
 #endif
+	    }
 	    while (xkbd_process_repeats(kb) && !XPending(display))
 		usleep(10000L); /* sleep for a 10th of a second */
       }

@@ -146,6 +146,7 @@ while(defined($s=<F>)){
 }
 close(F);
 @layouts||die "ERROR: no keyboard layouts from 'setxkbmap -query'";
+
 $N=$#layouts+1;
 
 ($l)=$k=~/(<layout>.*<\/layout>)/gs;
