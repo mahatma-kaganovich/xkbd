@@ -54,9 +54,6 @@ sub key{
 			if(exists($s{'default_ks'}) && $y eq $s{'default_ks'}){
 				$s{$x}=$s{'default'};
 				next;
-			}elsif($y eq 'ISO_Next_Group'){
-				$s{$x}='+'.$s{'default'};
-				next;
 			}
 		}
 		$y=~s/^KP_//;

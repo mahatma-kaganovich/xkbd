@@ -288,7 +288,7 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 	// If these aren't set, then we aren't initialized
 
 	if ((dpy == NULL) || (keymap == NULL))
-		return FALSE;
+		return 0;
 
 	assignedColumn = -1;
 	assignedKeycode = -1;
@@ -309,6 +309,7 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 				found = TRUE;
 				assignedKeycode = keycode + minKeycode;
 				assignedColumn = column;
+#ifndef MINIMAL
 				if (Xkb_sync) {
 					/* check server can translate it without modifiers */
 					if (
@@ -326,6 +327,7 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 						continue;
 					}
 				}
+#endif
 				break;
 			}
 			if (availableColumn == -1)
@@ -359,7 +361,7 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 		// that can be used.
 
 		if (availableColumn == -1)
-			return FALSE;
+			return 0;
 
 		// Ok. We can assign the KeySym to the entry in the table at the available Column and Keycode.
 		// We must update the server when we do this, so we can look up the string associated with the
@@ -519,7 +521,7 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 	}
 #endif
 
-	return TRUE;
+	return ((assignedColumn+1)<<1)*sizeof(struct keycodeEntry);
 }
 
 // Routine to test for and set up the XTest extension. Returns FALSE if the set up fails or if the extension
@@ -698,16 +700,3 @@ int setupKeyboardVariables(Display *display)
 	return TRUE;
 }
 
-void ksMap(KeySym ks, KeySym *ks1, char **txt1, unsigned int mods)
-{
-	KeySym k;
-	char txt[1];
-	int n;
-
-	if (!ks || *ks1  || *txt1) return;
-	k = ks;
-	XkbTranslateKeySym(dpy,&k,mods,txt,1,&n);
-	if (k == ks) return;
-	*ks1 = k;
-	ksText_(k, txt1);
-}

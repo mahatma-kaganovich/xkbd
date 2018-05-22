@@ -59,6 +59,21 @@ inline unsigned int LEVEL(unsigned int m, unsigned int l){
 
 #define MAX_LAYOUTS     3
 
+#ifdef MINIMAL
+#undef SLIDES
+#undef SEQ_CACHE
+#else
+#define SLIDES
+#define SEQ_CACHE
+#endif
+
+#ifdef SLIDES
+#define LEVELS 8
+#else
+#define LEVELS 4
+#endif
+
+
 typedef struct _list
 {
   struct _list *next;
@@ -131,8 +146,12 @@ typedef struct _button
   int x;             /* actual co-ords relative to window */
   int y;
 
+#ifdef SEQ_CACHE
+  void *cache[LEVELS];
+#endif
+
   char *txt[4];
-  KeySym ks[8];
+  KeySym ks[LEVELS];
 
 #define GET_TXT(b,i)	(b->txt[i])
 #define GET_KS(b,i)	(b->ks[i])
@@ -153,7 +172,9 @@ typedef struct _button
 #define SLIDE_LEFT	6
 #define SLIDE_RIGHT	7
 
+#ifdef SLIDES
   short slide;
+#endif
 
   unsigned int modifier; /* set to BUT_ if key is shift,ctrl,caps etc */
 
@@ -189,9 +210,13 @@ typedef struct _button
   Pixmap *mask;
   GC mask_gc;
 
-} button;
+}
+//    __attribute__ ((__packed__)) 
+    button;
 
+#ifndef MINIMAL
 extern int Xkb_sync;
+#endif
 extern int no_lock;
 
 #endif

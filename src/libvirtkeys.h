@@ -15,7 +15,9 @@
 #include "ks2unicode.h"
 
 extern int debug;
+#ifndef MINIMAL
 extern int Xkb_sync;
+#endif
 
 #ifndef TRUE
 #define	TRUE	1

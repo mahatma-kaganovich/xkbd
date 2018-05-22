@@ -49,7 +49,9 @@ Window rootWin;
 Atom mwm_atom;
 int screen_num;
 
+#ifndef MINIMAL
 int Xkb_sync = 0;
+#endif
 int no_lock = 0;
 
 enum {
@@ -230,7 +232,9 @@ int main(int argc, char **argv)
 	       dock = atoi(argv[++i]);
 	       break;
 	    case 'X' :
+#ifndef MINIMAL
 	       Xkb_sync = 1;
+#endif
 	       break;
 	    case 'l' :
 	       no_lock = 1;
@@ -247,6 +251,7 @@ int main(int argc, char **argv)
       }
    }
 
+#ifndef MINIMAL
    if (Xkb_sync) {
 	int xkbError, reason_rtrn, mjr = XkbMajorVersion, mnr = XkbMinorVersion;
 	unsigned short mask = XkbStateNotifyMask|XkbNewKeyboardNotifyMask;
@@ -261,7 +266,9 @@ int main(int argc, char **argv)
 	display = XkbOpenDisplay(display_name, &xkbEventType, &xkbError, &mjr, &mnr, &reason_rtrn);
 	if (!display) goto no_dpy;
 	XkbSelectEvents(display,XkbUseCoreKbd,mask,mask);
-   } else {
+   } else
+#endif
+   {
 	display = XOpenDisplay(display_name);
 	if (!display) goto no_dpy;
    }
@@ -454,6 +461,7 @@ int main(int argc, char **argv)
 		case Expose:
 		  xkbd_repaint(kb);
 		  break;
+#ifndef MINIMAL
 		default: if (ev.type == xkbEventType) {
 #define e ((XkbEvent)ev)
 			switch (e.any.xkb_type) {
@@ -478,6 +486,7 @@ int main(int argc, char **argv)
 			}
 		}
 	    }
+#endif
 	    while (xkbd_process_repeats(kb) && !XPending(display))
 		usleep(10000L); /* sleep for a 10th of a second */
       }

@@ -83,6 +83,29 @@ void _kb_load_font(keyboard *kb, char *defstr )
   exit(1);
 }
 
+void button_update(button *b) {
+	int l,l1;
+	int group = b->kb->total_layouts-1;
+	Display *dpy = b->kb->display;
+	char buf[1];
+	const unsigned int mods[4] = {0,STATE(KBIT_SHIFT),STATE(KBIT_MOD),STATE(KBIT_SHIFT)|STATE(KBIT_MOD)};
+	int n;
+	char *txt;
+
+	for(l=0; l<4; l++){
+		KeySym ks = b->ks[l];
+
+		if(!ks && (ks = b->ks[l&2]?:b->ks[0]))
+			XkbTranslateKeySym(dpy,&ks,mods[l],buf,1,&n);
+		if (!(txt = b->txt[l])) {
+			for (l1 = 0; l1<l && !txt; l1++) if (ks == b->ks[l1]) txt = b->txt[l1];
+			ksText_(ks,&txt);
+			b->txt[l] = txt;
+		}
+		b->ks[l] = ks;
+	}
+}
+
 keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		 int kb_width, int kb_height, char *conf_file,
 		 char *font_name, int font_is_xft)
@@ -242,13 +265,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 
 		  break;
 		case keydef:
-		  ksMap(DEFAULT_KS(tmp_but), &SHIFT_KS(tmp_but), &SHIFT_TXT(tmp_but), STATE(KBIT_SHIFT));
-		  ksMap(DEFAULT_KS(tmp_but), &MOD_KS(tmp_but), &MOD_TXT(tmp_but), STATE(KBIT_MOD));
-		  ksMap(SHIFT_KS(tmp_but), &SHIFT_MOD_KS(tmp_but), &SHIFT_MOD_TXT(tmp_but), STATE(KBIT_SHIFT)|STATE(KBIT_MOD));
-		  ksText_(DEFAULT_KS(tmp_but), &DEFAULT_TXT(tmp_but));
-		  ksText_(SHIFT_KS(tmp_but), &SHIFT_TXT(tmp_but));
-		  ksText_(MOD_KS(tmp_but), &MOD_TXT(tmp_but));
-		  ksText_(SHIFT_MOD_KS(tmp_but), &SHIFT_MOD_TXT(tmp_but));
+		  button_update(tmp_but);
 		  button_calc_c_width(tmp_but);
 		  button_calc_c_height(tmp_but);
 		  break;
@@ -390,10 +407,12 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 
                     height_tmp = atoi(tmpstr_C);
 		  }
+#ifdef SLIDES
 		else if (strcmp(tmpstr_A, "slide_margin") == 0)
 		  {
 		     kb->slide_margin = atoi(tmpstr_C);
 		  }
+#endif
 		else if (strcmp(tmpstr_A, "repeat_delay") == 0)
 		  {
 		     kb->key_delay_repeat = atoi(tmpstr_C);
@@ -791,9 +810,10 @@ button *kb_handle_events(keyboard *kb, XEvent an_event)
 	  {
 	    int new_state;
 
+#ifdef SLIDES
 	    kb_set_slide(active_but, an_event.xmotion.x,
 			 an_event.xmotion.y );
-
+#endif
 	    new_state = kb_process_keypress(active_but);
 
 	    if (new_state != active_but->kb->state ||
@@ -811,14 +831,17 @@ button *kb_handle_events(keyboard *kb, XEvent an_event)
 	      }
 	    /* check for slide */
 
+#ifdef SLIDES
 	    active_but->slide = 0;
-
+#endif
 	    if (active_but->layout_switch > -1)
 	      {
 		DBG("switching layout\n");
+#ifndef MINIMAL
 		if (Xkb_sync)
 			XkbLockGroup(active_but->kb->display, XkbUseCoreKbd, active_but->layout_switch);
 		else
+#endif
 			kb_switch_layout(active_but->kb, active_but->layout_switch);
 	      }
 
@@ -830,6 +853,7 @@ button *kb_handle_events(keyboard *kb, XEvent an_event)
   return active_but;
 }
 
+#ifdef SLIDES
 void kb_set_slide(button *active_but, int x, int y)
 {
   if (x < (button_get_abs_x(active_but)-active_but->kb->slide_margin))
@@ -848,6 +872,7 @@ void kb_set_slide(button *active_but, int x, int y)
 
 
 }
+#endif
 
 Bool kb_do_repeat(keyboard *kb, button *active_but)
 {
@@ -918,12 +943,14 @@ int kb_process_keypress(button *active_but)
     if (mod & ~STATE(KBIT_CAPS)) {
 	/* strange ("unKNOWN") combinations do "X Error"
 	   keep them virtual & change whole KNOWN mask only */
+#ifndef MINIMAL
 	if (Xkb_sync && (mod & KB_STATE_KNOWN)) {
 		if (state != active_but->kb->state)
 			XkbLatchModifiers(active_but->kb->display,XkbUseCoreKbd,KB_STATE_KNOWN,state & KB_STATE_KNOWN);
 		if (lock != active_but->kb->state_locked)
 			XkbLockModifiers(active_but->kb->display,XkbUseCoreKbd,KB_STATE_KNOWN,lock & KB_STATE_KNOWN);
 	}
+#endif
 	active_but->kb->state_locked = lock;
     }
 
@@ -941,13 +968,15 @@ void kb_send_keypress(button *b)
 {
   int slide_flag = 0;
   unsigned int l = KBLEVEL(b->kb);
+  unsigned int l1 = l;
   unsigned int l2 = 0;
   KeySym ks = GET_KS(b,l);
 
   struct keycodeEntry vk_keycodes[10];
 
+#ifdef SLIDES
   if (b->slide) { // 2do grok slides ;)
-      ks = GET_KS(b,b->slide);
+      ks = GET_KS(b,l1 = b->slide);
       switch (b->slide)
 	{
 	  case SLIDE_UP :
@@ -963,20 +992,30 @@ void kb_send_keypress(button *b)
 	    if (ks == 0 && (b->kb->state & STATE(KBIT_MOD)))
 	      {
 		ks = MOD_KS(b);
+//		l1 = 2;
 		slide_flag = STATE(KBIT_MOD);
 	      }
 	    break;
 	  case SLIDE_RIGHT : /* hold alt */
 	    break;
 	}
-    }
-
+  }
+#endif
   if (ks == 0) ks = DEFAULT_KS(b);
-  
   if (ks == 0) return; /* no keysym defined, abort */
 
+#ifdef SEQ_CACHE
+  struct keycodeEntry *kcs = b->cache[l1];
+  int len;
+
+  if (!kcs && (len = lookupKeyCodeSequence(ks, vk_keycodes, NULL, b->kb->group, l, !((b->kb->state & STATE(KBIT_SHIFT))==0))))
+	memcpy(b->cache[l1] = kcs = malloc(len),&vk_keycodes,len);
+  if (kcs)
+     sendKeySequence(kcs,
+#else
   if (lookupKeyCodeSequence(ks, vk_keycodes, NULL, b->kb->group, l, !((b->kb->state & STATE(KBIT_SHIFT))==0)))
      sendKeySequence(vk_keycodes,
+#endif
 	  ( (b->kb->state & STATE(KBIT_CTRL))  || (slide_flag == STATE(KBIT_CTRL)) ),
 	  ( (b->kb->state & STATE(KBIT_META))  || (slide_flag == STATE(KBIT_META)) ),
 	  ( (b->kb->state & STATE(KBIT_ALT))   || (slide_flag == STATE(KBIT_ALT))  ),
