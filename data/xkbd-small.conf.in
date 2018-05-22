@@ -235,8 +235,6 @@ repeat_time 0
 	<key>
 		default Shift
 		default_ks Shift_L
-		shift Shift
-# default shifted is ISO_Next_Group, override
 		shift_ks Shift_L
 		mod_ks Shift_R
 		width 14
@@ -288,6 +286,7 @@ repeat_time 0
 	<key>
 		default Ctrl
 		default_ks Control_L
+		shift_ks Control L
 		mod_ks Control_R
 	</key>
 	<key>
