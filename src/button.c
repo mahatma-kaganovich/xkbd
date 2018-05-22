@@ -333,7 +333,7 @@ void button_render(button *b, int mode)
   /* figure out what text to display
      via keyboard state              */
 
-  txt = GET_TXT(b,KBLEVEL(b->kb))?:DEFAULT_TXT(b);
+  txt = GET_TXT(b,KBLEVEL(b))?:DEFAULT_TXT(b);
 
   if (!(DEFAULT_KS(b) || SHIFT_KS(b) || MOD_KS(b)) &&
       ( DEFAULT_TXT(b) == NULL && SHIFT_TXT(b) == NULL && MOD_TXT(b) == NULL)

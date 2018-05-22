@@ -967,7 +967,7 @@ int kb_process_keypress(button *active_but)
 void kb_send_keypress(button *b)
 {
   int slide_flag = 0;
-  unsigned int l = KBLEVEL(b->kb);
+  unsigned int l = KBLEVEL(b);
   unsigned int l1 = l;
   unsigned int l2 = 0;
   KeySym ks = GET_KS(b,l);
