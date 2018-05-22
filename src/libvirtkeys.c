@@ -276,6 +276,7 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 	int assignedColumn;
 	int found = FALSE;
 	unsigned int invariant = 0;
+	int columns = keysymsPerKeycode>3?4:keysymsPerKeycode;
 #ifdef USEMODIFIERS
 	int len;
 	XEvent fakeEvent;
@@ -301,16 +302,22 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 
 	for (keycode = 0; ((keycode < (maxKeycode - minKeycode + 1)) && !found); keycode++)
 	{
-		for (column = 0; column < keysymsPerKeycode; column++)
+		for (column = 0; column < columns; column++)
 		{
 			if (keymap[(keycode * keysymsPerKeycode + column)] == ks)
 			{
 				found = TRUE;
-				assignedKeycode = keycode;
+				assignedKeycode = keycode + minKeycode;
 				assignedColumn = column;
 				if (Xkb_sync) {
 					/* check server can translate it without modifiers */
-					if (ks == XkbKeycodeToKeysym(dpy,keycode+minKeycode,group,level)) {
+					if (
+						// must be
+						(ks == XkbKeycodeToKeysym(dpy,assignedKeycode,group,level)) ||
+						// real
+						(level>1 && (ks == XkbKeycodeToKeysym(dpy,assignedKeycode,group,level & 1)))
+						
+					    ) {
 						assignedColumn = level2;
 						invariant = 0;
 					} else {
@@ -360,11 +367,12 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 
 		keymap[(availableKeycode * keysymsPerKeycode + availableColumn)] = ks;
 
+		availableKeycode += minKeycode;
 
 		// We point to only the row that we are changing, and say that we are chaing just one. Note that
 		// the keycode index passed must be based on minKeycode.
 
-		XChangeKeyboardMapping(dpy, (availableKeycode + minKeycode),
+		XChangeKeyboardMapping(dpy, availableKeycode,
 				keysymsPerKeycode, &keymap[(availableKeycode * keysymsPerKeycode)], 1);
 
 		assignedKeycode = availableKeycode;
@@ -373,7 +381,6 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 	}
 	else if (debug)
 		fprintf(stderr, "KeySym %x found at Keycode %d, Column %d\n", (unsigned int)ks, (assignedKeycode + minKeycode), assignedColumn);
-
 
 	// If we get here, we assigned it. Now set up the table with the appropriate
 	// information
@@ -387,9 +394,9 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 
 	/* if something wrong - debug it */
 	if (invariant) {
-		fprintf(stderr,"KeySym %lu (wanted in level %i) as keycode %i in group %i found incorrect invariant=%u",ks,level,keycode+minKeycode,group,invariant);
+		fprintf(stderr,"KeySym %lu (wanted in level %i) as keycode %i in group %i found incorrect invariant=%u",ks,level,assignedKeycode,group,invariant);
 		for(level=0; level<16; level++) {
-			if (ks==XkbKeycodeToKeysym(dpy,keycode+minKeycode,group,level))
+			if (ks==XkbKeycodeToKeysym(dpy,assignedKeycode,group,level))
 				fprintf(stderr," found in level %i",level);
 		}
 		fprintf(stderr,"\n");
@@ -399,7 +406,7 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 	{
 	case 0:	// Unshifted case
 
-		table[0].keycode = (assignedKeycode + minKeycode); 	// Store the keycode
+		table[0].keycode = (assignedKeycode); 	// Store the keycode
 		table[0].direction = keyDownUp; 	// Store the key direction (in this case, Down and Up)
 		table[1].keycode = 0;	 		// Store the sequence terminator
 
@@ -411,7 +418,7 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 		table[0].keycode = modifierTable[ShiftMapIndex];// Store the keycode for the shift key
 		table[0].direction = keyDown;	 	// Store the key direction (in this case, just Down)
 
-		table[1].keycode = (assignedKeycode + minKeycode); 	// Store the keycode
+		table[1].keycode = (assignedKeycode); 	// Store the keycode
 		table[1].direction = keyDownUp; 	// Store the key direction (in this case, Down and Up)
 
 		table[2].keycode = modifierTable[ShiftMapIndex];// Store the keycode for the shift key
@@ -428,7 +435,7 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 		table[0].keycode = ModeModifier;	// Store the keycode for the Mode switch code
 		table[0].direction = keyDown; 		// Store the key direction (in this case, Down)
 
-		table[1].keycode = (assignedKeycode + minKeycode); 	// Store the keycode
+		table[1].keycode = (assignedKeycode); 	// Store the keycode
 		table[1].direction = keyDownUp; 	// Store the key direction (in this case, Down and Up)
 
 		table[2].keycode = ModeModifier;	// Store the keycode for the Mode switch code
@@ -452,7 +459,7 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 		table[1].keycode = ModeModifier;	// Store the keycode for the Mode switch code
 		table[1].direction = keyDown; 		// Store the key direction (in this case, Down)
 
-		table[2].keycode = (assignedKeycode + minKeycode); 	// Store the keycode
+		table[2].keycode = (assignedKeycode); 	// Store the keycode
 		table[2].direction = keyDownUp; 	// Store the key direction (in this case, Down and Up)
 
 		table[3].keycode = ModeModifier;	// Store the keycode for the Mode switch code
@@ -484,7 +491,7 @@ int lookupKeyCodeSequence(KeySym ks, struct keycodeEntry *table, char **labelBuf
 	fakeEvent.xkey.x = fakeEvent.xkey.y = 0;
 	fakeEvent.xkey.x_root = fakeEvent.xkey.y_root = 0;
 	fakeEvent.xkey.state = modifiers;
-	fakeEvent.xkey.keycode = (assignedKeycode + minKeycode);
+	fakeEvent.xkey.keycode = (assignedKeycode);
 
 	if (labelBuffer)
 	{
@@ -702,5 +709,5 @@ void ksMap(KeySym ks, KeySym *ks1, char **txt1, unsigned int mods)
 	XkbTranslateKeySym(dpy,&k,mods,txt,1,&n);
 	if (k == ks) return;
 	*ks1 = k;
-	ksText(k, txt1);
+	ksText_(k, txt1);
 }

@@ -244,11 +244,11 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		case keydef:
 		  ksMap(DEFAULT_KS(tmp_but), &SHIFT_KS(tmp_but), &SHIFT_TXT(tmp_but), STATE(KBIT_SHIFT));
 		  ksMap(DEFAULT_KS(tmp_but), &MOD_KS(tmp_but), &MOD_TXT(tmp_but), STATE(KBIT_MOD));
-		  ksMap(SHIFT_KS(tmp_but), &SHIFT_MOD_KS(tmp_but), &SHIFT_MOD_TXT(tmp_but), STATE(KBIT_SHIFT));
-		  ksText(DEFAULT_KS(tmp_but), &DEFAULT_TXT(tmp_but));
-		  ksText(SHIFT_KS(tmp_but), &SHIFT_TXT(tmp_but));
-		  ksText(MOD_KS(tmp_but), &MOD_TXT(tmp_but));
-		  ksText(SHIFT_MOD_KS(tmp_but), &SHIFT_MOD_TXT(tmp_but));
+		  ksMap(SHIFT_KS(tmp_but), &SHIFT_MOD_KS(tmp_but), &SHIFT_MOD_TXT(tmp_but), STATE(KBIT_SHIFT)|STATE(KBIT_MOD));
+		  ksText_(DEFAULT_KS(tmp_but), &DEFAULT_TXT(tmp_but));
+		  ksText_(SHIFT_KS(tmp_but), &SHIFT_TXT(tmp_but));
+		  ksText_(MOD_KS(tmp_but), &MOD_TXT(tmp_but));
+		  ksText_(SHIFT_MOD_KS(tmp_but), &SHIFT_MOD_TXT(tmp_but));
 		  button_calc_c_width(tmp_but);
 		  button_calc_c_height(tmp_but);
 		  break;
@@ -975,11 +975,7 @@ void kb_send_keypress(button *b)
   
   if (ks == 0) return; /* no keysym defined, abort */
 
-  if (Xkb_sync) {
-	l &= 1;
-	l2 = !((b->kb->state & STATE(KBIT_SHIFT))==0);
-  }
-  if (lookupKeyCodeSequence(ks, vk_keycodes, NULL, b->kb->group, l, l2))
+  if (lookupKeyCodeSequence(ks, vk_keycodes, NULL, b->kb->group, l, !((b->kb->state & STATE(KBIT_SHIFT))==0)))
      sendKeySequence(vk_keycodes,
 	  ( (b->kb->state & STATE(KBIT_CTRL))  || (slide_flag == STATE(KBIT_CTRL)) ),
 	  ( (b->kb->state & STATE(KBIT_META))  || (slide_flag == STATE(KBIT_META)) ),
@@ -1028,7 +1024,7 @@ button * kb_find_button(keyboard *kb, int x, int y)
 		      )
 		    {
 			/* if pressed invariant/border - check buttons are identical */
-			if (but && memcmp(&but,&tmp_but,(char*)&but->options - (char*)&but->ks) + sizeof(but->options)
+			if (but && memcmp(but,tmp_but,(char*)&but->options - (char*)&but->ks) + sizeof(but->options)
 				)
 				return NULL;
 		        but = tmp_but;

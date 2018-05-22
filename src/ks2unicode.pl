@@ -54,10 +54,12 @@ print "};
 #define ks2u_size $N
 ";
 
-print 'void ksText(KeySym ks, char **txt)
-{
-	char s[4];
-	int n;
+print '
+
+char ksText_buf[10];
+static int n;
+
+void ksText(KeySym ks, char **txt){
 	unsigned int wc;
 	struct ks2unicode *k2u;
 	int p1 = 0;
@@ -96,35 +98,44 @@ next:
 wide:
 	if (wc < 0x000080) {
 		n=1;
-		s[0]=(char)wc;
+		ksText_buf[0]=(char)wc;
 	} else if (wc < 0x000800) {
 		n=2;
-		s[1] = (char) (0x80 | (wc & 0x3F)); wc >>= 6;
-		s[0] = (char) (0xC0 | wc);
+		ksText_buf[1] = (char) (0x80 | (wc & 0x3F)); wc >>= 6;
+		ksText_buf[0] = (char) (0xC0 | wc);
 	} else if (wc < 0x010000) {
 		n=3;
-		s[2] = (char) (0x80 | (wc & 0x3F)); wc >>= 6;
-		s[1] = (char) (0x80 | (wc & 0x3F)); wc >>= 6;
-		s[0] = (char) (0xE0 | wc);
+		ksText_buf[2] = (char) (0x80 | (wc & 0x3F)); wc >>= 6;
+		ksText_buf[1] = (char) (0x80 | (wc & 0x3F)); wc >>= 6;
+		ksText_buf[0] = (char) (0xE0 | wc);
 	} else if (wc < 0x200000) {
 		n=4;
-		s[3] = (char) (0x80 | (wc & 0x3F)); wc >>= 6;
-		s[2] = (char) (0x80 | (wc & 0x3F)); wc >>= 6;
-		s[1] = (char) (0x80 | (wc & 0x3F)); wc >>= 6;
-		s[0] = (char) (0xF0 | wc);
+		ksText_buf[3] = (char) (0x80 | (wc & 0x3F)); wc >>= 6;
+		ksText_buf[2] = (char) (0x80 | (wc & 0x3F)); wc >>= 6;
+		ksText_buf[1] = (char) (0x80 | (wc & 0x3F)); wc >>= 6;
+		ksText_buf[0] = (char) (0xF0 | wc);
 	} else {
 		*txt=XKeysymToString(ks);
-		if (!*txt) sprintf(*txt=malloc(7),"U+%04X",wc);
+		if (!*txt) n = sprintf(*txt = ksText_buf,"U+%04X",wc);
 		return;
 	}
-	s[n]=0;
-	*txt = malloc(n);
-	memcpy(*txt,s,n);
-	(*txt)[n] = 0;
+	ksText_buf[n]=0;
+	*txt = ksText_buf;
 	return;
 notfound:
 	*txt=XKeysymToString(ks);
-	if (!*txt) sprintf(*txt=malloc(10),"?%lx",ks);
+	if (!*txt) n = sprintf(*txt = ksText_buf,"?%lx",ks);
 	return;
 }
+
+int ksText_(KeySym ks, char **txt){
+	ksText(ks,txt);
+	if (*txt == ksText_buf) {
+		n++;
+		memcpy(*txt = malloc(n), ksText_buf, n);
+		return 1;
+	}
+	return 0;
+}
+
 ';

@@ -36,9 +36,9 @@
 
 #define STATE(b)	(1U<<b)
 #define BIT_MV(m,b,b2)	(((m) & STATE(b))>>(b-b2))
-inline unsigned int LEVEL(m,l){
-//	return ((BIT_MV(m,KBIT_SHIFT,0)^BIT_MV(l,KBIT_CAPS,0))|(BIT_MV(m,KBIT_MOD,1)^BIT_MV(m,KBIT_ALT,1)));
-	return ((BIT_MV(m,KBIT_SHIFT,0)^BIT_MV(m,KBIT_CAPS,0))|BIT_MV(m,KBIT_MOD,1));
+inline unsigned int LEVEL(unsigned int m, unsigned int l){
+	return ((BIT_MV(m,KBIT_SHIFT,0)^BIT_MV(l,KBIT_CAPS,0))|(BIT_MV(m,KBIT_MOD,1)^BIT_MV(m,KBIT_ALT,1)));
+//	return ((BIT_MV(m,KBIT_SHIFT,0)^BIT_MV(m,KBIT_CAPS,0))|BIT_MV(m,KBIT_MOD,1));
 }
 #define KBLEVEL(kb)	LEVEL(kb->state,kb->state_locked)
 

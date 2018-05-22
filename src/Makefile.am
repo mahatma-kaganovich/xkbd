@@ -1,7 +1,7 @@
 DEFAULT_CONFIG=$(pkgdatadir)/all.qwerty.xkbd
 
 LDADD = @X_LIBS@ -lX11 -lXtst $(XPM_LIBS) $(XFT_LIBS)
-AM_CFLAGS = -O2 -DDEFAULTCONFIG=\"$(DEFAULT_CONFIG)\"
+AM_CFLAGS = -O2 -DDEFAULTCONFIG=\"$(DEFAULT_CONFIG)\" -Dprefix=\"${prefix}\"
 
 bin_PROGRAMS = xkbd
 xkbd_SOURCES = xkbd.c libXkbd.c box.c button.c kb.c libvirtkeys.c ks2unicode.c \
