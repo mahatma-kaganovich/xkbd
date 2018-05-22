@@ -7,10 +7,10 @@ CLEANFILES =  $(kbdconfig_DATA) $(bin_PROGRAMS)
 EXTRA_DIST = *.in
 
 *.????: *.????.in
-	sh ./mk.sh $(pkgdatadir) *.????.in
+	sh ./mk.sh "$(pkgdatadir)" "$(CPPFLAGS)" *.????.in
 
 xkbd-config$(EXEEXT): xkbd-config.in
-	sh ./mk.sh $(pkgdatadir) xkbd-config.in
+	sh ./mk.sh "$(pkgdatadir)" "$(CPPFLAGS)" xkbd-config.in
 
 xkbd-onoff$(EXEEXT): xkbd-onoff.in
-	sh ./mk.sh $(pkgdatadir) xkbd-onoff.in
+	sh ./mk.sh "$(pkgdatadir)" "$(CPPFLAGS)" xkbd-onoff.in

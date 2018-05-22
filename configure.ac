@@ -42,9 +42,9 @@ fi
 
 AC_ARG_ENABLE(minimal,
   [  --enable-minimal         minimal build (disable: X sync mode, keycodes, slides), [default=no]],
-  enable_xpm=$enableval, enable_minimal=yes)
+  enable_xpm=$enableval, enable_minimal=no)
 
-if test x$enable_minimal != xno; then
+if test x$enable_minimal = xyes; then
       CPPFLAGS="$CPPFLAGS -DMINIMAL"
 fi
 

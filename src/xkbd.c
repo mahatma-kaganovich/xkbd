@@ -229,11 +229,11 @@ int main(int argc, char **argv)
 	    case 'D' :
 	       dock = atoi(argv[++i]);
 	       break;
-#ifndef MINIMAL
 	    case 'X' :
+#ifndef MINIMAL
 	       Xkb_sync = 1;
-	       break;
 #endif
+	       break;
 	    case 'e' :
 	       exec_cmd = &argv[++i];
 	       goto stop_argv;

@@ -2,6 +2,12 @@
 # generate xkbd config for "us,..." multi-layout
 use charnames qw(:full :short :loose);
 
+$minimal=@minimal@;
+
+# 1 - reduce translated config size
+# 0 - work with --enable-minimal (without keysymdef.h compiled-in)
+$ks_bin=!$minimal;
+
 sub key{
 	my ($s,$n)=@_;
 	my %s;
@@ -52,16 +58,16 @@ sub key{
 		$y=$s{$y};
 		if(exists($s{'default'})){
 			if(exists($s{'default_ks'}) && $y eq $s{'default_ks'}){
-				$s{$x}=$s{'default'};
+#				$s{$x}=$s{'default'};
 				next;
 			}
 		}
 		$y=~s/^KP_//;
 		if(length($y)>1){
 		    if(exists($u{$y})){
+			$ks_bin && next;
 			$y=$u{$y};
 		    }else{
-			my $y0=$u;
 			my ($lc,$y1);
 			if($y=~s/^U([0-9A-F]{4})$/chr(hex($1))/e){
 			}elsif(($lc=lc($y) eq $y) && ($y1=charnames::vianame($y))){
@@ -74,9 +80,12 @@ sub key{
 				$u{$y}=$y=chr($y1);
 #			}elsif($lc && (($y1=charnames::vianame("$y accent")) || ($y1=charnames::vianame($y)))){
 #				$u{$y}=$y=chr($y1);
+			}elsif($ks_bin){
+				next;
 			}
-			$u{$y0}=$y;
 		    }
+		}elsif($ks_bin){
+			next;
 		}
 		$s{$x}=$y if($y=~/\S/);
 	}
