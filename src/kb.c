@@ -923,6 +923,8 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 		    else must do other selections.
 		*/
 		if (but[t]) {
+		    button_render(but[t], BUTTON_RELEASED);
+		    button_paint(but[t]);
 		    if (b) { // button -> button
 			int ns = nsib[t], ns1 = b->nsiblings;
 			button **s1 = (button **)b->siblings;
@@ -942,18 +944,17 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 			}
 			nsib[t]=n;
 			if (n==0) { // no siblings, drop touch
-				button_render(but[t], BUTTON_RELEASED);
-				button_paint(but[t]);
 				goto drop;
 			}else if (n==1) { // 1 intersection: found button
 				b=sib[t][0];
 			// unknown, need to calculate or touch more
 			}else if (type==2){ // multiple choice at the END. now - drop
-				b=NULL;
+				goto drop;
 			}
-			if (b!=but[t]) {
-				button_render(but[t], BUTTON_RELEASED);
-				button_paint(but[t]);
+			if (b) {
+				but[t]=b;
+				button_render(b, BUTTON_PRESSED);
+				button_paint(b);
 			}
 		    } else goto drop; // button -> NULL
 		} else if (b) { // NULL -> button: new siblings base list
@@ -967,19 +968,18 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 		}
 #endif
 	}
-	if (!b) {
-		if (type == 2) goto drop;
-		return NULL;
-	}
 
 	if (type!=2){ // motion/to be continued
+	    if (b) {
 		times[t] = time;
 		X[t] = x;
 		Y[t] = y;
-		return b;
+	    }
+	    return b;
 	}
 
 	// the END/release
+	if (!b) goto drop;
 #ifdef SLIDES
 	kb_set_slide(b, x, y );
 #endif
