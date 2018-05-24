@@ -803,7 +803,7 @@ void kb_size(keyboard *kb)
       listp = listp->next;
 
     }
-#ifdef MULTITOUCH
+#ifdef SIBLINGS
     kb_update(kb);
 #endif
 }
