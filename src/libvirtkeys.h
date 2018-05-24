@@ -8,6 +8,7 @@
  * design, but are also intended to support handwriting input windows
  * that have very similar needs.
  *
+ * Changes (C) 2017+ Denis Kaganovich
  */
 
 #define SHOWSEQUENCES

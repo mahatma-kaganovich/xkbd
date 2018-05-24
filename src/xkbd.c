@@ -2,6 +2,7 @@
    xkbd - xlib based onscreen keyboard.
 
    Copyright (C) 2001 Matthew Allum
+   Changes (C) 2017+ Denis Kaganovich
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by

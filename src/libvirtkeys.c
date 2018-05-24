@@ -4,6 +4,7 @@
  *
  * See the files COPYRIGHT and LICENSE for distribution information.
  *
+ * Changes (C) 2017+ Denis Kaganovich
  */
 
 /*****************************************************************************
