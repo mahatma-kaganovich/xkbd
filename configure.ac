@@ -5,28 +5,28 @@ AM_INIT_AUTOMAKE()
 AM_CONFIG_HEADER(config.h)
 AC_CONFIG_MACRO_DIRS([m4])
 
+_set_pkg(){
+	CPPFLAGS="$CPPFLAGS $2"
+	if test x$PKG_CONFIG != xno && $PKG_CONFIG --exists $1; then
+		X_LIBS="$X_LIBS $(pkg-config --libs $1)"
+		CFLAGS="$CFLAGS $(pkg-config --cflags $1)"
+	else
+		if test x$PKG_CONFIG != xno; then
+			AC_MSG_WARN([*** Could not find pkg-config entry for $1 in your path, build may fail***])
+		fi
+		X_LIBS="$X_LIBS $3"
+	fi
+}
+
+AC_PATH_PROG(PKG_CONFIG, pkg-config, no)
+
 dnl check for xft support
 AC_ARG_ENABLE(xft,
   [  --disable-xft         disable xft (anti-aliased) support, [default=no]],
   enable_xft=$enableval, enable_xft=yes)
 
 if test x$enable_xft != xno; then
-  AC_PATH_PROG(PKG_CONFIG, pkg-config, no)	
-  if test x$PKG_CONFIG != xno && $PKG_CONFIG --exists xft; then
-      CFLAGS="$CFLAGS -DUSE_XFT `pkg-config --cflags xft`"
-      X_LIBS="$X_LIBS $(pkg-config --libs xft)"
-  else
-    AC_MSG_WARN([*** Could not find pkg-config entry for xft in your path, build may fail***])
-    AC_PATH_PROG(XFT_CONFIG, xft-config, no)
-      if test x$XFT_CONFIG = xno; then
-        AC_MSG_WARN([***Could not find xft-config, build may fail. You may want --disable-xft ***])
-        CFLAGS="$CFLAGS -DUSE_XFT"
-        X_LIBS="$X_LIBS -lXft"
-      else
-        CFLAGS="$CFLAGS -DUSE_XFT `xft-config --cflags`"
-        X_LIBS="$X_LIBS $(xft-config --libs)"
-     fi
-  fi
+	_set_pkg xft -DUSE_XFT -lXft
 fi
 
 AC_ARG_ENABLE(xpm,
@@ -34,22 +34,20 @@ AC_ARG_ENABLE(xpm,
   enable_xpm=$enableval, enable_xpm=yes)
 
 if test x$enable_xpm != xno; then
-      CFLAGS="$CFLAGS -DUSE_XPM"
-      X_LIBS="$X_LIBS -lXpm"
+	_set_pkg xpm -DUSE_XPM -lXpm
 fi
 
 AC_ARG_ENABLE(xi,
   [  --disable-xi         disable XInput2, [default=no]],
   enable_xi=$enableval, enable_xi=yes)
 
-if test x$enable_xpm != xi; then
-      CFLAGS="$CFLAGS -DUSE_XI"
-	X_LIBS="$X_LIBS -lXi"
+if test x$enable_xi != xno; then
+	_set_pkg xi -DUSE_XI -lXi
 fi
 
 AC_ARG_ENABLE(minimal,
   [  --enable-minimal         minimal build (disable: X sync mode, keycodes, slides), [default=no]],
-  enable_xpm=$enableval, enable_minimal=no)
+  enable_minimal=$enableval, enable_minimal=no)
 
 if test x$enable_minimal = xyes; then
       CPPFLAGS="$CPPFLAGS -DMINIMAL"
@@ -83,9 +81,6 @@ AC_C_CONST
 AC_FUNC_MALLOC
 AC_TYPE_SIGNAL
 AC_CHECK_FUNCS([strchr strdup])
-
-AC_SUBST(XFT_LIBS)
-AC_SUBST(XPM_LIBS)
 
 AC_OUTPUT(Makefile 
           src/Makefile
