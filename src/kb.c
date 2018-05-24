@@ -947,15 +947,13 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 				goto drop;
 			}else if (n==1) { // 1 intersection: found button
 				b=sib[t][0];
+				button_render(b, BUTTON_PRESSED);
+				button_paint(b);
 			// unknown, need to calculate or touch more
 			}else if (type==2){ // multiple choice at the END. now - drop
 				goto drop;
-			}
-			if (b) {
-				but[t]=b;
-				button_render(b, BUTTON_PRESSED);
-				button_paint(b);
-			}
+			}else{
+			but[t]=b;
 		    } else goto drop; // button -> NULL
 		} else if (b) { // NULL -> button: new siblings base list
 			nsib[t]=-1;
