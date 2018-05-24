@@ -952,7 +952,7 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 			// unknown, need to calculate or touch more
 			}else if (type==2){ // multiple choice at the END. now - drop
 				goto drop;
-			}else{
+			}
 			but[t]=b;
 		    } else goto drop; // button -> NULL
 		} else if (b) { // NULL -> button: new siblings base list
