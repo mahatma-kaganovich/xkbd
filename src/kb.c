@@ -112,6 +112,62 @@ void button_update(button *b) {
 	}
 }
 
+#ifdef SIBLINGS
+void kb_find_button_siblings(button *b) {
+	button *but = NULL, *tmp_but;
+	box *vbox = ((box*)b->parent)->parent, *bx;
+	list *listp, *ip;
+	int bord = 1;
+	int x1 = b->x + vbox->x;
+	int y1 = b->y + vbox->y;
+	int x2 = x1 + b->act_width;
+	int y2 = y1 + b->act_height;
+	int i;
+	int n=0;
+	x1 -= bord;
+	y1 -= bord;
+	x2 += bord;
+	y2 += bord;
+	button *buf[MAX_SIBLINGS];
+
+	for (listp = vbox->root_kid; listp; listp = listp->next) {
+		bx = (box *)listp->data;
+		i=bx->y;
+		if (y2<i) break;
+		if (y1>i+bx->act_height) continue;
+		for(ip=bx->root_kid; ip; ip= ip->next) {
+			tmp_but = (button *)ip->data;
+			i = tmp_but->x+bx->x;
+			if (x2<i) break;
+			if (x1>i+tmp_but->act_width) continue;
+			if (n>=MAX_SIBLINGS) {
+				fprintf(stderr,"too many siblings button in one point\n");
+				break;
+			}
+			buf[n++] = tmp_but;
+		}
+	}
+	if (b->siblings) free(b->siblings);
+	b->nsiblings = n;
+	n *= sizeof(button*);
+	memcpy(b->siblings = malloc(n),buf,n);
+}
+
+void kb_update(keyboard *kb){
+	list *listp, *ip;
+	button *b;
+	int i;
+
+	for (listp = kb->vbox->root_kid; listp; listp = listp->next) {
+		for(ip=((box *)listp->data)->root_kid; ip; ip= ip->next) {
+			b = (button *)ip->data;
+			if (b->siblings) return;
+			kb_find_button_siblings(b);
+		}
+	}
+}
+#endif
+
 keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		 int kb_width, int kb_height, char *conf_file,
 		 char *font_name, int font_is_xft)
@@ -587,7 +643,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 
   for(j=0;j<kb->total_layouts;j++)
     {
-      kb->vbox = kb->kbd_layouts[kb->group = j];
+      kb->vbox = kb->kbd_layouts[j];
       listp = kb->vbox->root_kid;
 
       while (listp != NULL)
@@ -747,7 +803,7 @@ void kb_size(keyboard *kb)
       listp = listp->next;
 
     }
-
+    kb_update(kb);
 }
 
 void
@@ -792,102 +848,206 @@ void kb_paint(keyboard *kb)
 	    kb->vbox->x, kb->vbox->y);
 }
 
-button *kb_handle_events(keyboard *kb, XEvent an_event)
+button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Time time)
 {
-  static button *active_but;
+	unsigned int new_state;
+	button *b;
+	int i,j;
+	Time T;
 
-  switch (an_event.type)
-    {
-      case ButtonPress:
-	active_but = kb_find_button(kb,
-				    an_event.xmotion.x,
-				    an_event.xmotion.y );
-	if (active_but != NULL)
-	  {
-	    button_render(active_but, BUTTON_PRESSED);
-	    button_paint(active_but);
-	    /* process state here
-	       send keypress via kbd state
-	    */
-	  }
-	break;
-      case ButtonRelease:
-	if (active_but != NULL)
-	  {
-	    int new_state;
-
-#ifdef SLIDES
-	    kb_set_slide(active_but, an_event.xmotion.x,
-			 an_event.xmotion.y );
+	static uint32_t touchid[MAX_TOUCH] = {};
+	static button *but[MAX_TOUCH] = {};
+	static Time times[MAX_TOUCH] = {};
+	static int X[MAX_TOUCH];
+	static int Y[MAX_TOUCH];
+#ifdef SIBLINGS
+	static button *sib[MAX_TOUCH][MAX_SIBLINGS];
+	static short nsib[MAX_TOUCH];
 #endif
-	    new_state = kb_process_keypress(active_but);
 
-	    if (new_state != active_but->kb->state ||
-		new_state & active_but->modifier)
-	      {
-		/* if the states changed repaint the entire kbd
-		   as its chars have probably changed */
-
-		active_but->kb->state = new_state;
-		kb_render(active_but->kb);
-		kb_paint(active_but->kb);
-	      } else {
-		button_render(active_but, BUTTON_RELEASED);
-		button_paint(active_but);
-	      }
-	    /* check for slide */
-
-#ifdef SLIDES
-	    active_but->slide = 0;
+#ifdef MULTITOUCH
+	int t=-1;
+	// find touch
+	for (i=0; i<MAX_TOUCH; i++) {
+		if (touchid[i] == ptr) {
+			// duplicate (I got BEGIN!)
+			if (time == (T=times[i]) && x==X[i] && y==Y[i]) return but[i];
+			t=i;
+			break;
+		}
+	}
+#else
+	const int t=0;
 #endif
-	    if (active_but->layout_switch > -1)
-	      {
+	if (!type) { // BEGIN/press
+		b = kb_find_button(kb,x,y);
+		if (!b) return NULL;
+#ifdef MULTITOUCH
+		// [kick oldest] touch, start to track
+		if (T=times[t=0]) for (i=1; i<MAX_TOUCH; i++) if (T>times[i] && !(T=times[t=i])) break;
+#endif
+		if (but[t]) {
+			button_render(but[t], BUTTON_RELEASED);
+			button_paint(but[t]);
+		}
+		but[t] = b;
+		touchid[t] = ptr;
+		times[t] = time;
+		X[t] = x;
+		Y[t] = y;
+#ifdef SIBLINGS
+		nsib[t] = -1;
+#endif
+		button_render(b, BUTTON_PRESSED);
+		button_paint(b);
+		return b;
+	}
+
+#ifdef MULTITOUCH
+	if (t<0) {
+//		fprintf(stderr,"untracked touch on state %i\n",type);
+		return NULL;
+	}
+#endif
+
+	b = kb_find_button(kb,x,y);
+	// simple logic: no button change in one touch
+	if (b != but[t]) {
+#ifdef SIBLINGS
+		/*
+		    intersection of sets of sibling buttons
+		    previous button or intersection with new button.
+		    if set size is 1 - this is result of touch.
+		    else must do other selections.
+		*/
+		if (but[t]) {
+		    if (b) { // button -> button
+			int ns = nsib[t], ns1 = b->nsiblings;
+			button **s1 = (button **)b->siblings;
+			int n=0;
+			if (ns<0) {
+				button **s = (button **)but[t]->siblings;
+				nsib[t] = ns = but[t]->nsiblings;
+				for(i=0; i<ns; i++)
+				    for(j=0; j<ns1; j++)
+					if (s[i]==s1[j])
+					    sib[t][n++]=s1[j];
+			} else {
+				for(i=0; i<ns; i++)
+				    for(j=0; j<ns1; j++)
+					if (sib[t][i]==s1[j])
+					    sib[t][n++]=s1[j];
+			}
+			nsib[t]=n;
+			if (n==0) { // no siblings, drop touch
+				button_render(but[t], BUTTON_RELEASED);
+				button_paint(but[t]);
+				but[t] = b = NULL;
+				times[t]=0;
+				touchid[t]=0;
+			}else if (n==1) { // 1 intersection: found button
+				b=sib[t][0];
+			}else{ // unknown, need to calculate or touch more
+				b=NULL;
+			}
+			if (b!=but[t]) {
+				button_render(but[t], BUTTON_RELEASED);
+				button_paint(but[t]);
+			}
+		    } else { // button -> NULL
+			but[t]=b=NULL;
+			times[t]=0;
+			touchid[t]=0;
+		    }
+		} else if (b) { // NULL -> button: new siblings base list
+			nsib[t]=-1;
+		}
+#else
+		if (but[t]) {
+			button_render(but[t], BUTTON_RELEASED);
+			button_paint(but[t]);
+			but[t]=b=NULL;
+			times[t]=0;
+			touchid[t]=0;
+		}
+#endif
+	}
+	if (!b) return NULL;
+
+	if (type!=2){ // motion/to be continued
+		times[t] = time;
+		X[t] = x;
+		Y[t] = y;
+		return b;
+	}
+
+	// the END/release
+#ifdef SLIDES
+	kb_set_slide(b, x, y );
+#endif
+	new_state = kb_process_keypress(b,0);
+
+//	if (new_state != b->kb->state || new_state & b->modifier) {
+	if (new_state != b->kb->state) {
+#ifndef MINIMAL
+		if (!Xkb_sync)
+#endif
+		{
+			b->kb->state = new_state;
+			kb_render(b->kb);
+			kb_paint(b->kb);
+		}
+	} else {
+		button_render(b, BUTTON_RELEASED);
+		button_paint(b);
+	}
+#ifdef SLIDES
+	b->slide = 0;
+#endif
+	if (b->layout_switch > -1) {
 		DBG("switching layout\n");
 #ifndef MINIMAL
 		if (Xkb_sync)
-			XkbLockGroup(active_but->kb->display, XkbUseCoreKbd, active_but->layout_switch);
+			XkbLockGroup(b->kb->display, XkbUseCoreKbd, b->layout_switch);
 		else
 #endif
-			kb_switch_layout(active_but->kb, active_but->layout_switch);
-	      }
-
-	    active_but = NULL;
-	  }
-	break;
-    }
-
-  return active_but;
+			kb_switch_layout(b->kb, b->layout_switch);
+	}
+	touchid[t]=0;
+	times[t] = 0;
+	but[t] = b = NULL;
+	return NULL;
 }
 
 #ifdef SLIDES
-void kb_set_slide(button *active_but, int x, int y)
+void kb_set_slide(button *b, int x, int y)
 {
-  if (x < (button_get_abs_x(active_but)-active_but->kb->slide_margin))
-    { active_but->slide = SLIDE_LEFT; return; }
+  if (x < (button_get_abs_x(b)-b->kb->slide_margin))
+    { b->slide = SLIDE_LEFT; return; }
 
-  if (x > ( button_get_abs_x(active_but)
-	    + active_but->act_width + -active_but->kb->slide_margin ))
-    { active_but->slide = SLIDE_RIGHT; return; }
+  if (x > ( button_get_abs_x(b)
+	    + b->act_width + -b->kb->slide_margin ))
+    { b->slide = SLIDE_RIGHT; return; }
 
-  if (y < (button_get_abs_y(active_but)-active_but->kb->slide_margin))
-    { active_but->slide = SLIDE_UP; return; }
+  if (y < (button_get_abs_y(b)-b->kb->slide_margin))
+    { b->slide = SLIDE_UP; return; }
 
-  if (y > ( button_get_abs_y(active_but) + active_but->act_height )
-      + -active_but->kb->slide_margin )
-    { active_but->slide = SLIDE_DOWN; return; }
+  if (y > ( button_get_abs_y(b) + b->act_height )
+      + -b->kb->slide_margin )
+    { b->slide = SLIDE_DOWN; return; }
 
 
 }
 #endif
 
-Bool kb_do_repeat(keyboard *kb, button *active_but)
+Bool kb_do_repeat(keyboard *kb, button *b)
 {
   static int timer;
   static Bool delay;
 
   if (!kb->key_repeat)
     return False;
-  if (active_but == NULL)
+  if (b == NULL)
     {
       timer = 0;
       delay = False;
@@ -904,22 +1064,23 @@ Bool kb_do_repeat(keyboard *kb, button *active_but)
   if ((delay && timer == kb->key_repeat1)
       || (!delay && timer == kb->key_delay_repeat1))
     {
-      kb_process_keypress(active_but);
+      kb_process_keypress(b, 1);
       timer = 0;
       delay = True;
     }
     return True;
 }
 
-int kb_process_keypress(button *active_but)
+unsigned int kb_process_keypress(button *b, int repeat)
 {
-    unsigned int state = active_but->kb->state;
-    unsigned int lock = active_but->kb->state_locked;
-    const unsigned int mod = active_but->modifier;
+    unsigned int state = b->kb->state;
+    unsigned int lock = b->kb->state_locked;
+    const unsigned int mod = b->modifier;
 
     DBG("got release state %i %i %i %i \n", new_state, STATE(KBIT_SHIFT), STATE(KBIT_MOD), STATE(KBIT_CTRL) );
 
-    if (mod & STATE(KBIT_CAPS)) {
+    if (repeat) {
+    } else if (mod & STATE(KBIT_CAPS)) {
 	state ^= STATE(KBIT_CAPS);
 	DBG("got caps key - %i \n", state);
     } else if (mod) {
@@ -947,17 +1108,17 @@ int kb_process_keypress(button *active_but)
 	   keep them virtual & change whole KNOWN mask only */
 #ifndef MINIMAL
 	if (Xkb_sync && (mod & KB_STATE_KNOWN)) {
-		if (state != active_but->kb->state)
-			XkbLatchModifiers(active_but->kb->display,XkbUseCoreKbd,KB_STATE_KNOWN,state & KB_STATE_KNOWN);
-		if (lock != active_but->kb->state_locked)
-			XkbLockModifiers(active_but->kb->display,XkbUseCoreKbd,KB_STATE_KNOWN,lock & KB_STATE_KNOWN);
+		if (state != b->kb->state)
+			XkbLatchModifiers(b->kb->display,XkbUseCoreKbd,KB_STATE_KNOWN,state & KB_STATE_KNOWN);
+		if (lock != b->kb->state_locked)
+			XkbLockModifiers(b->kb->display,XkbUseCoreKbd,KB_STATE_KNOWN,lock & KB_STATE_KNOWN);
 	}
 #endif
-	active_but->kb->state_locked = lock;
+	b->kb->state_locked = lock;
     }
 
-    kb_send_keypress(active_but);
-    DBG("%s clicked \n", DEFAULT_TXT(active_but));
+    kb_send_keypress(b);
+    DBG("%s clicked \n", DEFAULT_TXT(b));
 
     /* real precise state for Xkb_sync will be reached by event,
        so try to be just visually pretty sensitive */
@@ -1025,61 +1186,39 @@ void kb_send_keypress(button *b)
 }
 
 
-
 button * kb_find_button(keyboard *kb, int x, int y)
 {
-  list *listp;
-  box *tmp_box = NULL;
-  int offset_x, offset_y;
-  button *but = NULL;
+	button *but = NULL, *tmp_but;
+	box *vbox = kb->vbox, *bx;
+	list *listp, *ip;
+	int i;
 
-  offset_x = kb->vbox->x;
-  offset_y = kb->vbox->y;
+	x -= vbox->x;
+	y -= vbox->y;
 
-  /* global check required(?) only on global event hook. we dont */
-//  if (x >= offset_x &&
-//      y >= offset_y &&
-//      x <= (offset_x+kb->vbox->act_width) &&
-//      y <= (offset_y+kb->vbox->act_height) )
-//    {
-      listp = kb->vbox->root_kid;
-      while (listp != NULL)
-	{
-	  list *ip;
-
-	  button *tmp_but = NULL;
-	  tmp_box = (box *)listp->data;
-	  if (y >= (offset_y + tmp_box->y) &&
-	      y <= (offset_y + tmp_box->y + tmp_box->act_height))
-	    {
-	      ip = tmp_box->root_kid;
-	      while (ip != NULL) /* now the row is found, find the key */
-		{
-		  tmp_but = (button *)ip->data;
-		  if (x >= (tmp_but->x+offset_x+tmp_box->x) &&
-		      x <= (tmp_but->x+offset_x+tmp_box->x+tmp_but->act_width) &&
-		      y >= (tmp_but->y+offset_y+tmp_box->y) &&
-		      y <= (tmp_but->y+offset_y+tmp_box->y+tmp_but->act_height)
-		      )
-		    {
+	for (listp = vbox->root_kid; listp; listp = listp->next) {
+		bx = (box *)listp->data;
+		i = bx->y;
+		if (y < i) break;
+		if (y > i+bx->act_height) continue;
+		for(ip=bx->root_kid; ip; ip= ip->next) {
+			tmp_but = (button *)ip->data;
+			i = tmp_but->x+bx->x;
+			if (x<i) break;
+			if (x>i+tmp_but->act_width) continue;
+//			i = tmp_but->y+bx->y
+//			if (y<i) break;
+//			if (y>i+tmp_but->act_height) continue;
 			/* if pressed invariant/border - check buttons are identical */
-			if (but && memcmp(but,tmp_but,(char*)&but->options - (char*)&but->ks) + sizeof(but->options)
-				)
-				return NULL;
-		        but = tmp_but;
-		    }
-
-		  ip = ip->next;
+			if (but && memcmp(but,tmp_but,(char*)&but->options - (char*)&but->ks) + sizeof(but->options)) return NULL;
+			but = tmp_but;
 		}
-	    }
-	  listp = listp->next;
 	}
-//    }
-  if (!but)
-	fprintf(stderr, "xkbd: no button %i,%i\n",x,y);
-  return but;
-
+	if (!but) fprintf(stderr, "xkbd: no button %i,%i\n",x,y);
+	return but;
 }
+
+
 
 void kb_destroy(keyboard *kb)
 {

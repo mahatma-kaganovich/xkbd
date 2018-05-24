@@ -37,7 +37,7 @@ Xkbd* xkbd_realize(Display *display,
 void xkbd_resize(Xkbd *xkbd, int width, int height);
 void xkbd_move(Xkbd *kb, int x, int y);
 void xkbd_repaint(Xkbd *xkbd);
-void xkbd_process(Xkbd *xkbd, XEvent *an_event);
+void xkbd_process(Xkbd *xkbd, int type, int x, int y, uint32_t ptr, Time time);
 Bool xkbd_process_repeats(Xkbd *xkbd);
 int xkbd_get_width(Xkbd *xkbd);
 int xkbd_get_height(Xkbd *xkbd);

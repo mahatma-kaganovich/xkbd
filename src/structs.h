@@ -17,6 +17,7 @@
 #ifndef _STRUCT_H_
 #define _STRUCT_H_
 
+#include <stdint.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/XKBlib.h>
@@ -57,13 +58,27 @@ inline unsigned int LEVEL(unsigned int m, unsigned int l, unsigned int o){
 
 #define MAX_LAYOUTS     3
 
-#ifdef MINIMAL
-#undef SLIDES
-#undef SEQ_CACHE
-#else
-#define SLIDES
+// features
 #define SEQ_CACHE
+
+#ifndef MINIMAL
+#define SLIDES
+#define SIBLINGS
 #endif
+
+#ifdef USE_XI
+#define MULTITOUCH
+#else
+#undef MULTITOUCH
+#endif
+
+#ifndef MULTITOUCH
+#undef SIBLINGS
+#endif
+
+
+#define MAX_SIBLINGS 127
+#define MAX_TOUCH 10
 
 #ifdef SLIDES
 #define LEVELS 8
@@ -146,6 +161,10 @@ typedef struct _button
 
 #ifdef SEQ_CACHE
   void *cache[LEVELS];
+#endif
+#ifdef SIBLINGS
+  void **siblings;
+  unsigned short nsiblings;
 #endif
 
   char *txt[4];

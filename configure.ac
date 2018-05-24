@@ -3,9 +3,7 @@
 AC_INIT([xkbd], [0.8.18])
 AM_INIT_AUTOMAKE()
 AM_CONFIG_HEADER(config.h)
-
-XFT_LIBS=""
-XPM_LIBS=""
+AC_CONFIG_MACRO_DIRS([m4])
 
 dnl check for xft support
 AC_ARG_ENABLE(xft,
@@ -16,17 +14,17 @@ if test x$enable_xft != xno; then
   AC_PATH_PROG(PKG_CONFIG, pkg-config, no)	
   if test x$PKG_CONFIG != xno && $PKG_CONFIG --exists xft; then
       CFLAGS="$CFLAGS -DUSE_XFT `pkg-config --cflags xft`"
-      XFT_LIBS="`pkg-config --libs xft`"
+      X_LIBS="$X_LIBS $(pkg-config --libs xft)"
   else
     AC_MSG_WARN([*** Could not find pkg-config entry for xft in your path, build may fail***])
     AC_PATH_PROG(XFT_CONFIG, xft-config, no)
       if test x$XFT_CONFIG = xno; then
         AC_MSG_WARN([***Could not find xft-config, build may fail. You may want --disable-xft ***])
         CFLAGS="$CFLAGS -DUSE_XFT"
-        XFT_LIBS=" -lXft"
+        X_LIBS="$X_LIBS -lXft"
       else
         CFLAGS="$CFLAGS -DUSE_XFT `xft-config --cflags`"
-        XFT_LIBS="`xft-config --libs`"
+        X_LIBS="$X_LIBS $(xft-config --libs)"
      fi
   fi
 fi
@@ -37,7 +35,16 @@ AC_ARG_ENABLE(xpm,
 
 if test x$enable_xpm != xno; then
       CFLAGS="$CFLAGS -DUSE_XPM"
-      XPM_LIBS=" -lXpm"
+      X_LIBS="$X_LIBS -lXpm"
+fi
+
+AC_ARG_ENABLE(xi,
+  [  --disable-xi         disable XInput2, [default=no]],
+  enable_xi=$enableval, enable_xi=yes)
+
+if test x$enable_xpm != xi; then
+      CFLAGS="$CFLAGS -DUSE_XI"
+	X_LIBS="$X_LIBS -lXi"
 fi
 
 AC_ARG_ENABLE(minimal,

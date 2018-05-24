@@ -19,6 +19,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <signal.h>
+#include <math.h>
 
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -27,6 +28,12 @@
 #include <X11/keysym.h>
 #include <X11/XKBlib.h>
 #include <X11/extensions/shape.h>
+
+#ifdef USE_XI
+#include <X11/extensions/XInput.h>
+#include <X11/extensions/XInput2.h>
+#endif
+
 #include "../config.h"
 
 #include "libXkbd.h"
@@ -416,9 +423,13 @@ stop_argv:
 
       XSelectInput(display, win,
 		   ExposureMask |
+//#ifndef USE_XI
 		   ButtonPressMask |
 		   ButtonReleaseMask |
-		   Button1MotionMask |
+		    // may be lost "release" on libinput
+		    // probably need all motions or nothing
+//		   Button1MotionMask |
+//#endif
 		   StructureNotifyMask |
 		   VisibilityChangeMask);
 
@@ -427,14 +438,44 @@ stop_argv:
 	 fclose(stdout);
       } else {
 	 XMapWindow(display, win);
+	 XSync(display, False);
       }
       signal(SIGUSR1, handle_sig); /* for extenal mapping / unmapping */
 
+#ifdef USE_XI
+      int xiopcode, xievent, xierror;
+      int ximajor = 2, ximinor = 0;
+      if(XQueryExtension(display, "XInputExtension", &xiopcode, &xievent, &xierror) &&
+		XIQueryVersion(display, &ximajor, &ximinor) != BadRequest) {
+
+	XIEventMask mask = { .deviceid = XIAllDevices, .mask_len = XIMaskLen(XI_TouchEnd) };
+	mask.mask = (unsigned char*)calloc(3, sizeof(char));
+
+	XISetMask(mask.mask, XI_ButtonPress);
+	XISetMask(mask.mask, XI_ButtonRelease);
+
+//	XISetMask(mask.mask, XI_Motion);
+
+	XISetMask(mask.mask, XI_TouchBegin);
+	XISetMask(mask.mask, XI_TouchUpdate);
+	XISetMask(mask.mask, XI_TouchEnd);
+	XISelectEvents(display, win, &mask, 1);
+	free(mask.mask);
+      }
+
+#endif
+
+
       while (1)
       {
+	    int type = 0;
 	    XNextEvent(display, &ev);
-	    xkbd_process(kb, &ev);
 	    switch (ev.type) {
+	    case ButtonRelease: type++;
+	    case MotionNotify: type++;
+	    case ButtonPress:
+		xkbd_process(kb, type, ev.xmotion.x, ev.xmotion.y, 0, ev.xmotion.time);
+		break;
 	    case ClientMessage:
 		  if ((ev.xclient.message_type == wm_protocols[1])
 		      && (ev.xclient.data.l[0] == wm_protocols[0]))
@@ -456,8 +497,33 @@ stop_argv:
 		case Expose:
 		  xkbd_repaint(kb);
 		  break;
+#ifdef USE_XI
+		case GenericEvent: if (ev.xcookie.extension == xiopcode 
+//		    && ev.xgeneric.extension == 131
+		    && XGetEventData(display, &ev.xcookie)
+		    ) {
+#undef e
+#define e ((XIDeviceEvent*)ev.xcookie.data)
+//			switch(e->evtype) {
+			switch(ev.xcookie.evtype) {
+			    case XI_TouchEnd: type++;
+			    case XI_TouchUpdate: type++;
+			    case XI_TouchBegin:
+				xkbd_process(kb, type, round(e->event_x), round(e->event_y), e->detail, e->time);
+				break;
+			    case XI_ButtonRelease: type++;
+			    case XI_Motion: type++;
+			    case XI_ButtonPress:
+				xkbd_process(kb, type, round(e->event_x), round(e->event_y), e->detail, e->time);
+				break;
+			}
+			XFreeEventData(display, &ev.xcookie);
+		}
+		break;
+#endif
 #ifndef MINIMAL
 		default: if (ev.type == xkbEventType) {
+#undef e
 #define e ((XkbEvent)ev)
 			switch (e.any.xkb_type) {
 			    case XkbStateNotify:

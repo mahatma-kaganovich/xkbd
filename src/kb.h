@@ -26,13 +26,13 @@ void kb_size(keyboard *kb);
 void kb_render(keyboard *kb);
 void kb_paint(keyboard *kb);
 void kb_destroy(keyboard *kb);
-button *kb_handle_events(keyboard *kb, XEvent an_event);
-Bool kb_do_repeat(keyboard *kb, button *active_but);
-void kb_set_slide(button *active_but, int x, int y);
-int kb_process_keypress(button *active_but);
+button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Time time);
+Bool kb_do_repeat(keyboard *kb, button *b);
+void kb_set_slide(button *b, int x, int y);
+unsigned int kb_process_keypress(button *b, int repeat);
 button * kb_find_button(keyboard *kb, int x, int y);
 int _XColorFromStr(Display *display, XColor *col, const char *defstr);
-
+void kb_update(keyboard *kb);
 
 
 #endif
