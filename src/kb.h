@@ -32,7 +32,6 @@ void kb_set_slide(button *b, int x, int y);
 unsigned int kb_process_keypress(button *b, int repeat);
 button * kb_find_button(keyboard *kb, int x, int y);
 int _XColorFromStr(Display *display, XColor *col, const char *defstr);
-void kb_update(keyboard *kb);
 
 
 #endif
