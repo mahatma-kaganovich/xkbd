@@ -803,7 +803,9 @@ void kb_size(keyboard *kb)
       listp = listp->next;
 
     }
+#ifdef MULTITOUCH
     kb_update(kb);
+#endif
 }
 
 void
@@ -942,23 +944,18 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 			if (n==0) { // no siblings, drop touch
 				button_render(but[t], BUTTON_RELEASED);
 				button_paint(but[t]);
-				but[t] = b = NULL;
-				times[t]=0;
-				touchid[t]=0;
+				goto drop;
 			}else if (n==1) { // 1 intersection: found button
 				b=sib[t][0];
-			}else{ // unknown, need to calculate or touch more
+			// unknown, need to calculate or touch more
+			}else if (type==2){ // multiple choice at the END. now - drop
 				b=NULL;
 			}
 			if (b!=but[t]) {
 				button_render(but[t], BUTTON_RELEASED);
 				button_paint(but[t]);
 			}
-		    } else { // button -> NULL
-			but[t]=b=NULL;
-			times[t]=0;
-			touchid[t]=0;
-		    }
+		    } else goto drop; // button -> NULL
 		} else if (b) { // NULL -> button: new siblings base list
 			nsib[t]=-1;
 		}
@@ -966,13 +963,14 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 		if (but[t]) {
 			button_render(but[t], BUTTON_RELEASED);
 			button_paint(but[t]);
-			but[t]=b=NULL;
-			times[t]=0;
-			touchid[t]=0;
+			goto drop;
 		}
 #endif
 	}
-	if (!b) return NULL;
+	if (!b) {
+		if (type == 2) goto drop;
+		return NULL;
+	}
 
 	if (type!=2){ // motion/to be continued
 		times[t] = time;
@@ -1013,9 +1011,10 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 #endif
 			kb_switch_layout(b->kb, b->layout_switch);
 	}
-	touchid[t]=0;
+drop:
+	touchid[t] = 0;
 	times[t] = 0;
-	but[t] = b = NULL;
+	but[t] = NULL;
 	return NULL;
 }
 

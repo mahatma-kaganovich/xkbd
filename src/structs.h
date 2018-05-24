@@ -72,13 +72,15 @@ inline unsigned int LEVEL(unsigned int m, unsigned int l, unsigned int o){
 #undef MULTITOUCH
 #endif
 
-#ifndef MULTITOUCH
+#ifdef MULTITOUCH
+#define MAX_TOUCH 10
+#else
+#define MAX_TOUCH 1
 #undef SIBLINGS
 #endif
 
 
 #define MAX_SIBLINGS 127
-#define MAX_TOUCH 10
 
 #ifdef SLIDES
 #define LEVELS 8
