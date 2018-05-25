@@ -983,7 +983,8 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 				b = b1;
 			} else { // multiple: can draw whole set or nothing
 				b1 = but[t];
-#if 1
+#if 0
+				// incomplete. need to release
 				for(i=0; i<n; i++){
 					button_render(sib[t][i], BUTTON_PRESSED);
 					button_paint(sib[t][i]);
