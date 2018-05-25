@@ -924,38 +924,79 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 		    else must do other selections.
 		*/
 		if (but[t]) {
-		    button_render(but[t], BUTTON_RELEASED);
-		    button_paint(but[t]);
-		    if (b) { // button -> button
+			if (!b) goto drop; // button -> NULL
+			// button -> button
 			int ns = nsib[t], ns1 = b->nsiblings;
 			button **s1 = (button **)b->siblings;
+			button *b1 = NULL;
 			int n=0;
 			if (ns<0) {
 				button **s = (button **)but[t]->siblings;
 				nsib[t] = ns = but[t]->nsiblings;
 				for(i=0; i<ns; i++)
 				    for(j=0; j<ns1; j++)
-					if (s[i]==s1[j])
+					if (s[i]==s1[j]) {
 					    sib[t][n++]=s1[j];
+					    break;
+					}
 			} else {
 				for(i=0; i<ns; i++)
 				    for(j=0; j<ns1; j++)
-					if (sib[t][i]==s1[j])
+					if (sib[t][i]==s1[j]) {
 					    sib[t][n++]=s1[j];
+					    break;
+					}
 			}
 			nsib[t]=n;
 			if (n==0) { // no siblings, drop touch
 				goto drop;
 			}else if (n==1) { // 1 intersection: found button
-				b=sib[t][0];
-				button_render(b, BUTTON_PRESSED);
-				button_paint(b);
+				b1 = sib[t][0];
 			// unknown, need to calculate or touch more
-			}else if (type==2){ // multiple choice at the END. now - drop
-				goto drop;
+			}else {
+#if 0
+				if (type==2) goto drop;
+#else
+				// try set of 2 last buttons
+				// unsure in this logic, but there are
+				// last chance to 1) draw 2) press something
+				button *s2[2] = { but[t], b };
+				button *s3[2];
+				int n1=0;
+				for(j=0; j<2; j++)
+				    for(i=0; i<n; i++)
+					if (sib[t][i]==s2[j]) {
+					    s3[n1++]=s2[j];
+					    break;
+					}
+				if (n1==1) b1 = sib[t][0];
+				else if (type==2) goto drop;
+#endif
+			}
+			if (b1) {
+				if (b1!=but[t]) {
+					button_render(b1, BUTTON_PRESSED);
+					button_paint(b1);
+					button_render(but[t], BUTTON_RELEASED);
+					button_paint(but[t]);
+				}
+				b = b1;
+			} else { // multiple: can draw whole set or nothing
+				b1 = but[t];
+#if 1
+				for(i=0; i<n; i++){
+					button_render(sib[t][i], BUTTON_PRESSED);
+					button_paint(sib[t][i]);
+					if (sib[t][i]==b1) b1 = NULL;
+				}
+				if (b1)
+#endif
+				{
+					button_render(b1, BUTTON_RELEASED);
+					button_paint(b1);
+				}
 			}
 			but[t]=b;
-		    } else goto drop; // button -> NULL
 		} else if (b) { // NULL -> button: new siblings base list
 			nsib[t]=-1;
 		}
@@ -984,36 +1025,44 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 #endif
 	new_state = kb_process_keypress(b,0);
 
-//	if (new_state != b->kb->state || new_state & b->modifier) {
-	if (new_state != b->kb->state) {
-#ifndef MINIMAL
-		if (!Xkb_sync)
-#endif
-		{
-			b->kb->state = new_state;
-			kb_render(b->kb);
-			kb_paint(b->kb);
-		}
-	} else {
-		button_render(b, BUTTON_RELEASED);
-		button_paint(b);
-	}
-#ifdef SLIDES
-	b->slide = 0;
-#endif
 	if (b->layout_switch > -1) {
 		DBG("switching layout\n");
+		but[t] = NULL;
 #ifndef MINIMAL
 		if (Xkb_sync)
 			XkbLockGroup(b->kb->display, XkbUseCoreKbd, b->layout_switch);
 		else
 #endif
 			kb_switch_layout(b->kb, b->layout_switch);
+	} else
+//	if ((new_state != b->kb->state || new_state & b->modifier) {
+	if (new_state != b->kb->state) {
+#ifndef MINIMAL
+		if (!Xkb_sync)
+#endif
+		{
+			but[t] = NULL;
+			b->kb->state = new_state;
+			kb_render(b->kb);
+			kb_paint(b->kb);
+		}
 	}
+#ifdef SLIDES
+	if (b->slide && but[t]) { // unsure about slide, but let it be
+		but[t] = NULL;
+		button_render(b, BUTTON_RELEASED);
+		button_paint(b);
+	}
+	b->slide = 0;
+#endif
 drop:
+	if (but[t]) {
+		button_render(but[t], BUTTON_RELEASED);
+		button_paint(but[t]);
+		but[t] = NULL;
+	}
 	touchid[t] = 0;
 	times[t] = 0;
-	but[t] = NULL;
 	return NULL;
 }
 
