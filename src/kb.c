@@ -1152,7 +1152,8 @@ void kb_process_keypress(button *b, int repeat)
 	kb->state_locked = lock;
 	kb_render(kb);
 	kb_paint(kb);
-   } else if (b->layout_switch>-1) {
+   }
+   if (b->layout_switch>-1) {
 #ifndef MINIMAL
 	if (Xkb_sync && b->layout_switch>-1) {
 		XSync(dpy,False);
