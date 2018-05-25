@@ -60,7 +60,7 @@ inline unsigned int LEVEL(unsigned int m, unsigned int l, unsigned int o){
 #define MAX_LAYOUTS     3
 
 // features
-#define SEQ_CACHE
+//#define SEQ_CACHE
 
 #ifndef MINIMAL
 #define SLIDES
