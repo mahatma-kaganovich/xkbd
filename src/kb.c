@@ -1127,9 +1127,8 @@ void kb_process_keypress(button *b, int repeat)
     } else if (state & ~STATE(KBIT_CAPS)) {
 	/* check if the kbd is already in a state and reset it
 	   leaving caps key state alone */
-	state &= STATE(KBIT_CAPS);
-	state |= lock;
-	DBG("kbd is shifted, unshifting - %i \n", state);
+	kb->state = (state & ~STATE(KBIT_CAPS))|lock;
+	DBG("kbd is shifted, unshifting - %i \n", kb->state);
     }
 
     if (keypress) {
