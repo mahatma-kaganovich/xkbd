@@ -234,9 +234,13 @@ typedef struct _button
 //    __attribute__ ((__packed__)) 
     button;
 
-#ifndef MINIMAL
+
+#ifdef MINIMAL
+#define Xkb_sync 0
+#else
 extern int Xkb_sync;
 #endif
+
 extern int no_lock;
 
 #endif

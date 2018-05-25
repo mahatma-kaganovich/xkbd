@@ -15,6 +15,7 @@
 #include <sys/param.h>
 
 extern int debug;
+
 #ifndef MINIMAL
 extern int Xkb_sync;
 #endif

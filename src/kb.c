@@ -874,7 +874,8 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 	for (i=0; i<MAX_TOUCH; i++) {
 		if (touchid[i] == ptr) {
 			// duplicate (I got BEGIN!)
-			if (time == (T=times[i]) && x==X[i] && y==Y[i]) return but[i];
+//			if (time == (T=times[i]) && x==X[i] && y==Y[i]) return but[i];
+			if (time<=times[i] && type!=2) return but[i];
 			t=i;
 			break;
 		}
@@ -1002,11 +1003,7 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 			nsib[t]=-1;
 		}
 #else
-		if (but[t]) {
-			button_render(but[t], BUTTON_RELEASED);
-			button_paint(but[t]);
-			goto drop;
-		}
+		if (but[t]) goto drop;
 #endif
 	}
 
@@ -1048,19 +1045,14 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 			kb_paint(b->kb);
 		}
 	}
-#ifdef SLIDES
-	if (b->slide && but[t]) { // unsure about slide, but let it be
+drop:
+	if (b=but[t]) {
 		but[t] = NULL;
 		button_render(b, BUTTON_RELEASED);
 		button_paint(b);
-	}
-	b->slide = 0;
+#ifdef SLIDES
+		b->slide = 0;
 #endif
-drop:
-	if (but[t]) {
-		button_render(but[t], BUTTON_RELEASED);
-		button_paint(but[t]);
-		but[t] = NULL;
 	}
 	touchid[t] = 0;
 	times[t] = 0;
@@ -1124,6 +1116,7 @@ unsigned int kb_process_keypress(button *b, int repeat)
     unsigned int state = b->kb->state;
     unsigned int lock = b->kb->state_locked;
     const unsigned int mod = b->modifier;
+    int keypress = 1; // different versions & drivers have different switch behaviour. skip
 
     DBG("got release state %i %i %i %i \n", new_state, STATE(KBIT_SHIFT), STATE(KBIT_MOD), STATE(KBIT_CTRL) );
 
@@ -1131,17 +1124,23 @@ unsigned int kb_process_keypress(button *b, int repeat)
     } else if (mod & STATE(KBIT_CAPS)) {
 	state ^= STATE(KBIT_CAPS);
 	DBG("got caps key - %i \n", state);
+	keypress = Xkb_sync;
     } else if (mod) {
+	keypress = Xkb_sync;
 	if (lock & mod) {
 		lock ^= mod;
 		state ^= mod;
-	} else if ((state & mod)!=mod) {
+		keypress = 0;
+	} else if (!(state & mod)) {
 		state ^= mod;
 	} else if (no_lock) {
 		state ^= mod;
+		keypress = 0;
 	} else {
 		lock ^= mod;
+		keypress = 0;
 	}
+
 	DBG("got a modifier key - %i \n", state);
     } else if (state & ~STATE(KBIT_CAPS)) {
 	/* check if the kbd is already in a state and reset it
@@ -1165,8 +1164,10 @@ unsigned int kb_process_keypress(button *b, int repeat)
 	b->kb->state_locked = lock;
     }
 
-    kb_send_keypress(b);
-    DBG("%s clicked \n", DEFAULT_TXT(b));
+    if (keypress) {
+		kb_send_keypress(b);
+		DBG("%s clicked \n", DEFAULT_TXT(b));
+    }
 
     /* real precise state for Xkb_sync will be reached by event,
        so try to be just visually pretty sensitive */
