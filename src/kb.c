@@ -856,6 +856,7 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 	button *b;
 	int i,j;
 	Time T;
+	unsigned int old_state;
 
 	static uint32_t touchid[MAX_TOUCH] = {};
 	static button *but[MAX_TOUCH] = {};
@@ -1020,8 +1021,9 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 #ifdef SLIDES
 	kb_set_slide(b, x, y );
 #endif
+	old_state = b->kb->state;
 	kb_process_keypress(b,0);
-	if (b->modifier || b->layout_switch > -1) but[t] = NULL;
+	if (old_state != b->kb->state || b->layout_switch > -1) but[t] = NULL;
 drop:
 	if (b=but[t]) {
 		but[t] = NULL;
