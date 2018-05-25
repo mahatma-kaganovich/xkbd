@@ -264,11 +264,11 @@ stop_argv:
 #ifndef MINIMAL
    if (Xkb_sync) {
 	int xkbError, reason_rtrn, mjr = XkbMajorVersion, mnr = XkbMinorVersion;
-	unsigned short mask = XkbStateNotifyMask|XkbNewKeyboardNotifyMask;
 
 	display = XkbOpenDisplay(display_name, &xkbEventType, &xkbError, &mjr, &mnr, &reason_rtrn);
 	if (!display) goto no_dpy;
-	XkbSelectEvents(display,XkbUseCoreKbd,mask,mask);
+	XkbSelectEvents(display,XkbUseCoreKbd,XkbAllEventsMask,XkbStateNotifyMask|XkbNewKeyboardNotifyMask);
+	XkbSelectEventDetails(display,XkbUseCoreKbd,XkbStateNotifyMask,XkbAllStateComponentsMask,XkbModifierStateMask|XkbModifierLatchMask|XkbModifierLockMask|XkbModifierBaseMask);
    } else
 #endif
    {
@@ -445,7 +445,7 @@ stop_argv:
 
 #ifdef USE_XI
       int xiopcode, xievent, xierror;
-      int ximajor = 2, ximinor = 0;
+      int ximajor = 2, ximinor = 2;
       if(XQueryExtension(display, "XInputExtension", &xiopcode, &xievent, &xierror) &&
 		XIQueryVersion(display, &ximajor, &ximinor) != BadRequest) {
 

@@ -853,7 +853,6 @@ void kb_paint(keyboard *kb)
 
 button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Time time)
 {
-	unsigned int new_state;
 	button *b;
 	int i,j;
 	Time T;
@@ -1021,30 +1020,8 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 #ifdef SLIDES
 	kb_set_slide(b, x, y );
 #endif
-	new_state = kb_process_keypress(b,0);
-
-	if (b->layout_switch > -1) {
-		DBG("switching layout\n");
-		but[t] = NULL;
-#ifndef MINIMAL
-		if (Xkb_sync)
-			XkbLockGroup(b->kb->display, XkbUseCoreKbd, b->layout_switch);
-		else
-#endif
-			kb_switch_layout(b->kb, b->layout_switch);
-	} else
-//	if ((new_state != b->kb->state || new_state & b->modifier) {
-	if (new_state != b->kb->state) {
-#ifndef MINIMAL
-		if (!Xkb_sync)
-#endif
-		{
-			but[t] = NULL;
-			b->kb->state = new_state;
-			kb_render(b->kb);
-			kb_paint(b->kb);
-		}
-	}
+	kb_process_keypress(b,0);
+	if (b->modifier || b->layout_switch > -1) but[t] = NULL;
 drop:
 	if (b=but[t]) {
 		but[t] = NULL;
@@ -1111,18 +1088,23 @@ Bool kb_do_repeat(keyboard *kb, button *b)
     return True;
 }
 
-unsigned int kb_process_keypress(button *b, int repeat)
+void kb_process_keypress(button *b, int repeat)
 {
-    unsigned int state = b->kb->state;
-    unsigned int lock = b->kb->state_locked;
+    keyboard *kb = b->kb;
+    unsigned int state = kb->state;
+    unsigned int lock = kb->state_locked;
     const unsigned int mod = b->modifier;
-    int keypress = 1; // different versions & drivers have different switch behaviour. skip
+    int keypress = 1;
+#ifndef MINIMAL
+    Display *dpy = kb->display;
+#endif
 
     DBG("got release state %i %i %i %i \n", new_state, STATE(KBIT_SHIFT), STATE(KBIT_MOD), STATE(KBIT_CTRL) );
 
     if (repeat) {
     } else if (mod & STATE(KBIT_CAPS)) {
 	state ^= STATE(KBIT_CAPS);
+	lock ^= STATE(KBIT_CAPS);
 	DBG("got caps key - %i \n", state);
 	keypress = Xkb_sync;
     } else if (mod) {
@@ -1150,28 +1132,35 @@ unsigned int kb_process_keypress(button *b, int repeat)
 	DBG("kbd is shifted, unshifting - %i \n", state);
     }
 
-    if (mod & ~STATE(KBIT_CAPS)) {
-	/* strange ("unKNOWN") combinations do "X Error"
-	   keep them virtual & change whole KNOWN mask only */
+    if (keypress) {
+	kb_send_keypress(b);
+	DBG("%s clicked \n", DEFAULT_TXT(b));
+    }
+
+    if (mod) {
 #ifndef MINIMAL
-	if (Xkb_sync && (mod & KB_STATE_KNOWN)) {
-		if (state != b->kb->state)
-			XkbLatchModifiers(b->kb->display,XkbUseCoreKbd,KB_STATE_KNOWN,state & KB_STATE_KNOWN);
-		if (lock != b->kb->state_locked)
-			XkbLockModifiers(b->kb->display,XkbUseCoreKbd,KB_STATE_KNOWN,lock & KB_STATE_KNOWN);
+	if (Xkb_sync) {
+		XSync(dpy,False); // serialize
+		if (mod & KB_STATE_KNOWN) {
+			if (state != kb->state) XkbLatchModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,state & KB_STATE_KNOWN);
+			if (lock != kb->state_locked) XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,lock & KB_STATE_KNOWN);
+			XSync(dpy,True); // reduce events
+		}
 	}
 #endif
-	b->kb->state_locked = lock;
-    }
-
-    if (keypress) {
-		kb_send_keypress(b);
-		DBG("%s clicked \n", DEFAULT_TXT(b));
-    }
-
-    /* real precise state for Xkb_sync will be reached by event,
-       so try to be just visually pretty sensitive */
-    return state;
+	kb->state = state;
+	kb->state_locked = lock;
+	kb_render(kb);
+	kb_paint(kb);
+   }
+   else if (Xkb_sync && b->layout_switch>-1) {
+#ifndef MINIMAL
+	XSync(dpy,False);
+	XkbLockGroup(dpy, XkbUseCoreKbd, b->layout_switch);
+	XSync(dpy,True);
+#endif
+	kb_switch_layout(kb, b->layout_switch);
+   }
 }
 
 void kb_send_keypress(button *b)
