@@ -1152,12 +1152,13 @@ void kb_process_keypress(button *b, int repeat)
 	kb->state_locked = lock;
 	kb_render(kb);
 	kb_paint(kb);
-   }
-   else if (Xkb_sync && b->layout_switch>-1) {
+   } else if (b->layout_switch>-1) {
 #ifndef MINIMAL
-	XSync(dpy,False);
-	XkbLockGroup(dpy, XkbUseCoreKbd, b->layout_switch);
-	XSync(dpy,True);
+	if (Xkb_sync && b->layout_switch>-1) {
+		XSync(dpy,False);
+		XkbLockGroup(dpy, XkbUseCoreKbd, b->layout_switch);
+		XSync(dpy,True);
+	}
 #endif
 	kb_switch_layout(kb, b->layout_switch);
    }
