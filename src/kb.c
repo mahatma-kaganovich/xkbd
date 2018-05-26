@@ -1136,7 +1136,7 @@ void kb_process_keypress(button *b, int repeat)
 	DBG("%s clicked \n", DEFAULT_TXT(b));
     }
 
-    if (state != kb_state) {
+    if (state != kb->state || lock != kb->state_locked) {
 #ifndef MINIMAL
 	if (Xkb_sync) {
 		XSync(dpy,False); // serialize
