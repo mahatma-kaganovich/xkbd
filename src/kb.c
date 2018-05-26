@@ -1140,11 +1140,9 @@ void kb_process_keypress(button *b, int repeat)
 #ifndef MINIMAL
 	if (Xkb_sync) {
 		XSync(dpy,False); // serialize
-		if (mod & KB_STATE_KNOWN) {
-			if (state != kb->state) XkbLatchModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,state & KB_STATE_KNOWN);
-			if (lock != kb->state_locked) XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,lock & KB_STATE_KNOWN);
-			XSync(dpy,True); // reduce events
-		}
+		if (state != kb->state) XkbLatchModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,state & KB_STATE_KNOWN);
+		if (lock != kb->state_locked) XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,lock & KB_STATE_KNOWN);
+		XSync(dpy,True); // reduce events
 	}
 #endif
 	kb->state = state;
