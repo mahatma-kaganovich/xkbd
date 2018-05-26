@@ -856,7 +856,6 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 	button *b;
 	int i,j;
 	Time T;
-	unsigned int old_state;
 
 	static uint32_t touchid[MAX_TOUCH] = {};
 	static button *but[MAX_TOUCH] = {};
@@ -1021,9 +1020,8 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 #ifdef SLIDES
 	kb_set_slide(b, x, y );
 #endif
-	old_state = b->kb->state;
 	kb_process_keypress(b,0);
-	if (old_state != b->kb->state || b->layout_switch > -1) but[t] = NULL;
+	if (b->modifier || b->layout_switch > -1) but[t] = NULL;
 drop:
 	if (b=but[t]) {
 		but[t] = NULL;
@@ -1129,7 +1127,7 @@ void kb_process_keypress(button *b, int repeat)
     } else if (state & ~STATE(KBIT_CAPS)) {
 	/* check if the kbd is already in a state and reset it
 	   leaving caps key state alone */
-	kb->state = (state & STATE(KBIT_CAPS))|lock;
+	state = (state & STATE(KBIT_CAPS))|lock;
 	DBG("kbd is shifted, unshifting - %i \n", kb->state);
     }
 
@@ -1138,7 +1136,7 @@ void kb_process_keypress(button *b, int repeat)
 	DBG("%s clicked \n", DEFAULT_TXT(b));
     }
 
-    if (mod) {
+    if (state != kb_state) {
 #ifndef MINIMAL
 	if (Xkb_sync) {
 		XSync(dpy,False); // serialize
