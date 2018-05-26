@@ -208,7 +208,6 @@ void kb_find_button_siblings(button *b) {
 	n *= sizeof(button*);
 	memcpy(b->siblings = malloc(n),buf,n);
 }
-#endif
 
 void kb_update(keyboard *kb){
 	list *listp, *ip;
@@ -223,6 +222,7 @@ void kb_update(keyboard *kb){
 		}
 	}
 }
+#endif
 
 int kb_load_keymap(Display *dpy) {
  KeySym *keymap1 = NULL;
@@ -881,7 +881,9 @@ void kb_size(keyboard *kb)
       listp = listp->next;
 
     }
+#ifdef SIBLINGS
     kb_update(kb);
+#endif
 }
 
 void
