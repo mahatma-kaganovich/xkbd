@@ -1277,9 +1277,8 @@ void kb_send_keypress(button *b, unsigned int next_state) {
 	if (!Xkb_sync) 
 #endif
 	{
-//		mods0 = next_state = 0;
 		mods0 = saved_mods;
-		saved_mods = mods;
+		saved_mods = next_state = mods;
 	}
 	
 	if (b->kc[l]<minkc || b->kc[l]>maxkc) return;
