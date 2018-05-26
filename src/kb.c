@@ -1244,6 +1244,7 @@ void kb_send_keypress(button *b, unsigned int next_state) {
 	Display *dpy = b->kb->display;
 	unsigned int mods0 = b->kb->state_locked & KB_STATE_KNOWN;
 
+
 #ifdef SLIDES
 	if (b->slide || !GET_KS(b,b->slide)) { // 2do grok slides ;)
 	    unsigned int mods1 = 0;
@@ -1267,13 +1268,12 @@ void kb_send_keypress(button *b, unsigned int next_state) {
 	}
 #endif
 
+	next_state &= KB_STATE_KNOWN;
 #ifndef MINIMAL
 	if (!Xkb_sync) 
-	{
 #endif
+	{
 //		mods0 = next_state = 0;
-		// "lock" here is aggressive way, but dramatically reduce X calls
-		// anymore, !Xkb-sync mode is for performance without hw kbd
 		mods0 = saved_mods;
 		saved_mods = mods;
 	}
@@ -1281,24 +1281,14 @@ void kb_send_keypress(button *b, unsigned int next_state) {
 	if (b->kc[l]<minkc || b->kc[l]>maxkc) return;
 	if ((mods0 ^ mods) & STATE(KBIT_CAPS)) mods ^= STATE(KBIT_CAPS)|STATE(KBIT_SHIFT);
 	if (mods != mods0) {
-#ifndef MINIMAL
-		if (Xkb_sync) {
-			XkbLatchModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,mods);
-			XSync(dpy,True);
-		} else
-#endif
 			XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,mods);
+			if (Xkb_sync) XSync(dpy,True);
 	} else mods = b->kb->state;
 	XTestFakeKeyEvent(b->kb->display, b->kc[l], True, 0);
 	XTestFakeKeyEvent(b->kb->display, b->kc[l], False, 0);
-	if (mods != next_state) {
-#ifndef MINIMAL
-		if (Xkb_sync) {
-			XkbLatchModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,b->kb->state & KB_STATE_KNOWN);
-			XSync(dpy,True);
-		} else
-#endif
-			XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,b->kb->state & KB_STATE_KNOWN);
+	if (mods != next_state && next_state == mods0) {
+			XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,mods0 & KB_STATE_KNOWN);
+			if (Xkb_sync) XSync(dpy,True);
 	}
 }
 
