@@ -1241,6 +1241,12 @@ void kb_process_keypress(button *b, int repeat)
    }
 }
 
+#ifndef MINIMAL
+#define _xsync(x) if (Xkb_sync) XSync(dpy,x)
+#else
+#define _xsync(x)
+#endif
+
 static int saved_mods = 0;
 void kb_send_keypress(button *b, unsigned int next_state) {
 	unsigned int l = KBLEVEL(b);
@@ -1283,15 +1289,18 @@ void kb_send_keypress(button *b, unsigned int next_state) {
 	
 	if (b->kc[l]<minkc || b->kc[l]>maxkc) return;
 	if ((mods0 ^ mods) & STATE(KBIT_CAPS)) mods ^= STATE(KBIT_CAPS)|STATE(KBIT_SHIFT);
+	_xsync(False);
 	if (mods != mods0) {
 			XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,mods);
-			if (Xkb_sync) XSync(dpy,True);
+			_xsync(True);
 	} else mods = b->kb->state;
 	XTestFakeKeyEvent(b->kb->display, b->kc[l], True, 0);
+	_xsync(True);
 	XTestFakeKeyEvent(b->kb->display, b->kc[l], False, 0);
+	_xsync(True);
 	if (mods != next_state && next_state == mods0) {
 			XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,mods0 & KB_STATE_KNOWN);
-			if (Xkb_sync) XSync(dpy,True);
+			_xsync(True);
 	}
 }
 
