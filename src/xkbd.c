@@ -38,7 +38,6 @@
 #include "../config.h"
 
 #include "libXkbd.h"
-#include "libvirtkeys.h"
 
 #define DEBUG 1
 
@@ -295,26 +294,6 @@ stop_argv:
 
     mwm_atom = XInternAtom(display, "_MOTIF_WM_HINTS",False);
 
-      /* HACK to get libvirtkeys to work without mode_switch */
-	/* ??? 2delete? */
-      if  (XKeysymToKeycode(display, XK_Mode_switch) == 0)
-	{
-	  int keycode;
-	  int min_kc, max_kc;
-
-	  XDisplayKeycodes(display, &min_kc, &max_kc);
-
-	  for (keycode = min_kc; keycode <= max_kc; keycode++)
-	    if (XkbKeycodeToKeysym (display, keycode, 0, 0) == NoSymbol)
-	      {
-		mode_switch_ksym = XStringToKeysym("Mode_switch");
-		XChangeKeyboardMapping(display,
-				       keycode, 1,
-				       &mode_switch_ksym, 1);
-		XSync(display, False);
-	      }
-      }
-
 /*
       wm_name = get_current_window_manager_name ();
 
@@ -538,7 +517,7 @@ stop_argv:
 #define e (((XkbEvent)ev).new_kbd)
 				// Xkbd send false notify, so we must compare maps
 				if (e.min_key_code != e.old_min_key_code || e.max_key_code != e.old_max_key_code || e.device != e.old_device
-				    || loadKeySymTable()
+				    || kb_load_keymap(display)
 				    ) {
 					XCloseDisplay(display);
 					xkbd_destroy(kb);

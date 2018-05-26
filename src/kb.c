@@ -32,7 +32,6 @@
 #include "box.h"
 #include "button.h"
 
-#include "libvirtkeys.h"
 
 #ifndef MINIMAL
 #include "ks2unicode.h"
@@ -44,8 +43,10 @@
 #define DBG(txt, args... ) /* nothing */
 #endif
 
-#define TRUE  1
-#define FALSE 0
+static KeySym *keymap = NULL;
+static int minkc = 0;
+static int maxkc = 0;
+static int ks_per_kc = 0;
 
 static Bool
 load_a_single_font(keyboard *kb, char *fontname )
@@ -96,12 +97,31 @@ void button_update(button *b) {
 	const unsigned int mods[4] = {0,STATE(KBIT_SHIFT),STATE(KBIT_MOD),STATE(KBIT_SHIFT)|STATE(KBIT_MOD)};
 	int n;
 	char *txt;
+	KeySym ks, ks1;
+
+	for(l=0; l<LEVELS; l++) {
+		ks = b->ks[l];
+		if (!ks) continue;
+		if (l<4) {
+			ks1 = ks;
+			XkbTranslateKeySym(dpy,&ks1,b->mods[l]=mods[l],buf,1,&n);
+			if (ks1==ks) continue;
+		}
+		for (l1=0; l1<4 && ks != ks1; l1++) if (l1!=l) {
+			ks1 = ks;
+			XkbTranslateKeySym(dpy,&ks1,mods[l1],buf,1,&n);
+		}
+		if (ks1 == ks) {
+			b->mods[l] = mods[l1];
+			if (l!=l1 && l<4) fprintf(stderr,"keysym %s translated from level %i to level %i\n",__ksText(ks), l, l1);
+		} else fprintf(stderr,"keysym not self-translated: %s\n",__ksText(ks));
+	}
 
 	for(l=0; l<4; l++){
-		KeySym ks = b->ks[l];
-
-		if(!ks && (ks = b->ks[l&2]?:b->ks[0]))
-			XkbTranslateKeySym(dpy,&ks,mods[l],buf,1,&n);
+		ks = b->ks[l];
+		if(!ks && (ks = b->ks[l&2]?:b->ks[0])) {
+			XkbTranslateKeySym(dpy,&ks,b->mods[l] = mods[l],buf,1,&n);
+		}
 		if (!(txt = b->txt[l])) {
 			for (l1 = 0; l1<l && !txt; l1++) if (ks == b->ks[l1]) txt = b->txt[l1];
 #ifndef MINIMAL
@@ -111,6 +131,41 @@ void button_update(button *b) {
 		}
 		b->ks[l] = ks;
 	}
+#ifndef MINIMAL
+	unsigned int i ,j, p;
+	n = maxkc-minkc+1;
+	int m = -1;
+	for (l=0; l<LEVELS; l++) {
+	    if (!(ks = b->ks[l])) continue;
+	    // as soon we have keymap - try to respect shift
+	    if (keymap) {
+		i = n;
+		m = 4;
+		for (m=0; m<4; m++) if (mods[m] == b->mods[l]) break;
+		if (m<4) {
+			j = (group<<1)|(m&1);
+			for (i=0; i<n; i++)
+				if (keymap[p=i*ks_per_kc+j] == ks) goto found;
+			// try modifiers
+			for (i=0; i<n; i++) for (j=4+(m&1); j<ks_per_kc; j+=2)
+				if (keymap[p=i*ks_per_kc+j] == ks) goto found;
+		};
+		// everywere
+		for (j=0; j<ks_per_kc; j++) for (i=0; i<n; i++)
+			if (keymap[p=i*ks_per_kc+j] == ks) goto found;
+found:		if (i<n) {
+		    b->kc[l] = i+minkc;
+		    continue;
+		}
+	    }
+	    // if keymap wrong or not loaded
+	    // 2do: Intrinsic.h - XtKeysymToKeycodeList
+	    b->kc[l]=XKeysymToKeycode(dpy,ks);
+	}
+#else
+	for(l=0; l<LEVELS; l++)
+		if (b->ks[l]) b->kc[l]=XKeysymToKeycode(dpy,b->ks[l]);
+#endif
 }
 
 #ifdef SIBLINGS
@@ -153,6 +208,7 @@ void kb_find_button_siblings(button *b) {
 	n *= sizeof(button*);
 	memcpy(b->siblings = malloc(n),buf,n);
 }
+#endif
 
 void kb_update(keyboard *kb){
 	list *listp, *ip;
@@ -167,7 +223,28 @@ void kb_update(keyboard *kb){
 		}
 	}
 }
-#endif
+
+int kb_load_keymap(Display *dpy) {
+ KeySym *keymap1 = NULL;
+ int minkc1,maxkc1,ks_per_kc1;
+ int n = 0;
+
+ XDisplayKeycodes(dpy, &minkc1, &maxkc1);
+ keymap1 = XGetKeyboardMapping(dpy, minkc1, (maxkc1 - minkc1 + 1), &ks_per_kc1);
+
+ if (!keymap || minkc1 != minkc || maxkc1 != maxkc || ks_per_kc1 != ks_per_kc ||
+   memcmp(keymap, keymap1, (maxkc-minkc+1)*ks_per_kc1)) {
+   if (keymap) free(keymap);
+      keymap = keymap1;
+      minkc = minkc1;
+      maxkc = maxkc1;
+      ks_per_kc = ks_per_kc1;
+      return 1;
+   }
+   free(keymap1);
+   /* keymap not changed */
+   return 0;
+}
 
 keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		 int kb_width, int kb_height, char *conf_file,
@@ -295,7 +372,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 
   kb->backing = 0;
 
-  setupKeyboardVariables(kb->display);
+  kb_load_keymap(display);
 
   if ((rcfp = fopen(conf_file, "r")) == NULL)
     {
@@ -804,9 +881,7 @@ void kb_size(keyboard *kb)
       listp = listp->next;
 
     }
-#ifdef SIBLINGS
     kb_update(kb);
-#endif
 }
 
 void
@@ -1132,7 +1207,7 @@ void kb_process_keypress(button *b, int repeat)
     }
 
     if (keypress) {
-	kb_send_keypress(b);
+	kb_send_keypress(b, lock);
 	DBG("%s clicked \n", DEFAULT_TXT(b));
     }
 
@@ -1140,8 +1215,8 @@ void kb_process_keypress(button *b, int repeat)
 #ifndef MINIMAL
 	if (Xkb_sync) {
 		XSync(dpy,False); // serialize
-		if (state != kb->state) XkbLatchModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,state & KB_STATE_KNOWN);
-		if (lock != kb->state_locked) XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,lock & KB_STATE_KNOWN);
+		if (state != kb->state) XkbLatchModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,(state|lock) & KB_STATE_KNOWN);
+		if (lock != kb->state_locked) XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,(state|lock) & KB_STATE_KNOWN);
 		XSync(dpy,True); // reduce events
 	}
 #endif
@@ -1162,66 +1237,70 @@ void kb_process_keypress(button *b, int repeat)
    }
 }
 
-void kb_send_keypress(button *b)
-{
-  int slide_flag = 0;
-  unsigned int l = KBLEVEL(b);
-  unsigned int l1 = l;
-  unsigned int l2 = 0;
-  KeySym ks = GET_KS(b,l);
-
-  struct keycodeEntry vk_keycodes[10];
+static int saved_mods = 0;
+void kb_send_keypress(button *b, unsigned int next_state) {
+	unsigned int l = KBLEVEL(b);
+	unsigned int mods = b->mods[l];
+	Display *dpy = b->kb->display;
+	unsigned int mods0 = b->kb->state_locked & KB_STATE_KNOWN;
 
 #ifdef SLIDES
-  if (b->slide) { // 2do grok slides ;)
-      ks = GET_KS(b,l1 = b->slide);
-      switch (b->slide)
-	{
-	  case SLIDE_UP :
-//	    if (ks == 0) ks = SHIFT_KS(b);
-	    if (ks == 0 && (b->kb->state & STATE(KBIT_SHIFT))) ks = SHIFT_KS(b);
-	    break;
-	  case SLIDE_DOWN : /* hold ctrl */
-//	    if (ks == 0) slide_flag = STATE(KBIT_CTRL);
-	    if (!ks && (b->kb->state & STATE(KBIT_CTRL))) slide_flag = STATE(KBIT_CTRL);
-	    break;
-	  case SLIDE_LEFT : /* hold alt */
-//	    if (ks == 0)
-	    if (ks == 0 && (b->kb->state & STATE(KBIT_MOD)))
-	      {
-		ks = MOD_KS(b);
-//		l1 = 2;
-		slide_flag = STATE(KBIT_MOD);
-	      }
-	    break;
-	  case SLIDE_RIGHT : /* hold alt */
-	    break;
+	if (b->slide || !GET_KS(b,b->slide)) { // 2do grok slides ;)
+	    unsigned int mods1 = 0;
+
+	    l = 0;
+	    switch (b->slide) {
+		case SLIDE_UP:{
+			if (b->kb->state & STATE(KBIT_SHIFT)) l = 1;
+			break;
+		}
+		case SLIDE_DOWN: {
+			if (b->kb->state & STATE(KBIT_CTRL)) mods1 ^= STATE(KBIT_CTRL);
+			break;
+		}
+		case SLIDE_LEFT: {
+			if (b->kb->state & STATE(KBIT_MOD)) l = 2;
+			break;
+		}
+	    }
+	    mods = b->mods[l] ^ mods1;
 	}
-  }
 #endif
-  if (ks == 0) ks = DEFAULT_KS(b);
-  if (ks == 0) return; /* no keysym defined, abort */
 
-#ifdef SEQ_CACHE
-  struct keycodeEntry *kcs = b->cache[l1];
-  int len;
-
-  if (!kcs && (len = lookupKeyCodeSequence(ks, vk_keycodes, NULL, b->kb->group, l, !((b->kb->state & STATE(KBIT_SHIFT))==0))))
-	memcpy(b->cache[l1] = kcs = malloc(len),&vk_keycodes,len);
-  if (kcs)
-     sendKeySequence(kcs,
-#else
-  if (lookupKeyCodeSequence(ks, vk_keycodes, NULL, b->kb->group, l, !((b->kb->state & STATE(KBIT_SHIFT))==0)))
-     sendKeySequence(vk_keycodes,
+#ifndef MINIMAL
+	if (!Xkb_sync) 
+	{
 #endif
-	  ( (b->kb->state & STATE(KBIT_CTRL))  || (slide_flag == STATE(KBIT_CTRL)) ),
-	  ( (b->kb->state & STATE(KBIT_META))  || (slide_flag == STATE(KBIT_META)) ),
-	  ( (b->kb->state & STATE(KBIT_ALT))   || (slide_flag == STATE(KBIT_ALT))  ),
-		     0 /* ( (b->kb->state & STATE(KBIT_SHIFT)) || (slide_flag == STATE(KBIT_SHIFT)) ) */
-		  );
-
+//		mods0 = next_state = 0;
+		// "lock" here is aggressive way, but dramatically reduce X calls
+		// anymore, !Xkb-sync mode is for performance without hw kbd
+		mods0 = saved_mods;
+		saved_mods = mods;
+	}
+	
+	if (b->kc[l]<minkc || b->kc[l]>maxkc) return;
+	if ((mods0 ^ mods) & STATE(KBIT_CAPS)) mods ^= STATE(KBIT_CAPS)|STATE(KBIT_SHIFT);
+	if (mods != mods0) {
+#ifndef MINIMAL
+		if (Xkb_sync) {
+			XkbLatchModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,mods);
+			XSync(dpy,True);
+		} else
+#endif
+			XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,mods);
+	} else mods = b->kb->state;
+	XTestFakeKeyEvent(b->kb->display, b->kc[l], True, 0);
+	XTestFakeKeyEvent(b->kb->display, b->kc[l], False, 0);
+	if (mods != next_state) {
+#ifndef MINIMAL
+		if (Xkb_sync) {
+			XkbLatchModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,b->kb->state & KB_STATE_KNOWN);
+			XSync(dpy,True);
+		} else
+#endif
+			XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,b->kb->state & KB_STATE_KNOWN);
+	}
 }
-
 
 button * kb_find_button(keyboard *kb, int x, int y)
 {

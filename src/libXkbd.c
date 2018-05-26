@@ -102,6 +102,8 @@ unsigned int xkbd_sync_state(Xkbd *xkbd, unsigned int mods, unsigned int locked_
 	int i=0;
 	Display *dpy = xkbd->kb->display;
 
+	locked_mods &= STATE(KBIT_CAPS) | ~KB_STATE_KNOWN;
+
 	ch|=_set_state(&xkbd->kb->state, mods)|_set_state(&xkbd->kb->state_locked, locked_mods);
 	if (group!=xkbd->kb->group){
 		kb_switch_layout(xkbd->kb,group);

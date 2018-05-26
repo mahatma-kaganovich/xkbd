@@ -4,8 +4,8 @@ LDADD = @X_LIBS@ -lm -lX11 -lXtst
 AM_CFLAGS = -O2 -DDEFAULTCONFIG=\"$(DEFAULT_CONFIG)\" -Dprefix=\"${prefix}\"
 
 bin_PROGRAMS = xkbd
-xkbd_SOURCES = xkbd.c libXkbd.c box.c button.c kb.c libvirtkeys.c ks2unicode.c \
-                      structs.h box.h  button.h  kb.h  libvirtkeys.h ks2unicode.h \
+xkbd_SOURCES = xkbd.c libXkbd.c box.c button.c kb.c ks2unicode.c \
+                      structs.h box.h  button.h  kb.h  ks2unicode.h \
                       libXkbd.h
 xkbd_LDADD   = $(LDADD)
 

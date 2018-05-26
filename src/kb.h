@@ -22,7 +22,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		 int kb_width, int kb_height, char *conf_file,
 		 char *font_name, int font_is_xft);
 void kb_switch_layout(keyboard *kb, int kbd_layout_num);
-void kb_send_keypress(button *b);
+void kb_send_keypress(button *b, unsigned int next_state);
 void kb_size(keyboard *kb);
 void kb_render(keyboard *kb);
 void kb_paint(keyboard *kb);
@@ -34,6 +34,7 @@ void kb_process_keypress(button *b, int repeat);
 button * kb_find_button(keyboard *kb, int x, int y);
 int _XColorFromStr(Display *display, XColor *col, const char *defstr);
 
+int kb_load_keymap();
 
 #endif
 

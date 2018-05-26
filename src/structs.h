@@ -41,10 +41,11 @@
 
 #define STATE(b)	(1U<<b)
 #define BIT_MV(m,b,b2)	(((m) & STATE(b))>>(b-b2))
-inline unsigned int LEVEL(unsigned int m, unsigned int l, unsigned int o){
+inline unsigned int LEVEL(unsigned int m, unsigned int o){
 	return ((BIT_MV(m,KBIT_SHIFT,0)^(BIT_MV(m,KBIT_CAPS,0)&BIT_MV(o,OBIT_OBEYCAPS,0) ))|(BIT_MV(m,KBIT_MOD,1)^BIT_MV(m,KBIT_ALT,1)));
 }
-#define KBLEVEL(b)	LEVEL(b->kb->state,b->kb->state_locked,b->options)
+#define KBLEVEL(b)	LEVEL(b->kb->state|b->kb->state_locked,b->options)
+#define KBDLEVEL(kb)	LEVEL(kb->state|kb->state_locked,0)
 
 #define KB_STATE_KNOWN  (STATE(KBIT_SHIFT)|STATE(KBIT_CAPS)|STATE(KBIT_CTRL)|STATE(KBIT_ALT))
 
@@ -88,7 +89,6 @@ inline unsigned int LEVEL(unsigned int m, unsigned int l, unsigned int o){
 #else
 #define LEVELS 4
 #endif
-
 
 typedef struct _list
 {
@@ -165,6 +165,8 @@ typedef struct _button
 #ifdef SEQ_CACHE
   void *cache[LEVELS];
 #endif
+  KeyCode kc[LEVELS];
+  unsigned int mods[LEVELS];
 #ifdef SIBLINGS
   void **siblings;
   unsigned short nsiblings;

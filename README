@@ -328,7 +328,9 @@ the Free Software Foundation; either version 2, or (at your option)
 
 
 Credits
-Xkbd is written by Matthew Allum. It uses the libvirtkeys lib by.
+Xkbd is written by Matthew Allum.
+(It NOT uses the libvirtkeys lib more)
+Redesigned by Denis Kaganovich.
 
 
 Be sure to check out other exciting software by me including; xkbd - a
