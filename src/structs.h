@@ -25,12 +25,11 @@
 #ifdef USE_XFT
 #include <X11/Xft/Xft.h>
 #endif
-#define BUTTON_PRESSED  0
-#define BUTTON_RELEASED 1
-#define BUTTON_LOCKED   2
 
 #define OBIT_OBEYCAPS	0
 #define OBIT_WIDTH_SPEC	1
+#define OBIT_PRESSED	2
+#define OBIT_LOCKED	3
 
 #define KBIT_SHIFT	0
 #define KBIT_CAPS	1
@@ -44,7 +43,7 @@
 inline unsigned int LEVEL(unsigned int m, unsigned int o){
 	return ((BIT_MV(m,KBIT_SHIFT,0)^(BIT_MV(m,KBIT_CAPS,0)&BIT_MV(o,OBIT_OBEYCAPS,0) ))|(BIT_MV(m,KBIT_MOD,1)^BIT_MV(m,KBIT_ALT,1)));
 }
-#define KBLEVEL(b)	LEVEL(b->kb->state|b->kb->state_locked,b->options)
+#define KBLEVEL(b)	LEVEL(b->kb->state|b->kb->state_locked,b->flags)
 #define KBDLEVEL(kb)	LEVEL(kb->state|kb->state_locked,0)
 
 #define KB_STATE_KNOWN  (STATE(KBIT_SHIFT)|STATE(KBIT_CAPS)|STATE(KBIT_CTRL)|STATE(KBIT_ALT))
@@ -61,7 +60,6 @@ inline unsigned int LEVEL(unsigned int m, unsigned int o){
 #define MAX_LAYOUTS     3
 
 // features
-//#define SEQ_CACHE
 
 #ifndef MINIMAL
 #define SLIDES
@@ -162,9 +160,6 @@ typedef struct _button
   int x;             /* actual co-ords relative to window */
   int y;
 
-#ifdef SEQ_CACHE
-  void *cache[LEVELS];
-#endif
   KeyCode kc[LEVELS];
   unsigned int mods[LEVELS];
 #ifdef SIBLINGS
@@ -200,7 +195,7 @@ typedef struct _button
 
   unsigned int modifier; /* set to BUT_ if key is shift,ctrl,caps etc */
 
-  unsigned int options; /* bit-field of OPT_* */
+  unsigned int flags; /* bit-field of OPT_* */
 
   int c_width;  /* width  of contents ( min width ) */
   int c_height; /* height of contents ( min height ) */

@@ -185,7 +185,7 @@ void button_set_txt_ks(button *b, char *txt)
 
   /* for backwards compatibility */
   if (DEFAULT_KS(b) >= 0x061 && DEFAULT_KS(b) <= 0x07a)
-    b->options |= STATE(OBIT_OBEYCAPS);
+    b->flags |= STATE(OBIT_OBEYCAPS);
 }
 
 void button_set_slide_ks(button *b, char *txt, int dir)
@@ -304,8 +304,8 @@ void button_render(button *b, int mode)
   x = button_get_abs_x(b) - b->kb->vbox->x;
   y = button_get_abs_y(b) - b->kb->vbox->y;
 
-
-  if (mode == BUTTON_PRESSED)
+//  b->flags = (b->flags & ~(STATE(OBIT_PRESSED)|STATE(OBIT_LOCKED)|BUTTON_RELEASED))|mode;
+  if (mode == STATE(OBIT_PRESSED))
     {
       gc_solid = b->fg_gc;
       gc_txt   = b->kb->txt_gc;
@@ -313,7 +313,7 @@ void button_render(button *b, int mode)
       tmp_col  = b->kb->color_bg;
 #endif
     }
-  else if(mode == BUTTON_LOCKED)
+  else if(mode == STATE(OBIT_LOCKED))
     {
       gc_solid = b->fg_gc;
       gc_txt   = b->kb->txt_rev_gc;

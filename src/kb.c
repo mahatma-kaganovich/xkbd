@@ -96,44 +96,43 @@ void button_update(button *b) {
 	int group = b->kb->total_layouts-1;
 	Display *dpy = b->kb->display;
 	char buf[1];
-	const unsigned int mods[4] = {0,STATE(KBIT_SHIFT),STATE(KBIT_MOD),STATE(KBIT_SHIFT)|STATE(KBIT_MOD)};
+	const unsigned int mods[4] = {0,STATE(KBIT_SHIFT),STATE(KBIT_ALT),STATE(KBIT_SHIFT)|STATE(KBIT_ALT)};
 	int n;
 	char *txt;
 	KeySym ks, ks1;
+	unsigned int m;
 
 	for(l=0; l<LEVELS; l++) {
 		ks = b->ks[l];
-		if (!ks) continue;
+		m = 0;
 		if (l<4) {
-			ks1 = ks;
-			XkbTranslateKeySym(dpy,&ks1,b->mods[l]=mods[l],buf,1,&n);
-			if (ks1==ks) continue;
-		}
-		for (l1=0; l1<4 && ks != ks1; l1++) if (l1!=l) {
-			ks1 = ks;
-			XkbTranslateKeySym(dpy,&ks1,mods[l1],buf,1,&n);
-		}
-		if (ks1 == ks) {
-			b->mods[l] = mods[l1];
-			if (l!=l1 && l<4) fprintf(stderr,"keysym %s translated from level %i to level %i\n",__ksText(ks), l, l1);
-		} else fprintf(stderr,"keysym not self-translated: %s\n",__ksText(ks));
-	}
-
-	for(l=0; l<4; l++){
-		ks = b->ks[l];
-		if(!ks && (ks = b->ks[l&2]?:b->ks[0])) {
-			XkbTranslateKeySym(dpy,&ks,b->mods[l] = mods[l],buf,1,&n);
-		}
-		if (!(txt = b->txt[l])) {
-			for (l1 = 0; l1<l && !txt; l1++) if (ks == b->ks[l1]) txt = b->txt[l1];
+			m = mods[l];
+			if (!ks && (ks = b->ks[l1=l&2]?:b->ks[l1=0])) {
+				XkbTranslateKeySym(dpy,&ks,m,buf,1,&n);
+				b->ks[l] = ks;
+			}
+			if (!(txt = b->txt[l])) {
+				for (l1 = 0; l1<l && !txt; l1++) if (ks == b->ks[l1]) txt = b->txt[l1];
 #ifndef MINIMAL
-			ksText_(ks,&txt);
+				ksText_(ks,&txt);
 #endif
-			b->txt[l] = txt;
+				b->txt[l] = txt;
+			}
 		}
-		b->ks[l] = ks;
+		if (!ks) continue;
+		ks1=ks;
+		b->mods[l]=m;
+		b->kc[l]=XKeysymToKeycode(dpy,ks);
+		if (!XkbLookupKeySym(dpy,b->kc[l],m,0,&ks1) || ks1!=ks){
+			for(l1=0; l1<4; l1++) if ((m=mods[l1])!=b->mods[l]) {
+				if (XkbLookupKeySym(dpy,b->kc[l],m,0,&ks1) && ks1==ks) {
+					b->mods[l]=m;
+					break;
+				}
+			}
+		}
 	}
-#ifndef MINIMAL
+#if 0
 	unsigned int i ,j, p;
 	n = maxkc-minkc+1;
 	int m = -1;
@@ -164,9 +163,6 @@ found:		if (i<n) {
 	    // 2do: Intrinsic.h - XtKeysymToKeycodeList
 	    b->kc[l]=XKeysymToKeycode(dpy,ks);
 	}
-#else
-	for(l=0; l<LEVELS; l++)
-		if (b->ks[l]) b->kc[l]=XKeysymToKeycode(dpy,b->ks[l]);
 #endif
 }
 
@@ -636,12 +632,12 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		  button_set_slide_ks(tmp_but, tmpstr_C, RIGHT);
 		else if (strcmp(tmpstr_A, "width") == 0)
 		{
-		   tmp_but->options |= STATE(OBIT_WIDTH_SPEC);
+		   tmp_but->flags |= STATE(OBIT_WIDTH_SPEC);
 		    tmp_but->c_width = atoi(tmpstr_C);
 		}
 		else if (strcmp(tmpstr_A, "key_span_width") == 0)
 		{
-		   tmp_but->options |= STATE(OBIT_WIDTH_SPEC);
+		   tmp_but->flags |= STATE(OBIT_WIDTH_SPEC);
 		   tmp_but->key_span_width = atoi(tmpstr_C);
 		}
 
@@ -650,9 +646,9 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
                 else if (strcmp(tmpstr_A, "obey_capslock") == 0)
 		{
 		  if (strcmp(tmpstr_C, "yes") == 0)
-		    tmp_but->options |= STATE(OBIT_OBEYCAPS);
+		    tmp_but->flags |= STATE(OBIT_OBEYCAPS);
 		  else if (strcmp(tmpstr_C, "no") == 0)
-		    tmp_but->options &= ~STATE(OBIT_OBEYCAPS);
+		    tmp_but->flags &= ~STATE(OBIT_OBEYCAPS);
 		  else
 		  {
 		    perror("invalid value for obey_capslock\n"); exit(1);
@@ -695,7 +691,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 	{
 	   button *b;
 	   b = (button *)ip->data;
-	   if (!(b->options & STATE(OBIT_WIDTH_SPEC)))
+	   if (!(b->flags & STATE(OBIT_WIDTH_SPEC)))
 	   {
 	      if ( ( DEFAULT_TXT(b) == NULL || (strlen(DEFAULT_TXT(b)) == 1))
 		   && (SHIFT_TXT(b) == NULL || (strlen(SHIFT_TXT(b)) == 1))
@@ -740,7 +736,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 	    {
 	      button *b;
 	      b = (button *)ip->data;
-	      if (!(b->options & STATE(OBIT_WIDTH_SPEC)))
+	      if (!(b->flags & STATE(OBIT_WIDTH_SPEC)))
 		{
 		  if ((DEFAULT_TXT(b) == NULL || (strlen(DEFAULT_TXT(b)) == 1))
 		      && (SHIFT_TXT(b) == NULL || (strlen(SHIFT_TXT(b)) == 1))
@@ -916,7 +912,7 @@ void kb_render(keyboard *kb)
 		list *ip = ((box *)listp->data)->root_kid;
 		while (ip != NULL) {
 			button *tmp_but = (button *)ip->data;
-			button_render(tmp_but, (tmp_but->modifier & kb->state_locked)?BUTTON_LOCKED:(tmp_but->modifier & kb->state)?BUTTON_PRESSED:BUTTON_RELEASED);
+			button_render(tmp_but, (tmp_but->modifier & kb->state_locked)?STATE(OBIT_LOCKED):(tmp_but->modifier & kb->state)?STATE(OBIT_PRESSED):0);
 			ip = ip->next;
 		}
 		listp = listp->next;
@@ -928,6 +924,24 @@ void kb_paint(keyboard *kb)
   XCopyArea(kb->display, kb->backing, kb->win, kb->gc,
 	    0, 0, kb->vbox->act_width, kb->vbox->act_height,
 	    kb->vbox->x, kb->vbox->y);
+}
+
+void _release(button *b){
+	button_render(b, 0);
+	button_paint(b);
+
+}
+
+void _press(button *b){
+#ifdef MULTITOUCH
+	if (b->modifier & (KB_STATE_KNOWN ^ STATE(KBIT_CAPS))) {
+		kb_process_keypress(b,0,STATE(OBIT_PRESSED));
+		return;
+	}
+#endif
+	button_render(b, STATE(OBIT_PRESSED));
+	button_paint(b);
+
 }
 
 button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Time time)
@@ -968,10 +982,7 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 		// [kick oldest] touch, start to track
 		if (T=times[t=0]) for (i=1; i<MAX_TOUCH; i++) if (T>times[i] && !(T=times[t=i])) break;
 #endif
-		if (but[t]) {
-			button_render(but[t], BUTTON_RELEASED);
-			button_paint(but[t]);
-		}
+		if (but[t]) _release(but[t]);
 		but[t] = b;
 		touchid[t] = ptr;
 		times[t] = time;
@@ -980,8 +991,7 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 #ifdef SIBLINGS
 		nsib[t] = -1;
 #endif
-		button_render(b, BUTTON_PRESSED);
-		button_paint(b);
+		_press(b);
 		return b;
 	}
 
@@ -1054,10 +1064,8 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 			}
 			if (b1) {
 				if (b1!=but[t]) {
-					button_render(b1, BUTTON_PRESSED);
-					button_paint(b1);
-					button_render(but[t], BUTTON_RELEASED);
-					button_paint(but[t]);
+					_release(b1);
+					_press(but[t]);
 				}
 				b = b1;
 			} else { // multiple: can draw whole set or nothing
@@ -1065,16 +1073,12 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 #if 0
 				// incomplete. need to release
 				for(i=0; i<n; i++){
-					button_render(sib[t][i], BUTTON_PRESSED);
-					button_paint(sib[t][i]);
+					_press(sib[t][i]);
 					if (sib[t][i]==b1) b1 = NULL;
 				}
 				if (b1)
 #endif
-				{
-					button_render(b1, BUTTON_RELEASED);
-					button_paint(b1);
-				}
+					_release(b1);
 			}
 			but[t]=b;
 		} else if (b) { // NULL -> button: new siblings base list
@@ -1099,13 +1103,12 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 #ifdef SLIDES
 	kb_set_slide(b, x, y );
 #endif
-	kb_process_keypress(b,0);
+	kb_process_keypress(b,0,0);
 	if (b->modifier || b->layout_switch > -1) but[t] = NULL;
 drop:
 	if (b=but[t]) {
 		but[t] = NULL;
-		button_render(b, BUTTON_RELEASED);
-		button_paint(b);
+		_release(b);
 #ifdef SLIDES
 		b->slide = 0;
 #endif
@@ -1160,68 +1163,84 @@ Bool kb_do_repeat(keyboard *kb, button *b)
   if ((delay && timer == kb->key_repeat1)
       || (!delay && timer == kb->key_delay_repeat1))
     {
-      kb_process_keypress(b, 1);
+      kb_process_keypress(b, 1,0);
       timer = 0;
       delay = True;
     }
     return True;
 }
 
-void kb_process_keypress(button *b, int repeat)
+static unsigned int state_used = 0;
+void kb_process_keypress(button *b, int repeat, unsigned int press)
 {
     keyboard *kb = b->kb;
     unsigned int state = kb->state;
     unsigned int lock = kb->state_locked;
     const unsigned int mod = b->modifier;
     int keypress = 1;
+    int st;
 #ifndef MINIMAL
     Display *dpy = kb->display;
 #endif
 
-    DBG("got release state %i %i %i %i \n", new_state, STATE(KBIT_SHIFT), STATE(KBIT_MOD), STATE(KBIT_CTRL) );
+    DBG("got release state %i %i %i %i \n", state, STATE(KBIT_SHIFT), STATE(KBIT_MOD), STATE(KBIT_CTRL) );
 
     if (repeat) {
-    } else if (mod & STATE(KBIT_CAPS)) {
-	state ^= STATE(KBIT_CAPS);
-	lock ^= STATE(KBIT_CAPS);
-	DBG("got caps key - %i \n", state);
-	keypress = Xkb_sync;
     } else if (mod) {
-	keypress = Xkb_sync;
-	if (lock & mod) {
+//	keypress = Xkb_sync;
+	keypress = 0;
+	if (press & STATE(OBIT_PRESSED)){
+//		if (keypress == 0)
+			b->flags |= STATE(OBIT_PRESSED);
+		if ((lock|state) & mod) state_used |= mod;
+		else state_used &= ~mod;
+		lock |= mod;
+		state |= mod;
+	} else if (b->flags & STATE(OBIT_PRESSED)) {
+//		if (keypress == 0)
+			b->flags ^= STATE(OBIT_PRESSED);
+		lock &= ~mod;
+		if (state_used & mod) state &= ~mod;
+		state_used &= ~mod;
+	} else if (lock & mod) {
 		lock ^= mod;
 		state ^= mod;
-		keypress = 0;
+//		keypress = 0;
 	} else if (!(state & mod)) {
-		state ^= mod;
+		state |= mod;
+		if (mod & STATE(KBIT_CAPS)) lock |= mod;
 	} else if (no_lock) {
 		state ^= mod;
-		keypress = 0;
+//		keypress = 0;
 	} else {
 		lock ^= mod;
-		keypress = 0;
+//		keypress = 0;
 	}
-
 	DBG("got a modifier key - %i \n", state);
-    } else if (state & ~STATE(KBIT_CAPS)) {
-	/* check if the kbd is already in a state and reset it
-	   leaving caps key state alone */
-	state = (state & STATE(KBIT_CAPS))|lock;
-	DBG("kbd is shifted, unshifting - %i \n", kb->state);
+    } else {
+	state_used |= state|lock;
+	state = lock;
+	DBG("kbd is shifted, unshifting - %i \n", state);
     }
+
+    st = (state|lock) & KB_STATE_KNOWN;
 
     if (keypress) {
-	kb_send_keypress(b, lock);
+	fprintf(stderr,"");
+	kb_send_keypress(b, st, press);
 	DBG("%s clicked \n", DEFAULT_TXT(b));
     }
-
     if (state != kb->state || lock != kb->state_locked) {
 #ifndef MINIMAL
 	if (Xkb_sync) {
-		XSync(dpy,False); // serialize
-		if (state != kb->state) XkbLatchModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,(state|lock) & KB_STATE_KNOWN);
-		if (lock != kb->state_locked) XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,(state|lock) & KB_STATE_KNOWN);
-		XSync(dpy,True); // reduce events
+		if (st != kb->state|kb->state_locked) {
+			XSync(dpy,False); // serialize
+			XkbLatchModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,st);
+			XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,st);
+			XSync(dpy,True); // reduce events
+		}
+//		if ((state^kb->state)&KB_STATE_KNOWN) XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,state & KB_STATE_KNOWN);
+//		if ((lock^kb->state_locked)&KB_STATE_KNOWN) XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,lock & KB_STATE_KNOWN);
 	}
 #endif
 	kb->state = state;
@@ -1231,7 +1250,7 @@ void kb_process_keypress(button *b, int repeat)
    }
    if (b->layout_switch>-1) {
 #ifndef MINIMAL
-	if (Xkb_sync && b->layout_switch>-1) {
+	if (Xkb_sync) {
 		XSync(dpy,False);
 		XkbLockGroup(dpy, XkbUseCoreKbd, b->layout_switch);
 		XSync(dpy,True);
@@ -1248,7 +1267,7 @@ void kb_process_keypress(button *b, int repeat)
 #endif
 
 static int saved_mods = 0;
-void kb_send_keypress(button *b, unsigned int next_state) {
+void kb_send_keypress(button *b, unsigned int next_state, unsigned int press) {
 	unsigned int l = KBLEVEL(b);
 	unsigned int mods = b->mods[l];
 	Display *dpy = b->kb->display;
@@ -1278,7 +1297,6 @@ void kb_send_keypress(button *b, unsigned int next_state) {
 	}
 #endif
 
-	next_state &= KB_STATE_KNOWN;
 #ifndef MINIMAL
 	if (!Xkb_sync) 
 #endif
@@ -1289,18 +1307,25 @@ void kb_send_keypress(button *b, unsigned int next_state) {
 	
 	if (b->kc[l]<minkc || b->kc[l]>maxkc) return;
 	if ((mods0 ^ mods) & STATE(KBIT_CAPS)) mods ^= STATE(KBIT_CAPS)|STATE(KBIT_SHIFT);
+//	if ((mods0 ^ mods) & STATE(KBIT_MOD)) mods ^= STATE(KBIT_MOD)|STATE(KBIT_ALT);
 	_xsync(False);
 	if (mods != mods0) {
-			XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,mods);
-			_xsync(True);
+		XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,mods);
+		_xsync(True);
 	} else mods = b->kb->state;
-	XTestFakeKeyEvent(b->kb->display, b->kc[l], True, 0);
-	_xsync(True);
-	XTestFakeKeyEvent(b->kb->display, b->kc[l], False, 0);
-	_xsync(True);
+	if (!(b->flags & STATE(OBIT_PRESSED))) {
+		XTestFakeKeyEvent(b->kb->display, b->kc[l], True, 0);
+		_xsync(True);
+		b->flags |= STATE(OBIT_PRESSED);
+	}
+	if (!(press & STATE(OBIT_PRESSED))) {
+		XTestFakeKeyEvent(b->kb->display, b->kc[l], False, 0);
+		_xsync(True);
+		b->flags &= ~STATE(OBIT_PRESSED);
+	}
 	if (mods != next_state && next_state == mods0) {
-			XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,mods0 & KB_STATE_KNOWN);
-			_xsync(True);
+		XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,mods0);
+		_xsync(True);
 	}
 }
 
@@ -1328,7 +1353,7 @@ button * kb_find_button(keyboard *kb, int x, int y)
 //			if (y<i) break;
 //			if (y>i+tmp_but->act_height) continue;
 			/* if pressed invariant/border - check buttons are identical */
-			if (but && memcmp(but,tmp_but,(char*)&but->options - (char*)&but->ks) + sizeof(but->options)) return NULL;
+			if (but && memcmp(but,tmp_but,(char*)&but->flags - (char*)&but->ks) + sizeof(but->flags)) return NULL;
 			but = tmp_but;
 		}
 	}
