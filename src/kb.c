@@ -100,6 +100,7 @@ void button_update(button *b) {
 	int n;
 	char *txt;
 	KeySym ks, ks1;
+	KeyCode kc;
 	unsigned int m;
 
 	for(l=0; l<LEVELS; l++) {
@@ -122,10 +123,10 @@ void button_update(button *b) {
 		if (!ks) continue;
 		ks1=ks;
 		b->mods[l]=m;
-		b->kc[l]=XKeysymToKeycode(dpy,ks);
-		if (!XkbLookupKeySym(dpy,b->kc[l],m,0,&ks1) || ks1!=ks){
+		b->kc[l]=kc=XKeysymToKeycode(dpy,ks);
+		if (!XkbLookupKeySym(dpy,kc,m,0,&ks1) || ks1!=ks){
 			for(l1=0; l1<4; l1++) if ((m=mods[l1])!=b->mods[l]) {
-				if (XkbLookupKeySym(dpy,b->kc[l],m,0,&ks1) && ks1==ks) {
+				if (XkbLookupKeySym(dpy,kc,m,0,&ks1) && ks1==ks) {
 					b->mods[l]=m;
 					break;
 				}
@@ -372,11 +373,12 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 
   kb_load_keymap(display);
 
-  if ((rcfp = fopen(conf_file, "r")) == NULL)
-    {
+  if (!strcmp(conf_file,"-")) {
+     rcfp = stdin;
+  } else if ((rcfp = fopen(conf_file, "r")) == NULL) {
       fprintf(stderr, "xkbd: Cant open conf file: %s\n", conf_file);
       exit(1);
-    }
+  }
 
   context = none;
 

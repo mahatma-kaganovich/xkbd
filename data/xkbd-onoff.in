@@ -4,6 +4,4 @@
 f="$HOME/.cache/xkbd.conf"
 # around bug in configuring keyboard over xkb.conf
 setxkbmap
-c="$(xkbd-config)"
-[ "$c" = "$(< "$f")" ] || echo "$c" >"$f"
-exec xkbd -X -l -D 22 -k "$f" -e $0 --nokill
+exec xkbd -X -l -D 22 -k <(xkbd-config) -e $0 --nokill
