@@ -305,7 +305,7 @@ void button_render(button *b, int mode)
   y = button_get_abs_y(b) - b->kb->vbox->y;
 
 //  b->flags = (b->flags & ~(STATE(OBIT_PRESSED)|STATE(OBIT_LOCKED)|BUTTON_RELEASED))|mode;
-  if (mode == STATE(OBIT_PRESSED))
+  if (mode & STATE(OBIT_PRESSED))
     {
       gc_solid = b->fg_gc;
       gc_txt   = b->kb->txt_gc;
@@ -313,7 +313,7 @@ void button_render(button *b, int mode)
       tmp_col  = b->kb->color_bg;
 #endif
     }
-  else if(mode == STATE(OBIT_LOCKED))
+  else if(mode & STATE(OBIT_LOCKED))
     {
       gc_solid = b->fg_gc;
       gc_txt   = b->kb->txt_rev_gc;

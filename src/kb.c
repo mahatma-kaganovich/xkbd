@@ -927,19 +927,26 @@ void kb_paint(keyboard *kb)
 }
 
 void _release(button *b){
+#ifdef MULTITOUCH
+	if (b->flags & STATE(OBIT_PRESSED)) {
+		kb_process_keypress(b,0,STATE(OBIT_UGLY));
+		return;
+	}
+#endif
 	button_render(b, 0);
 	button_paint(b);
 
 }
 
-void _press(button *b){
+void _press(button *b, unsigned int flags){
+	flags |= STATE(OBIT_PRESSED);
 #ifdef MULTITOUCH
 	if (b->modifier & (KB_STATE_KNOWN ^ STATE(KBIT_CAPS))) {
-		kb_process_keypress(b,0,STATE(OBIT_PRESSED));
+		kb_process_keypress(b,0,flags);
 		return;
 	}
 #endif
-	button_render(b, STATE(OBIT_PRESSED));
+	button_render(b, flags);
 	button_paint(b);
 
 }
@@ -991,7 +998,7 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 #ifdef SIBLINGS
 		nsib[t] = -1;
 #endif
-		_press(b);
+		_press(b,0);
 		return b;
 	}
 
@@ -1065,7 +1072,7 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 			if (b1) {
 				if (b1!=but[t]) {
 					_release(b1);
-					_press(but[t]);
+					_press(but[t],STATE(OBIT_UGLY));
 				}
 				b = b1;
 			} else { // multiple: can draw whole set or nothing
@@ -1073,7 +1080,7 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 #if 0
 				// incomplete. need to release
 				for(i=0; i<n; i++){
-					_press(sib[t][i]);
+					_press(sib[t][i],STATE(OBIT_UGLY));
 					if (sib[t][i]==b1) b1 = NULL;
 				}
 				if (b1)
@@ -1171,7 +1178,7 @@ Bool kb_do_repeat(keyboard *kb, button *b)
 }
 
 static unsigned int state_used = 0;
-void kb_process_keypress(button *b, int repeat, unsigned int press)
+void kb_process_keypress(button *b, int repeat, unsigned int flags)
 {
     keyboard *kb = b->kb;
     unsigned int state = kb->state;
@@ -1187,39 +1194,45 @@ void kb_process_keypress(button *b, int repeat, unsigned int press)
 
     if (repeat) {
     } else if (mod) {
-//	keypress = Xkb_sync;
 	keypress = 0;
-	if (press & STATE(OBIT_PRESSED)){
-//		if (!keypress)
-			b->flags |= STATE(OBIT_PRESSED);
+	if (flags & STATE(OBIT_PRESSED)){
+		b->flags |= flags;
 		if ((lock|state) & mod) state_used |= mod;
 		else state_used &= ~mod;
 		if (no_lock || ~(state|lock) & mod) {
 			lock |= mod;
 			state |= mod;
 		}
+	} else if ((flags|b->flags) & STATE(OBIT_UGLY)){
+		b->flags &= ~(STATE(OBIT_PRESSED)|STATE(OBIT_UGLY));
+		state &= ~mod;
+		lock &= ~mod;
+		state_used &= ~mod;
 	} else if (b->flags & STATE(OBIT_PRESSED)) {
-//		if (!keypress)
-			b->flags ^= STATE(OBIT_PRESSED);
-		if (state_used & mod) {
+		if ((flags|b->flags) & STATE(OBIT_UGLY)) {
+			b->flags &= ~(STATE(OBIT_PRESSED)|STATE(OBIT_UGLY));
 			state &= ~mod;
+			lock &= ~mod;
 			state_used &= ~mod;
+		} else {
+			b->flags &= ~STATE(OBIT_PRESSED);
+			if (state_used & mod) {
+				state &= ~mod;
+				state_used &= ~mod;
+			}
+			if (no_lock) lock &= ~mod;
+			else lock ^= mod;
 		}
-		if (no_lock) lock &= ~mod;
-		else lock ^= mod;
 	} else if (lock & mod) {
 		lock ^= mod;
 		state ^= mod;
-//		keypress = 0;
 	} else if (!(state & mod)) {
 		state |= mod;
 		if (mod & STATE(KBIT_CAPS)) lock |= mod;
 	} else if (no_lock) {
 		state ^= mod;
-//		keypress = 0;
 	} else {
 		lock ^= mod;
-//		keypress = 0;
 	}
 	DBG("got a modifier key - %i \n", state);
     } else {
@@ -1232,7 +1245,7 @@ void kb_process_keypress(button *b, int repeat, unsigned int press)
 
     if (keypress) {
 	fprintf(stderr,"");
-	kb_send_keypress(b, st, press);
+	kb_send_keypress(b, st, flags);
 	DBG("%s clicked \n", DEFAULT_TXT(b));
     }
     if (state != kb->state || lock != kb->state_locked) {
@@ -1270,7 +1283,7 @@ void kb_process_keypress(button *b, int repeat, unsigned int press)
 #endif
 
 static int saved_mods = 0;
-void kb_send_keypress(button *b, unsigned int next_state, unsigned int press) {
+void kb_send_keypress(button *b, unsigned int next_state, unsigned int flags) {
 	unsigned int l = KBLEVEL(b);
 	unsigned int mods = b->mods[l];
 	Display *dpy = b->kb->display;
@@ -1321,7 +1334,7 @@ void kb_send_keypress(button *b, unsigned int next_state, unsigned int press) {
 		_xsync(True);
 		b->flags |= STATE(OBIT_PRESSED);
 	}
-	if (!(press & STATE(OBIT_PRESSED))) {
+	if (!(flags & STATE(OBIT_PRESSED))) {
 		XTestFakeKeyEvent(b->kb->display, b->kc[l], False, 0);
 		_xsync(True);
 		b->flags &= ~STATE(OBIT_PRESSED);
