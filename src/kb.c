@@ -1238,14 +1238,12 @@ void kb_process_keypress(button *b, int repeat, unsigned int press)
     if (state != kb->state || lock != kb->state_locked) {
 #ifndef MINIMAL
 	if (Xkb_sync) {
-		if (st != kb->state|kb->state_locked) {
-			XSync(dpy,False); // serialize
-			XkbLatchModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,st);
-			XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,st);
-			XSync(dpy,True); // reduce events
-		}
-//		if ((state^kb->state)&KB_STATE_KNOWN) XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,state & KB_STATE_KNOWN);
-//		if ((lock^kb->state_locked)&KB_STATE_KNOWN) XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,lock & KB_STATE_KNOWN);
+		XSync(dpy,False); // serialize
+		if (st != kb->state & KB_STATE_KNOWN) XkbLatchModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,st);
+		if (st != kb->state_locked & KB_STATE_KNOWN) XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,st);
+//		if ((state^kb->state ^ state)&KB_STATE_KNOWN) XkbLatchModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,state & KB_STATE_KNOWN);
+//		if ((lock^kb->state_locked ^ lock)&KB_STATE_KNOWN) XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,lock & KB_STATE_KNOWN);
+		XSync(dpy,True); // reduce events
 	}
 #endif
 	kb->state = state;
