@@ -934,7 +934,7 @@ void _release(button *b){
 
 void _press(button *b){
 #ifdef MULTITOUCH
-	if (b->modifier & (KB_STATE_KNOWN ^ STATE(KBIT_CAPS)) && no_lock) {
+	if (b->modifier & (KB_STATE_KNOWN ^ STATE(KBIT_CAPS))) {
 		kb_process_keypress(b,0,STATE(OBIT_PRESSED));
 		return;
 	}
@@ -1190,18 +1190,23 @@ void kb_process_keypress(button *b, int repeat, unsigned int press)
 //	keypress = Xkb_sync;
 	keypress = 0;
 	if (press & STATE(OBIT_PRESSED)){
-//		if (keypress == 0)
+//		if (!keypress)
 			b->flags |= STATE(OBIT_PRESSED);
 		if ((lock|state) & mod) state_used |= mod;
 		else state_used &= ~mod;
-		lock |= mod;
-		state |= mod;
+		if (no_lock || ~(state|lock) & mod) {
+			lock |= mod;
+			state |= mod;
+		}
 	} else if (b->flags & STATE(OBIT_PRESSED)) {
-//		if (keypress == 0)
+//		if (!keypress)
 			b->flags ^= STATE(OBIT_PRESSED);
-		lock &= ~mod;
-		if (state_used & mod) state &= ~mod;
-		state_used &= ~mod;
+		if (state_used & mod) {
+			state &= ~mod;
+			state_used &= ~mod;
+		}
+		if (no_lock) lock &= ~mod;
+		else lock ^= mod;
 	} else if (lock & mod) {
 		lock ^= mod;
 		state ^= mod;
