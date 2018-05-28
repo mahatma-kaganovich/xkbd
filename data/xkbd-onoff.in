@@ -1,7 +1,6 @@
 #!/bin/bash
 
 [ "$1" != --nokill ] && killall -qw xkbd -u "$USER" && exit
-f="$HOME/.cache/xkbd.conf"
-# around bug in configuring keyboard over xkb.conf
+# around bug in configuring keyboard over xorg.conf
 setxkbmap
 exec xkbd -X -l -D 22 -k <(xkbd-config) -e $0 --nokill
