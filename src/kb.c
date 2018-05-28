@@ -1203,11 +1203,6 @@ void kb_process_keypress(button *b, int repeat, unsigned int flags)
 			lock |= mod;
 			state |= mod;
 		}
-	} else if ((flags|b->flags) & STATE(OBIT_UGLY)){
-		b->flags &= ~(STATE(OBIT_PRESSED)|STATE(OBIT_UGLY));
-		state &= ~mod;
-		lock &= ~mod;
-		state_used &= ~mod;
 	} else if (b->flags & STATE(OBIT_PRESSED)) {
 		if ((flags|b->flags) & STATE(OBIT_UGLY)) {
 			b->flags &= ~(STATE(OBIT_PRESSED)|STATE(OBIT_UGLY));
