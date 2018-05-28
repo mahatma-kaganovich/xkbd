@@ -30,6 +30,7 @@
 #define OBIT_WIDTH_SPEC	1
 #define OBIT_PRESSED	2
 #define OBIT_LOCKED	3
+#define OBIT_UGLY	4
 
 #define KBIT_SHIFT	0
 #define KBIT_CAPS	1
