@@ -934,7 +934,7 @@ void _release(button *b){
 
 void _press(button *b){
 #ifdef MULTITOUCH
-	if (b->modifier & (KB_STATE_KNOWN ^ STATE(KBIT_CAPS))) {
+	if (b->modifier & (KB_STATE_KNOWN ^ STATE(KBIT_CAPS)) && no_lock) {
 		kb_process_keypress(b,0,STATE(OBIT_PRESSED));
 		return;
 	}
