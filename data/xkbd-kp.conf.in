@@ -349,7 +349,7 @@ repeat_time 0
 	</key>
 	<key>
 		default_ks KP_Insert
-		>mod_ks 0
+		mod_ks 0
 	</key>
 	<key>
 		default_ks KP_Delete

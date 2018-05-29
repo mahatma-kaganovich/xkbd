@@ -402,7 +402,7 @@ repeat_time 0
 	<key>
 		default_ks KP_Delete
 		mod_ks KP_Decimal
-		</key>
+	</key>
 	<key>
 		default_ks KP_Enter
 	</key>
