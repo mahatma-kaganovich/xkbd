@@ -29,7 +29,6 @@ int _XColorFromStr(Display *display, XColor *col, const char *defstr);
 char *button_set(char *txt);
 KeySym button_ks(char *txt);
 
-void button_set_layout(button *b, char *txt);
 void button_set_pixmap(button *b, char *txt);
 void button_set_txt_ks(button *b, char *txt);
 void button_set_slide_ks(button *b, char *txt, int dir);

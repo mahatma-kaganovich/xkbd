@@ -298,16 +298,17 @@ box *clone_box(Display *dpy, box *vbox, int group){
 			memcpy(b=malloc(sizeof(button)),ip->data,sizeof(button));
 			box_add_button(bx1,b);
 			// new layout
+			// in first look same code must be used to reconfigure 1 layout,
+			// but no way to verify levels still equal in other definition.
+			// this is paranoid case, but I keep restart way
+			if (group != 0)
 			for(l=0; l<LEVELS; l++) {
 				if (!(ks=b->ks[l]) || !b->txt[l] || (kc=b->kc[l])<minkc && kc>maxkc) continue;
-				for (i=0; i<10; i++) {
-				    if (XkbKeycodeToKeysym(dpy, kc, 0, i) == ks) {
-					if((ks1=XkbKeycodeToKeysym(dpy, kc, group, i)) && ks1!=ks) {
-						b->txt[l]=NULL;
-						ksText_(b->ks[l]=ks1,&b->txt[l]);
-					}
-					break;
-				    }
+				if (!(ks1=XkbKeycodeToKeysym(dpy, kc, 0, i=l&3)) || ks1 != ks)
+				    for (i=0; i<100 && (ks1=XkbKeycodeToKeysym(dpy, kc, 0, i)) && ks1 != ks; i++) {}
+				if (ks1 && ks1 == ks && (ks1=XkbKeycodeToKeysym(dpy, kc, group, i)) && ks1!=ks) {
+					b->txt[l]=NULL;
+					ksText_(b->ks[l]=ks1,&b->txt[l]);
 				}
 			}
 		}
@@ -598,9 +599,14 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		  DEFAULT_TXT(tmp_but) = button_set(tmpstr_C);
 		else if (strcmp(tmpstr_A, "shift") == 0)
 		  SHIFT_TXT(tmp_but) = button_set(tmpstr_C);
-		else if (strcmp(tmpstr_A, "switch") == 0)
-		  button_set_layout(tmp_but, tmpstr_C);
-		else if (strcmp(tmpstr_A, "mod") == 0)
+		else if (strcmp(tmpstr_A, "switch") == 0) {
+		  // -1 is default, but setting in config -> -2 & switch KeySym
+		  // to other keysym - set -2 & concrete default_ks
+		  if((tmp_but->layout_switch = atoi(tmpstr_C))==-1) {
+		    button_set_txt_ks(tmp_but, "ISO_Next_Group");
+		    tmp_but->layout_switch = -2;
+		  }
+		} else if (strcmp(tmpstr_A, "mod") == 0)
 		  MOD_TXT(tmp_but) = button_set(tmpstr_C);
 		else if (strcmp(tmpstr_A, "shift_mod") == 0)
 		  SHIFT_MOD_TXT(tmp_but) = button_set(tmpstr_C);
@@ -1260,7 +1266,8 @@ void kb_process_keypress(button *b, int repeat, unsigned int flags)
 	kb_render(kb);
 	kb_paint(kb);
    }
-   if (b->layout_switch>-1) {
+   if (b->layout_switch!=-1) {
+    if (b->layout_switch>-1) {
 #ifndef MINIMAL
 	if (Xkb_sync) {
 		XSync(dpy,False);
@@ -1269,6 +1276,11 @@ void kb_process_keypress(button *b, int repeat, unsigned int flags)
 	}
 #endif
 	kb_switch_layout(kb, b->layout_switch);
+    } else {
+        XkbStateRec s;
+	XkbGetState(dpy,XkbUseCoreKbd,&s);
+	kb_switch_layout(kb, s.group);
+    }
    }
 }
 

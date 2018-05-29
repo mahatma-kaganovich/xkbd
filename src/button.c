@@ -131,11 +131,6 @@ void button_set_pixmap(button *b, char *filename)
 }
 #endif
 
-void button_set_layout(button *b, char *txt)
-{
-  b->layout_switch = atoi(txt);
-}
-
 void button_set_txt_ks(button *b, char *txt)
 {
   if (strcmp(txt, "Caps_Lock") == 0 )

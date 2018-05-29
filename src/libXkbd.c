@@ -11,7 +11,7 @@ xkbd_realize(Display *display,
 	     int height,
 	     int flags)
 {
-   XkbStateRec Xkb_state[1] = {};
+   XkbStateRec Xkb_state;
    Xkbd *xkbd = malloc(sizeof(Xkbd));
 
    xkbd->kb = kb_new(dest, display, x, y,
