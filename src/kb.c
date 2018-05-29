@@ -108,7 +108,7 @@ void button_update(button *b) {
 		m = 0;
 		if (l<4) {
 			m = mods[l];
-			if (!ks && (ks = b->ks[l1=l&2]?:b->ks[l1=0])) {
+			if (!ks && (ks = b->ks[l&2]?:b->ks[0])) {
 				XkbTranslateKeySym(dpy,&ks,m,buf,1,&n);
 				b->ks[l] = ks;
 			}
@@ -119,6 +119,15 @@ void button_update(button *b) {
 #endif
 				b->txt[l] = txt;
 			}
+#ifdef SLIDERS
+		} else if (!ks && (ks = b->ks[l1=l&3])) {
+			b->ks[l]=ks;
+			b->kc[l]=b->kc[l1];
+			m = b->mods[l1];
+			if (!l1) m|=STATE(KBIT_CTRL);
+			b->mods[l]=m;
+			continue;
+#endif
 		}
 		if (!ks) continue;
 		ks1=ks;
@@ -301,7 +310,7 @@ box *clone_box(Display *dpy, box *vbox, int group){
 			// in first look same code must be used to reconfigure 1 layout,
 			// but no way to verify levels still equal in other definition.
 			// this is paranoid case, but I keep restart way
-			if (group != 0)
+			if (group)
 			for(l=0; l<LEVELS; l++) {
 				if (!(ks=b->ks[l]) || !b->txt[l] || (kc=b->kc[l])<minkc && kc>maxkc) continue;
 				if (!(ks1=XkbKeycodeToKeysym(dpy, kc, 0, i=l&3)) || ks1 != ks)
@@ -1292,19 +1301,14 @@ void kb_process_keypress(button *b, int repeat, unsigned int flags)
 
 static int saved_mods = 0;
 void kb_send_keypress(button *b, unsigned int next_state, unsigned int flags) {
+#ifdef SLIDES
+	unsigned int l = b->slide?:KBLEVEL(b);
+#else
 	unsigned int l = KBLEVEL(b);
+#endif
 	unsigned int mods = b->mods[l];
 	Display *dpy = b->kb->display;
 	unsigned int mods0 = b->kb->state_locked & KB_STATE_KNOWN;
-
-
-#ifdef SLIDES
-	if (b->slide || !GET_KS(b,b->slide)) { // 2do grok slides ;)
-	    l = b->slide & 3;
-	    mods = b->mods[l];
-	    if (!l) mods|=STATE(KBIT_CTRL);
-	}
-#endif
 
 #ifndef MINIMAL
 	if (!Xkb_sync) 
