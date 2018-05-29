@@ -185,8 +185,8 @@ typedef struct _button
 #define MOD_KS(b) GET_KS(b,2)
 #define SHIFT_MOD_KS(b) GET_KS(b,3)
 
-#define SLIDE_UP	4
-#define SLIDE_DOWN	5
+#define SLIDE_DOWN	4
+#define SLIDE_UP	5
 #define SLIDE_LEFT	6
 #define SLIDE_RIGHT	7
 

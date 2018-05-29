@@ -1300,24 +1300,9 @@ void kb_send_keypress(button *b, unsigned int next_state, unsigned int flags) {
 
 #ifdef SLIDES
 	if (b->slide || !GET_KS(b,b->slide)) { // 2do grok slides ;)
-	    unsigned int mods1 = 0;
-
-	    l = 0;
-	    switch (b->slide) {
-		case SLIDE_UP:{
-			if (b->kb->state & STATE(KBIT_SHIFT)) l = 1;
-			break;
-		}
-		case SLIDE_DOWN: {
-			if (b->kb->state & STATE(KBIT_CTRL)) mods1 ^= STATE(KBIT_CTRL);
-			break;
-		}
-		case SLIDE_LEFT: {
-			if (b->kb->state & STATE(KBIT_MOD)) l = 2;
-			break;
-		}
-	    }
-	    mods = b->mods[l] ^ mods1;
+	    l = b->slide & 3;
+	    mods = b->mods[l];
+	    if (!l) mods|=STATE(KBIT_CTRL);
 	}
 #endif
 
