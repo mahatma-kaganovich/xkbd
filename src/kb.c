@@ -140,7 +140,7 @@ void button_update(button *b) {
 			b->mods[l]=m;
 			continue;
 #endif
-		}
+		} else continue;
 		if (!(txt = b->txt[l])) {
 			for (l1 = 0; l1<l && !txt; l1++) if (ks == b->ks[l1]) txt = b->txt[l1];
 #ifndef MINIMAL
