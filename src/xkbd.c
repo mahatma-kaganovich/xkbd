@@ -124,10 +124,15 @@ void handle_sig(int sig)
    }
 }
 
+static int stopped = 0;
 void _reset(int sig){
-   XkbLockModifiers(display,XkbUseCoreKbd,0xffff,0);
-   XkbLatchModifiers(display,XkbUseCoreKbd,0xffff,0);
-   XkbLockGroup(display,XkbUseCoreKbd,0);
+	if (!stopped) {
+		stopped = sig;
+		XkbLockModifiers(display,XkbUseCoreKbd,0xffff,0);
+		XkbLatchModifiers(display,XkbUseCoreKbd,0xffff,0);
+		XkbLockGroup(display,XkbUseCoreKbd,0);
+	}
+	if (stopped) exit(1);
 }
 
 void version()
