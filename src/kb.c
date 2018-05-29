@@ -96,7 +96,6 @@ void button_update(button *b) {
 	int group = b->kb->total_layouts-1;
 	Display *dpy = b->kb->display;
 	char buf[1];
-	static const unsigned int mods[5] = {0,STATE(KBIT_SHIFT),STATE(KBIT_ALT),STATE(KBIT_SHIFT)|STATE(KBIT_ALT),STATE(KBIT_CTRL)|STATE(KBIT_ALT)};
 	int n;
 	char *txt;
 	KeySym ks, ks1;
@@ -106,25 +105,31 @@ void button_update(button *b) {
 	for(l=0; l<LEVELS; l++) {
 		ks = b->ks[l];
 		m = 0;
-		if (!ks && l && l<STD_LEVELS && b->ks[l1=b->ks[l&1]?l1&1:0] &&
+		if (!ks && l && l<STD_LEVELS && b->ks[l1= b->ks[l&~1] ? l&~1 : 0] &&
 		    (kc=b->kc[l1])>=minkc && kc<=maxkc &&
-		    (ks=XkbKeycodeToKeysym(dpy, kc, group, l))) {
+		    (ks=XkbKeycodeToKeysym(dpy, kc, group, l))
+		    ) {
 			b->kc[l]=kc;
-			b->mods[l]=m=mods[l];
+			b->mods[l]=m=MODS(l);
 			b->ks[l]=ks;
-			continue; // no more verify, believe in level
 		} else if (l<4) {
-			m = mods[l];
+			m = MODS(l);
 			if (!ks && (ks = b->ks[l&2]?:b->ks[0])) {
 				XkbTranslateKeySym(dpy,&ks,m,buf,1,&n);
 				b->ks[l] = ks;
 			}
-			if (!(txt = b->txt[l])) {
-				for (l1 = 0; l1<l && !txt; l1++) if (ks == b->ks[l1]) txt = b->txt[l1];
-#ifndef MINIMAL
-				ksText_(ks,&txt);
-#endif
-				b->txt[l] = txt;
+			if (ks) {
+				ks1=ks;
+				b->mods[l]=m;
+				b->kc[l]=kc=XKeysymToKeycode(dpy,ks);
+				if (!XkbLookupKeySym(dpy,kc,m,0,&ks1) || ks1!=ks){
+					for(l1=0; l1<STD_LEVELS; l1++) if ((m=MODS(l1))!=b->mods[l]) {
+						if (XkbLookupKeySym(dpy,kc,m,0,&ks1) && ks1==ks) {
+							b->mods[l]=m;
+							break;
+						}
+					}
+				}
 			}
 #ifdef SLIDERS
 		} else if (!ks && (ks = b->ks[l1=l&3])) {
@@ -136,18 +141,13 @@ void button_update(button *b) {
 			continue;
 #endif
 		}
-		if (!ks) continue;
-		ks1=ks;
-		b->mods[l]=m;
-		b->kc[l]=kc=XKeysymToKeycode(dpy,ks);
-		if (!XkbLookupKeySym(dpy,kc,m,0,&ks1) || ks1!=ks){
-			for(l1=0; l1<STD_LEVELS; l1++) if ((m=mods[l1])!=b->mods[l]) {
-				if (XkbLookupKeySym(dpy,kc,m,0,&ks1) && ks1==ks) {
-					b->mods[l]=m;
-					break;
-				}
-			}
-		}
+		if (!(txt = b->txt[l])) {
+			for (l1 = 0; l1<l && !txt; l1++) if (ks == b->ks[l1]) txt = b->txt[l1];
+#ifndef MINIMAL
+			ksText_(ks,&txt);
+#endif
+			b->txt[l] = txt;
+                }
 	}
 #if 0
 	unsigned int i ,j, p;

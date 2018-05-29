@@ -26,8 +26,10 @@
 #include <X11/Xft/Xft.h>
 #endif
 
-#define STD_LEVELS 4
-//#define STD_LEVELS 5
+//#define LEVEL_BITS 2
+#define LEVEL_BITS 3
+
+#define STD_LEVELS (1U<<LEVEL_BITS)
 
 #define OBIT_OBEYCAPS	0
 #define OBIT_WIDTH_SPEC	1
@@ -44,14 +46,23 @@
 
 #define STATE(b)	(1U<<b)
 #define BIT_MV(m,b,b2)	(((m) & STATE(b))>>(b-b2))
+#define BIT_MVL(m,b,b2)	(((m) & STATE(b))<<(b2-b))
 inline unsigned int LEVEL(unsigned int m, unsigned int o){
-#if STD_LEVELS == 5
-	return ((BIT_MV(m,KBIT_SHIFT,0)^(BIT_MV(m,KBIT_CAPS,0)&BIT_MV(o,OBIT_OBEYCAPS,0) ))|BIT_MV(m,KBIT_MOD,1)|(BIT_MV(m,KBIT_CTRL,2)&BIT_MV(m,KBIT_ALT,2)));
-#else
-//	return ((BIT_MV(m,KBIT_SHIFT,0)^(BIT_MV(m,KBIT_CAPS,0)&BIT_MV(o,OBIT_OBEYCAPS,0) ))|(BIT_MV(m,KBIT_MOD,1)^BIT_MV(m,KBIT_ALT,1)));
-	return ((BIT_MV(m,KBIT_SHIFT,0)^(BIT_MV(m,KBIT_CAPS,0)&BIT_MV(o,OBIT_OBEYCAPS,0) ))|BIT_MV(m,KBIT_MOD,1));
+//	return ((BIT_MV(m,KBIT_SHIFT,0)^(BIT_MV(m,KBIT_CAPS,0)&BIT_MV(o,OBIT_OBEYCAPS,0) ))|(BIT_MV(m,KBIT_MOD,1)^BIT_MV(m,KBIT_ALT,1)))
+	return ((BIT_MV(m,KBIT_SHIFT,0)^(BIT_MV(m,KBIT_CAPS,0)&BIT_MV(o,OBIT_OBEYCAPS,0) ))|BIT_MV(m,KBIT_MOD,1))
+#if LEVEL_BITS == 3
+		|(BIT_MV(m,KBIT_CTRL,2)&BIT_MV(m,KBIT_ALT,2))
 #endif
+	;
 }
+inline unsigned int MODS(unsigned int l){
+	return BIT_MVL(l,0,KBIT_SHIFT)|BIT_MVL(l,1,KBIT_ALT)
+#if LEVEL_BITS == 3
+		|(BIT_MVL(l,KBIT_CTRL,2)&BIT_MVL(l,2,KBIT_ALT));
+#endif
+		;
+}
+
 #define KBLEVEL(b)	LEVEL(b->kb->state|b->kb->state_locked,b->flags)
 #define KBDLEVEL(kb)	LEVEL(kb->state|kb->state_locked,0)
 
@@ -92,10 +103,13 @@ inline unsigned int LEVEL(unsigned int m, unsigned int o){
 #define MAX_SIBLINGS 127
 
 
+#define STD_LEVELS (1U<<LEVEL_BITS)
+
 #ifdef SLIDES
 #define LEVELS 8
 #else
 #define LEVELS STD_LEVELS
+
 #endif
 
 typedef struct _list

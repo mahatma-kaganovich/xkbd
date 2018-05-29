@@ -1,5 +1,9 @@
 #!/usr/bin/perl
 
+%tr1=(
+	'KP_Decimal'=>'decimalpoint',
+);
+
 $h='/usr/include/X11/keysymdef.h';
 $packed='__attribute__ ((__packed__))';
 
@@ -9,14 +13,38 @@ while(defined(my $s=<$F>)){
 	(@a=$s=~/^\#define XK_([a-zA-Z_0-9]+)\s+0x([0-9a-f]+)\s*\/\*\(U+([0-9A-F]{4,6}) (.*)\)\*\/\s*$/)||
 	(@a=$s=~/^\#define XK_([a-zA-Z_0-9]+)\s+0x([0-9a-f]+)\s*(\/\*\s*(.*)\s*\*\/)?\s*$/)||next;
 
-	(($u)=$a[2]=~/\s+U\+([A-Z0-9]{4})\s+/) || next;
-	$k{hex($i=$a[1])}=hex($u);
-	
+	$d=hex($i=$a[1]);
+	$kc{$a[0]}=$d;
+	(($u)=$a[2]=~/[ \(]U\+([A-Z0-9]{4})\s+/)||next;
+	$u=hex($u);
+	$k{$d}=$u;
 	$iu=~s/^0*//;
 	$i=(length($i)+1)>>1;
 	$ks_size=$i if($ks_size<$i)
 }
 close($F);
+
+sub ok{
+	for(@_) {
+		if(exists($kc{$_}) && exists($k{$kc{$_}})) {
+			$k{$kc}=$k{$kc{$_}};
+			return 1;
+		}
+	}
+}
+for(sort keys %kc){
+	exists($k{$kc{$_}}) && next;
+	$i=$_;
+	$kc=$kc{$_};
+	if (exists($tr1{$_})){
+		ok($tr1{$_}) && next
+	}
+	if($i=~s/^KP_//){
+		(ok($i)||ok(lc($i))) && next;
+	}
+	$un{$_}=$kc;
+}
+
 
 $KeySym = 'KeySym';
 $ks_size *= 8;
@@ -49,10 +77,15 @@ for $x (sort{$a<=>$b}keys %k){
 	$n++;
 }
 print "$n}\n" if($n!=-1);
-print "};
+
+print "};\n\/* No symbol:\n",map{"$_\n"}(sort{$un{$a}<=>$un{$b}}keys %un),"*/\n";
+
+
+print "
 
 #define ks2u_size $N
 ";
+
 
 print '
 

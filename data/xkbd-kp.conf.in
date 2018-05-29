@@ -349,10 +349,11 @@ repeat_time 0
 	</key>
 	<key>
 		default_ks KP_Insert
+		>mod_ks 0
 	</key>
 	<key>
 		default_ks KP_Delete
-		shift .
+		mod_ks KP_Decimal
 	</key>
 	<key>
 		default_ks KP_Enter

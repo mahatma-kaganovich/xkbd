@@ -114,7 +114,7 @@ repeat_time 0
 	</key>
 	<key>
 		default -
-		default_ks KP_Substract
+		default_ks KP_Subtract
 	</key>
 </row>
 <row>
@@ -401,9 +401,8 @@ repeat_time 0
 	</key>
 	<key>
 		default_ks KP_Delete
-		shift .
-		mod_ks .
-	</key>
+		mod_ks KP_Decimal
+		</key>
 	<key>
 		default_ks KP_Enter
 	</key>

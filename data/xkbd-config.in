@@ -62,7 +62,15 @@ sub key{
 				next;
 			}
 		}
-		$y=~s/^KP_//;
+		$y0=$y;
+		if ($y=~s/^KP_//) {
+			$ly=lc($y);
+			if (!exists($u{$y}) && exists($u{$ly})){
+				$y=$ly
+			} elsif ($y eq 'Decimal') {
+				$y='decimalpoint';
+			}
+		}
 		if(length($y)>1){
 		    if(exists($u{$y})){
 			$ks_bin && next;
@@ -84,7 +92,7 @@ sub key{
 				next;
 			}
 		    }
-		}elsif($ks_bin){
+		}elsif($ks_bin && $y0 eq $y){
 			next;
 		}
 		$s{$x}=$y if($y=~/\S/);
@@ -122,7 +130,7 @@ $k=~s/\s+$//gm;
 
 open F,'<','/usr/include/X11/keysymdef.h' or die $!;
 while(defined($s=<F>)){
-	my ($x,$y)=$s=~/^#define\s+XK_(\S+)\s+0x\S+\s*\/\*\s+U\+([0-9A-F]+)\s/gs or next;
+	my ($x,$y)=$s=~/^#define\s+XK_(\S+)\s+0x\S+\s*\/\*[ \(]U\+([0-9A-F]+)\s/gs or next;
 	$y=chr(hex($y));
 	$u{$x}=$y;
 }
