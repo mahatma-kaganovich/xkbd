@@ -26,8 +26,8 @@
 #include <X11/Xft/Xft.h>
 #endif
 
-//#define LEVEL_BITS 2
-#define LEVEL_BITS 3
+#define LEVEL_BITS 2
+//#define LEVEL_BITS 3
 
 #define STD_LEVELS (1U<<LEVEL_BITS)
 
