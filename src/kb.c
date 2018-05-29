@@ -245,6 +245,87 @@ int kb_load_keymap(Display *dpy) {
    return 0;
 }
 
+#ifdef USE_XFT
+#define _set_color_fg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,xc)
+void __set_color_fg(keyboard *kb, char *txt,GC *gc, XftColor *xc){
+	XRenderColor colortmp;
+#else
+#define _set_color_fg(kb,c,gc,xc)  __set_color_fg(kb,c,gc)
+void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
+#endif
+	XColor col;
+	Display *dpy = kb->display;
+	if (_XColorFromStr(dpy, &col, txt) == 0) {
+		perror("color allocation failed\n"); exit(1);
+	}
+#ifdef USE_XFT
+	if (xc && kb->render_type == xft) {
+		colortmp.red   = col.red;
+		colortmp.green = col.green;
+		colortmp.blue  = col.blue;
+		colortmp.alpha = 0xFFFF;
+		XftColorAllocValue(dpy,
+			DefaultVisual(dpy,DefaultScreen(dpy)),
+			DefaultColormap(dpy,DefaultScreen(dpy)),
+			&colortmp, xc);
+	} else
+#endif
+	{
+		if (gc && !*gc) *gc = _createGC(dpy, kb->win);
+		XSetForeground(dpy, *gc, col.pixel );
+	}
+}
+
+box *_clone_box(box *vbox){
+	box *b = malloc(sizeof(box));
+	memcpy(b,vbox,sizeof(box));
+	b->root_kid = b->tail_kid =NULL;
+	return b;
+}
+
+box *clone_box(Display *dpy, box *vbox, int group){
+	box *bx = _clone_box(vbox), *bx1;
+	list *listp, *ip;
+	box *tmp_box;
+	button *b;
+	int l,i;
+	KeySym ks,ks1;
+	KeyCode kc;
+
+	for(listp = vbox->root_kid; listp; listp = listp->next) {
+		box_add_box(bx, bx1=_clone_box((box *)listp->data));
+		for (ip = ((box *)listp->data)->root_kid; ip; ip = ip->next) {
+			memcpy(b=malloc(sizeof(button)),ip->data,sizeof(button));
+			box_add_button(bx1,b);
+			// new layout
+			for(l=0; l<LEVELS; l++) {
+				if (!(ks=b->ks[l]) || !b->txt[l] || (kc=b->kc[l])<minkc && kc>maxkc) continue;
+				for (i=0; i<10; i++) {
+				    if (XkbKeycodeToKeysym(dpy, kc, 0, i) == ks) {
+					if((ks1=XkbKeycodeToKeysym(dpy, kc, group, i)) && ks1!=ks) {
+						b->txt[l]=NULL;
+						ksText_(b->ks[l]=ks1,&b->txt[l]);
+					}
+					break;
+				    }
+				}
+			}
+		}
+	}
+	return bx;
+}
+
+void _simple_GC(keyboard *kb, GC *gc, int rev) {
+	Display *dpy = kb->display;
+	unsigned long b = BlackPixel(dpy, DefaultScreen(dpy));
+	unsigned long w = WhitePixel(dpy, DefaultScreen(dpy));
+
+	*gc = _createGC(dpy, kb->win);
+	XSetForeground(dpy, *gc, rev?w:b);
+	XSetBackground(dpy, *gc, rev?b:w);
+}
+
+
 keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		 int kb_width, int kb_height, char *conf_file,
 		 char *font_name, int font_is_xft)
@@ -287,35 +368,11 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
   cmp = DefaultColormap(display, DefaultScreen(display));
 
   /* create lots and lots of gc's */
-  kb->gc = _createGC(display, win);
-  XSetForeground(display, kb->gc,
-		 BlackPixel(display, DefaultScreen(display) ));
-  XSetBackground(display, kb->gc,
-		 WhitePixel(display, DefaultScreen(display) ));
-
-  kb->rev_gc = _createGC(display, win);
-  XSetForeground(display, kb->rev_gc,
-		 WhitePixel(display, DefaultScreen(display) ));
-  XSetBackground(display, kb->rev_gc,
-		 BlackPixel(display, DefaultScreen(display) ));
-
-  kb->txt_gc = _createGC(display, win);
-  XSetForeground(display, kb->txt_gc,
-		 BlackPixel(display, DefaultScreen(display) ));
-  XSetBackground(display, kb->txt_gc,
-		 WhitePixel(display, DefaultScreen(display) ));
-
-  kb->txt_rev_gc = _createGC(display, win);
-  XSetForeground(display, kb->txt_rev_gc,
-		 WhitePixel(display, DefaultScreen(display) ));
-  XSetBackground(display, kb->rev_gc,
-		 BlackPixel(display, DefaultScreen(display) ));
-
-  kb->bdr_gc = _createGC(display, win);
-  XSetForeground(display, kb->bdr_gc,
-		 BlackPixel(display, DefaultScreen(display) ));
-  XSetBackground(display, kb->bdr_gc,
-		 WhitePixel(display, DefaultScreen(display) ));
+  _simple_GC(kb,&kb->gc,0);
+  _simple_GC(kb,&kb->rev_gc,1);
+  _simple_GC(kb,&kb->txt_gc,0);
+  _simple_GC(kb,&kb->txt_rev_gc,1);
+  _simple_GC(kb,&kb->bdr_gc,0);
 
 #ifdef USE_XFT
   kb->render_type = xft;
@@ -505,32 +562,11 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		      kb->theme = plain;
 		  }
 		else if (strcmp(tmpstr_A, "col") == 0)
-		  {
-		    XColor col;
-		    if (_XColorFromStr(kb->display, &col, tmpstr_C) == 0)
-		      {
-			perror("color allocation failed\n"); exit(1);
-		      }
-		    XSetForeground(kb->display, kb->rev_gc, col.pixel );
-		  }
+		  _set_color_fg(kb,tmpstr_C,&kb->rev_gc,NULL);
 		else if (strcmp(tmpstr_A, "border_col") == 0)
-		  {
-		    XColor col;
-		    if (_XColorFromStr(kb->display, &col, tmpstr_C) == 0)
-		      {
-			perror("color allocation failed\n"); exit(1);
-		      }
-		    XSetForeground(kb->display, kb->bdr_gc, col.pixel );
-		  }
+		  _set_color_fg(kb,tmpstr_C,&kb->bdr_gc,NULL);
 		else if (strcmp(tmpstr_A, "down_col") == 0)
-		  {
-		    XColor col;
-		    if (_XColorFromStr(kb->display, &col, tmpstr_C) == 0)
-		      {
-			perror("color allocation failed\n"); exit(1);
-		      }
-		    XSetForeground(kb->display, kb->gc, col.pixel );
-		  }
+		  _set_color_fg(kb,tmpstr_C,&kb->gc,NULL);
 		else if (strcmp(tmpstr_A, "width") == 0)
 		  {
 		    /* TODO fix! seg's as kb->vbox does not yet exist
@@ -539,61 +575,21 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		    */
 		  }
 		else if (strcmp(tmpstr_A, "height") == 0)
-		  {
 		    /* TODO fix! seg's as kb->vbox does not yet exist
 		     if (!kb->vbox->act_height)
 			kb->vbox->act_height = atoi(tmpstr_C);
 		    */
-
                     height_tmp = atoi(tmpstr_C);
-		  }
 #ifdef SLIDES
 		else if (strcmp(tmpstr_A, "slide_margin") == 0)
-		  {
 		     kb->slide_margin = atoi(tmpstr_C);
-		  }
 #endif
 		else if (strcmp(tmpstr_A, "repeat_delay") == 0)
-		  {
 		     kb->key_delay_repeat = atoi(tmpstr_C);
-		  }
 		else if (strcmp(tmpstr_A, "repeat_time") == 0)
-		  {
 		     kb->key_repeat = atoi(tmpstr_C);
-		  }
-
 		else if (strcmp(tmpstr_A, "txt_col") == 0)
-		  {
-		    XColor col;
-		    if (_XColorFromStr(kb->display, &col, tmpstr_C) == 0)
-		      {
-			perror("color allocation failed\n"); exit(1);
-		      }
-#ifdef USE_XFT
-		    if (kb->render_type == oldskool)
-		      {
-#endif
-			XSetForeground(kb->display, kb->txt_gc, col.pixel );
-#ifdef USE_XFT
-		      }
-		    else
-		      {
-
-			colortmp.red   = col.red;
-			colortmp.green = col.green;
-			colortmp.blue  = col.blue;
-			colortmp.alpha = 0xFFFF;
-			XftColorAllocValue(display,
-					   DefaultVisual(display,
-						      DefaultScreen(display)),
-					   DefaultColormap(display,
-						      DefaultScreen(display)),
-					   &colortmp,
-					   &kb->color_fg);
-		      }
-#endif
-		  }
-
+		     _set_color_fg(kb,tmpstr_C,&kb->txt_gc,&kb->color_fg);
 		break;
 	      case rowdef: /* no rowdefs as yet */
 		break;
@@ -621,9 +617,9 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		  { button_set_pixmap(tmp_but, tmpstr_C); }
 #endif
 		else if (strcmp(tmpstr_A, "bg") == 0)
-		  { button_set_bg_col(tmp_but, tmpstr_C); }
+		  {tmp_but->bg_gc=NULL; _set_color_fg(kb,tmpstr_C,&tmp_but->bg_gc,NULL);}
 		else if (strcmp(tmpstr_A, "fg") == 0)
-		  { button_set_fg_col(tmp_but, tmpstr_C); }
+		  {tmp_but->fg_gc=NULL; _set_color_fg(kb,tmpstr_C,&tmp_but->fg_gc,NULL);}
 		else if (strcmp(tmpstr_A, "slide_up_ks") == 0)
 		  button_set_slide_ks(tmp_but, tmpstr_C, UP);
 		else if (strcmp(tmpstr_A, "slide_down_ks") == 0)
@@ -893,6 +889,9 @@ kb_switch_layout(keyboard *kb, int kbd_layout_num)
   int h = kb->vbox->act_height;
   int mw = kb->vbox->min_width;
   int mh = kb->vbox->min_height;
+
+  for(; kbd_layout_num >= kb->total_layouts; kb->total_layouts++)
+    kb->kbd_layouts[kb->total_layouts] = clone_box(kb->display,kb->kbd_layouts[0],kb->total_layouts);
 
   kb->vbox = kb->kbd_layouts[kb->group = kbd_layout_num];
 

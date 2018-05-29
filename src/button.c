@@ -91,33 +91,6 @@ int _XColorFromStr(Display *display, XColor *col, const char *defstr)
   }
 }
 
-
-void button_set_bg_col(button *b, char *txt)
-{
-  XColor col;
-  b->bg_gc = _createGC(b->kb->display, b->kb->win);
-  if (_XColorFromStr(b->kb->display, &col, txt) == 0)
-    {
-      perror("color allocation failed\n");
-      exit(1);
-    }
-  XSetForeground(b->kb->display, b->bg_gc, col.pixel );
-
-}
-
-void button_set_fg_col(button *b, char *txt)
-{
-  XColor col;
-  b->fg_gc = _createGC(b->kb->display, b->kb->win);
-  if (_XColorFromStr(b->kb->display, &col, txt) == 0)
-    {
-      perror("color allocation failed\n");
-      exit(1);
-    }
-  XSetForeground(b->kb->display, b->fg_gc, col.pixel );
-
-}
-
 #ifdef USE_XPM
 void button_set_pixmap(button *b, char *filename)
 {
