@@ -26,6 +26,9 @@
 #include <X11/Xft/Xft.h>
 #endif
 
+#define STD_LEVELS 4
+//#define STD_LEVELS 5
+
 #define OBIT_OBEYCAPS	0
 #define OBIT_WIDTH_SPEC	1
 #define OBIT_PRESSED	2
@@ -42,7 +45,12 @@
 #define STATE(b)	(1U<<b)
 #define BIT_MV(m,b,b2)	(((m) & STATE(b))>>(b-b2))
 inline unsigned int LEVEL(unsigned int m, unsigned int o){
-	return ((BIT_MV(m,KBIT_SHIFT,0)^(BIT_MV(m,KBIT_CAPS,0)&BIT_MV(o,OBIT_OBEYCAPS,0) ))|(BIT_MV(m,KBIT_MOD,1)^BIT_MV(m,KBIT_ALT,1)));
+#if STD_LEVELS == 5
+	return ((BIT_MV(m,KBIT_SHIFT,0)^(BIT_MV(m,KBIT_CAPS,0)&BIT_MV(o,OBIT_OBEYCAPS,0) ))|BIT_MV(m,KBIT_MOD,1)|(BIT_MV(m,KBIT_CTRL,2)&BIT_MV(m,KBIT_ALT,2)));
+#else
+//	return ((BIT_MV(m,KBIT_SHIFT,0)^(BIT_MV(m,KBIT_CAPS,0)&BIT_MV(o,OBIT_OBEYCAPS,0) ))|(BIT_MV(m,KBIT_MOD,1)^BIT_MV(m,KBIT_ALT,1)));
+	return ((BIT_MV(m,KBIT_SHIFT,0)^(BIT_MV(m,KBIT_CAPS,0)&BIT_MV(o,OBIT_OBEYCAPS,0) ))|BIT_MV(m,KBIT_MOD,1));
+#endif
 }
 #define KBLEVEL(b)	LEVEL(b->kb->state|b->kb->state_locked,b->flags)
 #define KBDLEVEL(kb)	LEVEL(kb->state|kb->state_locked,0)
@@ -83,10 +91,11 @@ inline unsigned int LEVEL(unsigned int m, unsigned int o){
 
 #define MAX_SIBLINGS 127
 
+
 #ifdef SLIDES
 #define LEVELS 8
 #else
-#define LEVELS 4
+#define LEVELS STD_LEVELS
 #endif
 
 typedef struct _list
@@ -168,7 +177,7 @@ typedef struct _button
   unsigned short nsiblings;
 #endif
 
-  char *txt[4];
+  char *txt[STD_LEVELS];
   KeySym ks[LEVELS];
 
 #define GET_TXT(b,i)	(b->txt[i])
