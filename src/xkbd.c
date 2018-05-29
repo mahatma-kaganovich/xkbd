@@ -124,6 +124,12 @@ void handle_sig(int sig)
    }
 }
 
+void _reset(int sig){
+   XkbLockModifiers(display,XkbUseCoreKbd,0xffff,0);
+   XkbLatchModifiers(display,XkbUseCoreKbd,0xffff,0);
+   XkbLockGroup(display,XkbUseCoreKbd,0);
+}
+
 void version()
 {
    printf("Version: %s \n", VERSION);
@@ -366,6 +372,9 @@ stop_argv:
 	      conf_file = DEFAULTCONFIG;
 	    }
 	}
+
+      _reset(0);
+      signal(SIGTERM, _reset);
 
       kb = xkbd_realize(display, win, conf_file, font_name, 0, 0,
 			wret, hret, cmd_xft_selected);

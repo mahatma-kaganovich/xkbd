@@ -109,8 +109,10 @@ void button_update(button *b) {
 		if (!ks && l && l<STD_LEVELS && b->ks[l1=b->ks[l&1]?l1&1:0] &&
 		    (kc=b->kc[l1])>=minkc && kc<=maxkc &&
 		    (ks=XkbKeycodeToKeysym(dpy, kc, group, l))) {
-			m = mods[l];
+			b->kc[l]=kc;
+			b->mods[l]=m=mods[l];
 			b->ks[l]=ks;
+			continue; // no more verify, believe in level
 		} else if (l<4) {
 			m = mods[l];
 			if (!ks && (ks = b->ks[l&2]?:b->ks[0])) {
