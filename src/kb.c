@@ -150,7 +150,8 @@ void button_update(button *b) {
 			    if (
 				!strncmp(txt,"XF86Switch_",n=11) ||
 				!strncmp(txt,"XF86_",n=5) ||
-				!strncmp(txt,"XF86",n=4)
+				!strncmp(txt,"XF86",n=4) ||
+				!strncmp(txt,"KP_",n=3)
 				) txt+=n;
 			}
 #endif

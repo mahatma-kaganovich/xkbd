@@ -25,7 +25,10 @@
 'Down'=>'↓',
 'Right'=>'→',
 'ISO_Next_Group'=>'grp',
-
+'Page_Up'=>'Pg↑',
+'Page_Down'=>'Pg↓',
+'Scroll_Lock'=>'SclLk',
+'Num_Lock'=>'NumLk',
 );
 
 $h='/usr/include/X11/keysymdef.h';
@@ -68,16 +71,18 @@ for(sort keys %kc){
 		if (exists($tr{$i})){
 			if(ok($tr{$i})){
 				delete($tr{$i});
-				next;
+				last;
 			}
 			$tr{$_}=$tr{$i} if($i ne $_);
 			$i=$i1;
 		}
 		if($i=~s/^KP_//){
-			(ok($i)||ok(lc($i))) && next;
+			(ok($i)||ok(lc($i))) && last;
 		}
 		$i=lc($i) if ($i eq $i0);
 	}
+	exists($k{$kc{$_}}) && next;
+	exists($tr{$_}) && next;
 	$un{$_}=$kc;
 }
 
