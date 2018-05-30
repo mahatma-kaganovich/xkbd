@@ -10,3 +10,5 @@ char *__ksText(KeySym ks){
 	ksText(ks,&s);
 	return s;
 }
+
+void ks2unicode_init();

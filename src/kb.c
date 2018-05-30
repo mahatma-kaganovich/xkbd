@@ -140,11 +140,19 @@ void button_update(button *b) {
 			b->mods[l]=m;
 			continue;
 #endif
-		} else continue;
-		if (!(txt = b->txt[l])) {
+		}
+		if (l<STD_LEVELS && !(txt = b->txt[l])) {
 			for (l1 = 0; l1<l && !txt; l1++) if (ks == b->ks[l1]) txt = b->txt[l1];
 #ifndef MINIMAL
 			ksText_(ks,&txt);
+			if (txt) {
+			    
+			    if (
+				!strncmp(txt,"XF86Switch_",n=11) ||
+				!strncmp(txt,"XF86_",n=5) ||
+				!strncmp(txt,"XF86",n=4)
+				) txt+=n;
+			}
 #endif
 			b->txt[l] = txt;
                 }
@@ -376,6 +384,10 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 
 #ifdef USE_XFT
   XRenderColor colortmp;
+#endif
+
+#ifndef MINIMAL
+  ks2unicode_init();
 #endif
 
   kb = calloc(1,sizeof(keyboard));

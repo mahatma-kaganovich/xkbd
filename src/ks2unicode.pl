@@ -1,7 +1,10 @@
 #!/usr/bin/perl
 
-%tr1=(
+%tr=(
 	'KP_Decimal'=>'decimalpoint',
+	'KP_Add'=>'plus',
+	'KP_Subtract'=>'minus',
+	'KP_Divide'=>'division',
 );
 
 $h='/usr/include/X11/keysymdef.h';
@@ -32,19 +35,30 @@ sub ok{
 		}
 	}
 }
+
 for(sort keys %kc){
 	exists($k{$kc{$_}}) && next;
 	$i=$_;
+	$i0='';
 	$kc=$kc{$_};
-	if (exists($tr1{$_})){
-		ok($tr1{$_}) && next
-	}
-	if($i=~s/^KP_//){
-		(ok($i)||ok(lc($i))) && next;
+
+	while($i0 ne $i) {
+		$i0=$i;
+		if (exists($tr{$i})){
+			if(ok($tr{$i})){
+				delete($tr{$i});
+				next;
+			}
+			$tr{$_}=$tr{$i} if($i ne $_);
+			$i=$i1;
+		}
+		if($i=~s/^KP_//){
+			(ok($i)||ok(lc($i))) && next;
+		}
+		$i=lc($i) if ($i eq $i0);
 	}
 	$un{$_}=$kc;
 }
-
 
 $KeySym = 'KeySym';
 $ks_size *= 8;
@@ -78,8 +92,11 @@ for $x (sort{$a<=>$b}keys %k){
 }
 print "$n}\n" if($n!=-1);
 
-print "};\n\/* No symbol:\n",map{"$_\n"}(sort{$un{$a}<=>$un{$b}}keys %un),"*/\n";
+print "};\n\/* No symbol:\n",(map{"$_\n"} sort{$un{$a}<=>$un{$b}}keys %un),"*/\n";
 
+print "static struct translator { char *s1,*s2; } translate[] = {\n",
+	(map{"{\"$_\",\"$tr{$_}\"},\n"} sort{$a cmp $b}keys %tr),
+	"};\n";
 
 print "
 
@@ -89,8 +106,17 @@ print "
 
 print '
 
-char ksText_buf[10];
+int cmp_str(const void *x1, const void *x2){
+	return strcmp(((struct translator *)x1)->s1,((struct translator *)x2)->s1);
+}
+
+void ks2unicode_init(){
+	qsort(translate,sizeof(translate)/sizeof(struct translator),sizeof(struct translator),cmp_str);
+}
+
+static char ksText_buf[10];
 static int n;
+static struct translator *tr;
 
 void ksText(KeySym ks, char **txt){
 	unsigned int wc;
@@ -99,6 +125,7 @@ void ksText(KeySym ks, char **txt){
 	int p2 = ks2u_size-1;
 	int p;
 	KeySym k;
+	struct translator tr1;
 
 	if (!ks || *txt) return;
 	if (ks > 0x01000000){
@@ -150,14 +177,18 @@ wide:
 	} else {
 		*txt=XKeysymToString(ks);
 		if (!*txt) n = sprintf(*txt = ksText_buf,"U+%04X",wc);
-		return;
+		goto tr;
 	}
 	ksText_buf[n]=0;
 	*txt = ksText_buf;
-	return;
+	goto tr;
 notfound:
 	*txt=XKeysymToString(ks);
 	if (!*txt) n = sprintf(*txt = ksText_buf,"?%lx",ks);
+tr:
+	tr1.s1 = *txt;
+	if(tr=bsearch(&tr1,translate,sizeof(translate)/sizeof(struct translator),sizeof(struct translator),cmp_str))
+		*txt = tr->s2;
 	return;
 }
 
@@ -166,6 +197,10 @@ int ksText_(KeySym ks, char **txt){
 	if (*txt == ksText_buf) {
 		n++;
 		memcpy(*txt = malloc(n), ksText_buf, n);
+		return 1;
+	} else if (tr && *txt == tr->s2) {
+		n = strlen(tr->s2)+1;
+		memcpy(*txt = malloc(n), tr->s2, n);
 		return 1;
 	}
 	return 0;
