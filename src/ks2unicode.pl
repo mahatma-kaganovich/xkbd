@@ -1,10 +1,31 @@
 #!/usr/bin/perl
 
 %tr=(
-	'KP_Decimal'=>'decimalpoint',
-	'KP_Add'=>'plus',
-	'KP_Subtract'=>'minus',
-	'KP_Divide'=>'division',
+'KP_Decimal'=>'decimalpoint',
+'KP_Add'=>'plus',
+'KP_Subtract'=>'minus',
+'KP_Divide'=>'division',
+
+'Escape'=>'Esc',
+'BackSpace'=>'BkSp',
+'Caps_Lock'=>'Caps',
+'Return'=>'Enter',
+'Shift_L'=>'Shift',
+'Shift_R'=>'Shift',
+'Control_L'=>'Ctrl',
+'Control_R'=>'Ctrl',
+'Super_L'=>'Super',
+'Super_R'=>'Super',
+'Hyper_L'=>'Hyper',
+'Hyper_R'=>'Hyper',
+'Alt_L'=>'Alt',
+'Alt_R'=>'Alt',
+'Up'=>'↑',
+'Left'=>'←',
+'Down'=>'↓',
+'Right'=>'→',
+'ISO_Next_Group'=>'grp',
+
 );
 
 $h='/usr/include/X11/keysymdef.h';
