@@ -993,8 +993,8 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 	int i,j;
 	Time T;
 
-	static uint32_t touchid[MAX_TOUCH] = {};
-	static button *but[MAX_TOUCH] = {};
+	static uint32_t touchid[MAX_TOUCH];
+	static button *but[MAX_TOUCH];
 	static Time times[MAX_TOUCH] = {};
 	static int X[MAX_TOUCH];
 	static int Y[MAX_TOUCH];
