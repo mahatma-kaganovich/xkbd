@@ -58,9 +58,9 @@ xkbd_repaint(Xkbd *xkbd)
    kb_paint(xkbd->kb);
 }
 
-void xkbd_process(Xkbd *xkbd, int type, int x, int y, uint32_t ptr, Time time)
+void xkbd_process(Xkbd *xkbd, int type, int x, int y, uint32_t ptr, int dev, Time time)
 {
-   xkbd->active_but = kb_handle_events(xkbd->kb, type, x, y, ptr, time);
+   xkbd->active_but = kb_handle_events(xkbd->kb, type, x, y, ptr, dev, time);
 }
 
 Bool xkbd_process_repeats(Xkbd *xkbd)

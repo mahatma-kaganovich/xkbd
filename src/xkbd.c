@@ -488,7 +488,7 @@ stop_argv:
 	    case ButtonRelease: type++;
 	    case MotionNotify: type++;
 	    case ButtonPress:
-		xkbd_process(kb, type, ev.xmotion.x, ev.xmotion.y, 0, ev.xmotion.time);
+		xkbd_process(kb, type, ev.xmotion.x, ev.xmotion.y, 0, 0, ev.xmotion.time);
 		break;
 	    case ClientMessage:
 		  if ((ev.xclient.message_type == wm_protocols[1])
@@ -523,12 +523,12 @@ stop_argv:
 			    case XI_TouchEnd: type++;
 			    case XI_TouchUpdate: type++;
 			    case XI_TouchBegin:
-				xkbd_process(kb, type, round(e->event_x), round(e->event_y), e->detail, e->time);
+				xkbd_process(kb, type, round(e->event_x), round(e->event_y), e->detail, e->sourceid, e->time);
 				break;
 			    case XI_ButtonRelease: type++;
 			    case XI_Motion: type++;
 			    case XI_ButtonPress:
-				xkbd_process(kb, type, round(e->event_x), round(e->event_y), e->detail, e->time);
+				xkbd_process(kb, type, round(e->event_x), round(e->event_y), e->detail, e->sourceid, e->time);
 				break;
 			}
 			XFreeEventData(display, &ev.xcookie);

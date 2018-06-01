@@ -26,8 +26,8 @@
 #include <X11/Xft/Xft.h>
 #endif
 
-#define LEVEL_BITS 2
-//#define LEVEL_BITS 3
+//#define LEVEL_BITS 2
+#define LEVEL_BITS 3
 
 #define STD_LEVELS (1U<<LEVEL_BITS)
 
@@ -95,10 +95,9 @@ inline unsigned int MODS(unsigned int l){
 #ifdef MULTITOUCH
 #define MAX_TOUCH 10
 #else
-#define MAX_TOUCH 1
+#define MAX_TOUCH 2
 #undef SIBLINGS
 #endif
-
 
 #define MAX_SIBLINGS 127
 

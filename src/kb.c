@@ -987,7 +987,7 @@ void _press(button *b, unsigned int flags){
 
 }
 
-button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Time time)
+button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int dev, Time time)
 {
 	button *b;
 	int i,j;
@@ -998,6 +998,7 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 	static Time times[MAX_TOUCH] = {};
 	static int X[MAX_TOUCH];
 	static int Y[MAX_TOUCH];
+	static int devid[MAX_TOUCH];
 #ifdef SIBLINGS
 	static button *sib[MAX_TOUCH][MAX_SIBLINGS];
 	static short nsib[MAX_TOUCH];
@@ -1007,7 +1008,7 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 	int t=-1;
 	// find touch
 	for (i=0; i<MAX_TOUCH; i++) {
-		if (touchid[i] == ptr) {
+		if (times[i] && touchid[i] == ptr && devid[i] == dev) {
 			// duplicate (I got BEGIN!)
 //			if (time == (T=times[i]) && x==X[i] && y==Y[i]) return but[i];
 			if (time<=times[i] && type!=2) return but[i];
@@ -1028,6 +1029,7 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 		if (but[t]) _release(but[t]);
 		but[t] = b;
 		touchid[t] = ptr;
+		devid[t] = dev;
 		times[t] = time;
 		X[t] = x;
 		Y[t] = y;
@@ -1107,8 +1109,8 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Tim
 			}
 			if (b1) {
 				if (b1!=but[t]) {
-					_release(b1);
-					_press(but[t],STATE(OBIT_UGLY));
+					_press(b1,STATE(OBIT_UGLY));
+					_release(but[t]);
 				}
 				b = b1;
 			} else { // multiple: can draw whole set or nothing
@@ -1156,7 +1158,6 @@ drop:
 		b->slide = 0;
 #endif
 	}
-	touchid[t] = 0;
 	times[t] = 0;
 	return NULL;
 }

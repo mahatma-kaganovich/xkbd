@@ -27,7 +27,7 @@ void kb_size(keyboard *kb);
 void kb_render(keyboard *kb);
 void kb_paint(keyboard *kb);
 void kb_destroy(keyboard *kb);
-button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, Time time);
+button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int dev, Time time);
 Bool kb_do_repeat(keyboard *kb, button *b);
 void kb_set_slide(button *b, int x, int y);
 void kb_process_keypress(button *b, int repeat, unsigned int press);
