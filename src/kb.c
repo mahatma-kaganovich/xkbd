@@ -994,21 +994,22 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 	Time T;
 
 	static uint32_t touchid[MAX_TOUCH];
-	static button *but[MAX_TOUCH];
-	static Time times[MAX_TOUCH] = {};
-	static int X[MAX_TOUCH];
-	static int Y[MAX_TOUCH];
 	static int devid[MAX_TOUCH];
+	static Time times[MAX_TOUCH];
+	static button *but[MAX_TOUCH];
+//	static int X[MAX_TOUCH];
+//	static int Y[MAX_TOUCH];
 #ifdef SIBLINGS
 	static button *sib[MAX_TOUCH][MAX_SIBLINGS];
 	static short nsib[MAX_TOUCH];
 #endif
-
 #ifdef MULTITOUCH
+	static int N=0;
 	int t=-1;
+
 	// find touch
-	for (i=0; i<MAX_TOUCH; i++) {
-		if (times[i] && touchid[i] == ptr && devid[i] == dev) {
+	for (i=0; i<N; i++) {
+		if (touchid[i] == ptr && devid[i] == dev) {
 			// duplicate (I got BEGIN!)
 //			if (time == (T=times[i]) && x==X[i] && y==Y[i]) return but[i];
 			if (time<=times[i] && type!=2) return but[i];
@@ -1023,16 +1024,26 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 		b = kb_find_button(kb,x,y);
 		if (!b) return NULL;
 #ifdef MULTITOUCH
-		// [kick oldest] touch, start to track
-		if (T=times[t=0]) for (i=1; i<MAX_TOUCH; i++) if (T>times[i] && !(T=times[t=i])) break;
+		t=N;
+		if (N==MAX_TOUCH) {
+			// touch overflow. kick oldest touch
+//			if (T=times[t=0]) for (i=1; i<MAX_TOUCH; i++) if (T>times[i]) T=times[t=i];
+#define _shift(x) memmove(&x[0],&x[1],sizeof(x)-sizeof(x[0]));
+			_shift(but);
+			_shift(touchid);
+			_shift(devid);
+			_shift(times);
+//			_shift(X);
+//			_shift(Y);
+		} else N++;
 #endif
 		if (but[t]) _release(but[t]);
 		but[t] = b;
 		touchid[t] = ptr;
 		devid[t] = dev;
 		times[t] = time;
-		X[t] = x;
-		Y[t] = y;
+//		X[t] = x;
+//		Y[t] = y;
 #ifdef SIBLINGS
 		nsib[t] = -1;
 #endif
@@ -1137,8 +1148,8 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 	if (type!=2){ // motion/to be continued
 	    if (b) {
 		times[t] = time;
-		X[t] = x;
-		Y[t] = y;
+//		X[t] = x;
+//		Y[t] = y;
 	    }
 	    return b;
 	}
@@ -1158,7 +1169,17 @@ drop:
 		b->slide = 0;
 #endif
 	}
-	times[t] = 0;
+	if (N && t<--N) {
+		but[t] = but[N];
+		touchid[t] = touchid[N];
+		devid[t] = devid[N];
+		times[t] = times[N];
+//		X[t] = X[N];
+//		Y[t] = Y[N];
+#ifdef SIBLINGS
+		nsib[t] = nsib[N];
+#endif
+	}
 	return NULL;
 }
 
