@@ -1024,7 +1024,6 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 		b = kb_find_button(kb,x,y);
 		if (!b) return NULL;
 #ifdef MULTITOUCH
-		t=N;
 		if (N==MAX_TOUCH) {
 			// touch overflow. kick oldest touch
 //			if (T=times[t=0]) for (i=1; i<MAX_TOUCH; i++) if (T>times[i]) T=times[t=i];
@@ -1036,6 +1035,7 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 //			_shift(X);
 //			_shift(Y);
 		} else N++;
+		t=N-1;
 #endif
 		if (but[t]) _release(but[t]);
 		but[t] = b;
