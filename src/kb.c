@@ -106,11 +106,11 @@ void button_update(button *b) {
 		ks = b->ks[l];
 		m = 0;
 		if (!ks && l && l<STD_LEVELS && (
-		    ( (l1=l&~1U) && b->ks[l1] &&
+		    ( (l1=l&~1U) && l1!=l && b->ks[l1] &&
 			(kc=b->kc[l1])>=minkc && kc<=maxkc &&
 			(ks=XkbKeycodeToKeysym(dpy, kc, group, l))
 		    ) ||
-		    ( l1!=(l1=l&~3U) && l1 && b->ks[l1] &&
+		    ( l1!=(l1=l&~3U) && l1 && l1!=l && b->ks[l1] &&
 			(kc=b->kc[l1])>=minkc && kc<=maxkc &&
 			(ks=XkbKeycodeToKeysym(dpy, kc, group, l))
 		    ) ||
