@@ -95,7 +95,13 @@ inline unsigned int MODS(unsigned int l){
 #endif
 
 #ifdef MULTITOUCH
+#ifdef SIBLINGS
+// less RAM
 #define MAX_TOUCH 10
+#else
+// fast
+#define MAX_TOUCH 16
+#endif
 #else
 #define MAX_TOUCH 1
 #undef SIBLINGS
