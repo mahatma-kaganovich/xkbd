@@ -105,10 +105,26 @@ void button_update(button *b) {
 	for(l=0; l<LEVELS; l++) {
 		ks = b->ks[l];
 		m = 0;
-		if (!ks && l && l<STD_LEVELS && b->ks[l1= b->ks[l&~1] ? l&~1 : 0] &&
-		    (kc=b->kc[l1])>=minkc && kc<=maxkc &&
-		    (ks=XkbKeycodeToKeysym(dpy, kc, group, l))
-		    ) {
+		if (!ks && l && l<STD_LEVELS &&
+		    ( (l1=l&~1U) &&
+			b->ks[l1] &&
+			(kc=b->kc[l1])>=minkc && kc<=maxkc &&
+			(ks=XkbKeycodeToKeysym(dpy, kc, group, l))
+		    ) ||
+		    ( l1!=(l1=l&~3U) &&
+			b->ks[l1] &&
+			(kc=b->kc[l1])>=minkc && kc<=maxkc &&
+			(ks=XkbKeycodeToKeysym(dpy, kc, group, l))
+		    ) ||
+		    ( b->ks[l1=0] &&
+			(kc=b->kc[l1])>=minkc && kc<=maxkc &&
+			(ks=XkbKeycodeToKeysym(dpy, kc, group, l))
+		    ) ||
+		    ( l>3 && b->ks[l1=2] &&
+			(kc=b->kc[l1])>=minkc && kc<=maxkc &&
+			(ks=XkbKeycodeToKeysym(dpy, kc, group, l))
+		    )
+		) {
 			b->kc[l]=kc;
 			b->mods[l]=m=MODS(l);
 			b->ks[l]=ks;
@@ -146,7 +162,6 @@ void button_update(button *b) {
 #ifndef MINIMAL
 			ksText_(ks,&txt);
 			if (txt) {
-			    
 			    if (
 				!strncmp(txt,"XF86Switch_",n=11) ||
 				!strncmp(txt,"XF86_",n=5) ||
@@ -990,7 +1005,7 @@ void _press(button *b, unsigned int flags){
 button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int dev, Time time)
 {
 	button *b;
-	int i,j;
+	unsigned int i,j;
 	Time T;
 
 	static uint32_t touchid[MAX_TOUCH];
@@ -1004,14 +1019,15 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 	static short nsib[MAX_TOUCH];
 #endif
 #ifdef MULTITOUCH
-	static int N=0;
+	static unsigned int N=0;
+	static unsigned int P=0;
 	int t=-1;
 
 	// find touch
-	for (i=0; i<N; i++) {
+	for (i=P; i!=N; TOUCH_INC(i)) {
 		if (touchid[i] == ptr && devid[i] == dev) {
 			// duplicate (I got BEGIN!)
-//			if (time == (T=times[i]) && x==X[i] && y==Y[i]) return but[i];
+//			if (time==times[i] && x==X[i] && y==Y[i]) return but[i];
 			if (time<=times[i] && type!=2) return but[i];
 			t=i;
 			break;
@@ -1024,18 +1040,9 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 		b = kb_find_button(kb,x,y);
 		if (!b) return NULL;
 #ifdef MULTITOUCH
-		if (N==MAX_TOUCH) {
-			// touch overflow. kick oldest touch
-//			if (T=times[t=0]) for (i=1; i<MAX_TOUCH; i++) if (T>times[i]) T=times[t=i];
-#define _shift(x) memmove(&x[0],&x[1],sizeof(x)-sizeof(x[0]));
-			_shift(but);
-			_shift(touchid);
-			_shift(devid);
-			_shift(times);
-//			_shift(X);
-//			_shift(Y);
-		} else N++;
-		t=N-1;
+		t=N;
+		TOUCH_INC(N);
+		if (N==P) TOUCH_INC(P);
 #endif
 		if (but[t]) _release(but[t]);
 		but[t] = b;
@@ -1169,7 +1176,9 @@ drop:
 		b->slide = 0;
 #endif
 	}
-	if (N && t<--N) {
+#ifdef MULTITOUCH
+	TOUCH_DEC(N);
+	if (t!=N) {
 		but[t] = but[N];
 		touchid[t] = touchid[N];
 		devid[t] = devid[N];
@@ -1180,6 +1189,7 @@ drop:
 		nsib[t] = nsib[N];
 #endif
 	}
+#endif
 	return NULL;
 }
 

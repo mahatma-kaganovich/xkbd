@@ -26,7 +26,9 @@
 #include <X11/Xft/Xft.h>
 #endif
 
+// shift,mod/alt
 //#define LEVEL_BITS 2
+// +ctrl-alt
 #define LEVEL_BITS 3
 
 #define STD_LEVELS (1U<<LEVEL_BITS)
@@ -56,11 +58,11 @@ inline unsigned int LEVEL(unsigned int m, unsigned int o){
 	;
 }
 inline unsigned int MODS(unsigned int l){
-	return BIT_MVL(l,0,KBIT_SHIFT)|BIT_MVL(l,1,KBIT_ALT)
 #if LEVEL_BITS == 3
-		|(BIT_MVL(l,KBIT_CTRL,2)&BIT_MVL(l,2,KBIT_ALT));
+	return BIT_MVL(l,0,KBIT_SHIFT)|((l&2)?STATE(KBIT_CTRL)|STATE(KBIT_ALT):BIT_MVL(l,1,KBIT_ALT));
+#else
+	return BIT_MVL(l,0,KBIT_SHIFT)|BIT_MVL(l,1,KBIT_ALT);
 #endif
-		;
 }
 
 #define KBLEVEL(b)	LEVEL(b->kb->state|b->kb->state_locked,b->flags)
@@ -110,6 +112,20 @@ inline unsigned int MODS(unsigned int l){
 #define LEVELS STD_LEVELS
 
 #endif
+
+#if MAX_TOUCH == 1
+#define TOUCH_INC(x)
+#define TOUCH_DEC(x)
+#else
+#if MAX_TOUCH == 16
+#define TOUCH_INC(x) (x=(x+1)&0xf)
+#define TOUCH_DEC(x) (x=(x-1)&0xf)
+#else
+#define TOUCH_INC(x) (x=(x+1)%MAX_TOUCH)
+#define TOUCH_DEC(x) (x=x?x-1:(MAX_TOUCH-1))
+#endif
+#endif
+
 
 typedef struct _list
 {
