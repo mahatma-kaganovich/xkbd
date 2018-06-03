@@ -48,6 +48,7 @@
 static KeySym *keymap = NULL;
 static int minkc = 0;
 static int maxkc = 0;
+static int notkc = 0;
 static int ks_per_kc = 0;
 
 static Bool
@@ -103,14 +104,15 @@ void button_update(button *b) {
 	unsigned int m;
 
 	for(l=0; l<LEVELS; l++) {
+		b->kc[l] = notkc;
 		ks = b->ks[l];
 		m = 0;
 		if (!ks && l && l<STD_LEVELS && (
-		    ( (l1=l&~1U) && l1!=l && b->ks[l1] &&
+		    ( (l1=l&~1U) && b->ks[l1] &&
 			(kc=b->kc[l1])>=minkc && kc<=maxkc &&
 			(ks=XkbKeycodeToKeysym(dpy, kc, group, l))
 		    ) ||
-		    ( l1!=(l1=l&~3U) && l1 && l1!=l && b->ks[l1] &&
+		    ( l1!=(l1=l&~3U) && l1 && b->ks[l1] &&
 			(kc=b->kc[l1])>=minkc && kc<=maxkc &&
 			(ks=XkbKeycodeToKeysym(dpy, kc, group, l))
 		    ) ||
@@ -276,6 +278,7 @@ int kb_load_keymap(Display *dpy) {
       keymap = keymap1;
       minkc = minkc1;
       maxkc = maxkc1;
+      notkc = minkc1 - 1;
       ks_per_kc = ks_per_kc1;
       return 1;
    }
