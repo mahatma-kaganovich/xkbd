@@ -1002,6 +1002,14 @@ void _press(button *b, unsigned int flags){
 
 }
 
+#if MAX_TOUCH == 16
+#define TOUCH_INC(x) (x=(x+1)&15)
+#define TOUCH_DEC(x) (x=(x+15)&15)
+#else
+#define TOUCH_INC(x) (x=(x+1)%MAX_TOUCH)
+#define TOUCH_DEC(x) (x=(x+(MAX_TOUCH-1))%MAX_TOUCH)
+#endif
+
 button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int dev, Time time)
 {
 	button *b;

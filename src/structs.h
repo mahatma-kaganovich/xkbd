@@ -113,20 +113,6 @@ inline unsigned int MODS(unsigned int l){
 
 #endif
 
-#if MAX_TOUCH == 1
-#define TOUCH_INC(x)
-#define TOUCH_DEC(x)
-#else
-#if MAX_TOUCH == 16
-#define TOUCH_INC(x) (x=(x+1)&0xf)
-#define TOUCH_DEC(x) (x=(x-1)&0xf)
-#else
-#define TOUCH_INC(x) (x=(x+1)%MAX_TOUCH)
-#define TOUCH_DEC(x) (x=x?x-1:(MAX_TOUCH-1))
-#endif
-#endif
-
-
 typedef struct _list
 {
   struct _list *next;
