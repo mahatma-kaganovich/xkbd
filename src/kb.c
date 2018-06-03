@@ -105,14 +105,12 @@ void button_update(button *b) {
 	for(l=0; l<LEVELS; l++) {
 		ks = b->ks[l];
 		m = 0;
-		if (!ks && l && l<STD_LEVELS &&
-		    ( (l1=l&~1U) &&
-			b->ks[l1] &&
+		if (!ks && l && l<STD_LEVELS && (
+		    ( (l1=l&~1U) && b->ks[l1] &&
 			(kc=b->kc[l1])>=minkc && kc<=maxkc &&
 			(ks=XkbKeycodeToKeysym(dpy, kc, group, l))
 		    ) ||
-		    ( l1!=(l1=l&~3U) &&
-			b->ks[l1] &&
+		    ( l1!=(l1=l&~3U) && l1 && b->ks[l1] &&
 			(kc=b->kc[l1])>=minkc && kc<=maxkc &&
 			(ks=XkbKeycodeToKeysym(dpy, kc, group, l))
 		    ) ||
@@ -124,7 +122,7 @@ void button_update(button *b) {
 			(kc=b->kc[l1])>=minkc && kc<=maxkc &&
 			(ks=XkbKeycodeToKeysym(dpy, kc, group, l))
 		    )
-		) {
+		)) {
 			b->kc[l]=kc;
 			b->mods[l]=m=MODS(l);
 			b->ks[l]=ks;
@@ -149,19 +147,20 @@ void button_update(button *b) {
 			}
 #ifdef SLIDERS
 		} else if (!ks && (ks = b->ks[l1=l&3])) {
-			b->ks[l]=ks;
 			b->kc[l]=b->kc[l1];
 			m = b->mods[l1];
 			if (!l1) m|=STATE(KBIT_CTRL);
 			b->mods[l]=m;
+			// sliders. don't need to be visible, but can
+			//if (l<STD_LEVELS) { b->ks[l]=ks; b->txt[l]=b->txt[l1];}
 			continue;
 #endif
 		}
-		if (l<STD_LEVELS && !(txt = b->txt[l])) {
+		if (ks && l<STD_LEVELS && !(txt = b->txt[l])) {
 			for (l1 = 0; l1<l && !txt; l1++) if (ks == b->ks[l1]) txt = b->txt[l1];
 #ifndef MINIMAL
-			ksText_(ks,&txt);
-			if (txt) {
+			if (!txt) {
+			    ksText_(ks,&txt);
 			    if (
 				!strncmp(txt,"XF86Switch_",n=11) ||
 				!strncmp(txt,"XF86_",n=5) ||
