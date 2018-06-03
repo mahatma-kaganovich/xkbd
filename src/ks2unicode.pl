@@ -224,10 +224,10 @@ int ksText_(KeySym ks, char **txt){
 		n++;
 		memcpy(*txt = malloc(n), ksText_buf, n);
 		return 1;
-	} else if (tr && *txt == tr->s2) {
-		n = strlen(tr->s2)+1;
-		memcpy(*txt = malloc(n), tr->s2, n);
-		return 1;
+//	} else if (tr && *txt == tr->s2) {
+//		n = strlen(tr->s2)+1;
+//		memcpy(*txt = malloc(n), tr->s2, n);
+//		return 1;
 	}
 	return 0;
 }
