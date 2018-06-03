@@ -142,7 +142,6 @@ void ks2unicode_init(){
 
 static char ksText_buf[10];
 static int n;
-static struct translator *tr;
 
 void ksText(KeySym ks, char **txt){
 	unsigned int wc;
@@ -151,7 +150,7 @@ void ksText(KeySym ks, char **txt){
 	int p2 = ks2u_size-1;
 	int p;
 	KeySym k;
-	struct translator tr1;
+	struct translator tr1, *tr;
 
 	if (!ks || *txt) return;
 	if (ks > 0x01000000){
@@ -224,10 +223,6 @@ int ksText_(KeySym ks, char **txt){
 		n++;
 		memcpy(*txt = malloc(n), ksText_buf, n);
 		return 1;
-//	} else if (tr && *txt == tr->s2) {
-//		n = strlen(tr->s2)+1;
-//		memcpy(*txt = malloc(n), tr->s2, n);
-//		return 1;
 	}
 	return 0;
 }
