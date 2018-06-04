@@ -3,7 +3,7 @@
 # font name, for an xft font, specify the point size after a '-'
 # default font is fixed
 #font verdana-12|fixed
-font sans-16|fixed
+font sans-26|fixed
 
 # color of keboard background ( default white )
 col  0:0:0
@@ -333,7 +333,7 @@ kp_width 6
 	</key>
 	<key>
 		default i18l
-		switch 0
+		switch -1
 	</key>
 	<key>
 		default_ks space

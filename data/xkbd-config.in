@@ -169,7 +169,9 @@ $N=$#layouts+1;
 ($l)=$k=~/(<layout>.*<\/layout>)/gs;
 
 $k=~s/[ 	]*(<key>.*?<\/key>)/key($1,0)/gse;
+$k=~s/switch -1/switch 0/;
 $k=~s/switch 0/switch 1/ if($N>1);
+
 utf8::encode($k);
 print $k;
 
