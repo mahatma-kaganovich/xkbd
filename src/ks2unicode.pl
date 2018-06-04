@@ -143,7 +143,7 @@ void ks2unicode_init(){
 static char ksText_buf[10];
 static int n;
 
-void ksText(KeySym ks, char **txt){
+void ksText(KeySym ks, char **txt, int *is_sym){
 	unsigned int wc;
 	struct ks2unicode *k2u;
 	int p1 = 0;
@@ -159,7 +159,6 @@ void ksText(KeySym ks, char **txt){
 	}
 
 	if (ks < ks2u[p1].ks || ks > ks2u[p2].ks) goto notfound;
-
 next:
 	p = (p1+p2)>>1;
 	k = ks2u[p].ks;
@@ -181,6 +180,7 @@ next:
 	if (n < 0 || n > ks2u[p].n) goto notfound;
 	wc = ks2u[p].u + n;
 wide:
+	*is_sym=1;
 	if (wc < 0x000080) {
 		n=1;
 		ksText_buf[0]=(char)wc;
@@ -208,6 +208,7 @@ wide:
 	*txt = ksText_buf;
 	goto tr;
 notfound:
+	*is_sym=0;
 	*txt=XKeysymToString(ks);
 	if (!*txt) n = sprintf(*txt = ksText_buf,"?%lx",ks);
 tr:
@@ -217,8 +218,8 @@ tr:
 	return;
 }
 
-int ksText_(KeySym ks, char **txt){
-	ksText(ks,txt);
+int ksText_(KeySym ks, char **txt, int *is_sym){
+	ksText(ks,txt,is_sym);
 	if (*txt == ksText_buf) {
 		n++;
 		memcpy(*txt = malloc(n), ksText_buf, n);

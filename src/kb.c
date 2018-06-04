@@ -102,6 +102,7 @@ void button_update(button *b) {
 	KeySym ks, ks1;
 	KeyCode kc;
 	unsigned int m;
+	int is_sym = 0;
 
 	for(l=0; l<LEVELS; l++) {
 		b->kc[l] = notkc;
@@ -162,7 +163,8 @@ void button_update(button *b) {
 			for (l1 = 0; l1<l && !txt; l1++) if (ks == b->ks[l1]) txt = b->txt[l1];
 #ifndef MINIMAL
 			if (!txt) {
-			    ksText_(ks,&txt);
+			    ksText_(ks,&txt,&l1);
+			    if (!l) is_sym = l1;
 			    if (
 				!strncmp(txt,"XF86Switch_",n=11) ||
 				!strncmp(txt,"XF86_",n=5) ||
@@ -179,9 +181,8 @@ void button_update(button *b) {
 	if (b->kc[0]>=0xff80 && b->kc[0]<=0xffb9) {
 		if (b->bg_gc == b->kb->rev_gc) b->bg_gc = b->kb->kp_gc;
 		if (b->kb->kp_width) w = b->kb->kp_width;
-	} else if ( b->bg_gc == b->kb->rev_gc && (b->modifier || !b->ks[0]
-		|| (!group && b->txt[0] && b->txt[0][0] && b->txt[0][1])
-		)) b->bg_gc = b->kb->grey_gc;
+	} else if ( b->bg_gc == b->kb->rev_gc && (b->modifier || !b->ks[0] || !is_sym))
+		b->bg_gc = b->kb->grey_gc;
 	if (w && !(b->flags & STATE(OBIT_WIDTH_SPEC))) {
 		b->c_width = w;
 		b->flags |= STATE(OBIT_WIDTH_SPEC);
@@ -346,6 +347,7 @@ box *clone_box(Display *dpy, box *vbox, int group){
 	int l,i;
 	KeySym ks,ks1;
 	KeyCode kc;
+	int is_sym;
 
 	for(listp = vbox->root_kid; listp; listp = listp->next) {
 		box_add_box(bx, bx1=_clone_box((box *)listp->data));
@@ -363,7 +365,7 @@ box *clone_box(Display *dpy, box *vbox, int group){
 				    for (i=0; i<100 && (ks1=XkbKeycodeToKeysym(dpy, kc, 0, i)) && ks1 != ks; i++) {}
 				if (ks1 && ks1 == ks && (ks1=XkbKeycodeToKeysym(dpy, kc, group, i)) && ks1!=ks) {
 					b->txt[l]=NULL;
-					ksText_(b->ks[l]=ks1,&b->txt[l]);
+					ksText_(b->ks[l]=ks1,&b->txt[l],&is_sym);
 				}
 			}
 		}
