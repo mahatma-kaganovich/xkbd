@@ -179,9 +179,9 @@ void button_update(button *b) {
 	if (b->kc[0]>=0xff80 && b->kc[0]<=0xffb9) {
 		if (b->bg_gc == b->kb->rev_gc) b->bg_gc = b->kb->kp_gc;
 		if (b->kb->kp_width) w = b->kb->kp_width;
-	// basic group 0 is English/Latin, so char length still 1
-	} else if ( b->bg_gc == b->kb->rev_gc && (b->modifier || !b->ks[0] || (b->txt[0] && b->txt[0][0] && b->txt[0][1])))
-		b->bg_gc = b->kb->grey_gc;
+	} else if ( b->bg_gc == b->kb->rev_gc && (b->modifier || !b->ks[0]
+		|| (!group && b->txt[0] && b->txt[0][0] && b->txt[0][1])
+		)) b->bg_gc = b->kb->grey_gc;
 	if (w && !(b->flags & STATE(OBIT_WIDTH_SPEC))) {
 		b->c_width = w;
 		b->flags |= STATE(OBIT_WIDTH_SPEC);
