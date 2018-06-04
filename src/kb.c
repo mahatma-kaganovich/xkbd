@@ -175,10 +175,16 @@ void button_update(button *b) {
                 }
 	}
 
-	if (b->bg_gc == b->kb->rev_gc) {
-		// must be in render, but no reason to unsimplify
-		if (b->modifier) b->bg_gc = b->kb->grey_gc;
-		else if (b->kc[0]>=0xff80 && b->kc[0]<=0xffb9) b->bg_gc = b->kb->kp_gc;
+	int w = b->kb->def_width;
+	if (b->kc[0]>=0xff80 && b->kc[0]<=0xffb9) {
+		if (b->bg_gc == b->kb->rev_gc) b->bg_gc = b->kb->kp_gc;
+		if (b->kb->kp_width) w = b->kb->kp_width;
+	// basic group 0 is English/Latin, so char length still 1
+	} else if ( b->bg_gc == b->kb->rev_gc && (b->modifier || !b->ks[0] || (b->txt[0] && b->txt[0][0] && b->txt[0][1])))
+		b->bg_gc = b->kb->grey_gc;
+	if (w && !(b->flags & STATE(OBIT_WIDTH_SPEC))) {
+		b->c_width = w;
+		b->flags |= STATE(OBIT_WIDTH_SPEC);
 	}
 #if 0
 	unsigned int i ,j, p;
@@ -653,6 +659,10 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		     _set_color_fg(kb,tmpstr_C,&kb->txt_gc,&kb->color);
 		else if (strcmp(tmpstr_A, "txt_col_rev") == 0)
 		     _set_color_fg(kb,tmpstr_C,&kb->txt_rev_gc,&kb->color_rev);
+		else if (!strcmp(tmpstr_A, "def_width"))
+		     kb->def_width = atoi(tmpstr_C);
+		else if (!strcmp(tmpstr_A, "kp_width"))
+		     kb->kp_width = atoi(tmpstr_C);
 		break;
 	      case rowdef: /* no rowdefs as yet */
 		break;

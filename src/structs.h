@@ -187,6 +187,9 @@ typedef struct _keyboard
   XftColor color_rev;
 #endif
 
+  int def_width;
+  int kp_width;
+
 } keyboard;
 
 typedef struct _button

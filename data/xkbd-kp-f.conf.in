@@ -33,6 +33,9 @@ kp_col 0:31:31
 # 0 disable repeat (powersave), -1 - delay & time from X
 repeat_time 0
 
+def_width 7
+kp_width 6
+
 </global>
 
 #
