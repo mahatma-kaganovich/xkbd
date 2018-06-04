@@ -164,6 +164,9 @@ typedef struct _keyboard
   GC txt_rev_gc;
   GC bdr_gc;
 
+  GC grey_gc;
+  GC kp_gc;
+
   XFontStruct* font_info;
   unsigned int state;  /* shifted | caps | modded | normal */
   unsigned int state_locked;  /* shifted | modded | normal */
@@ -180,8 +183,8 @@ typedef struct _keyboard
 #ifdef USE_XFT
   XftDraw *xftdraw;   /* xft aa bits */
   XftFont *xftfont;
-  XftColor color_bg;
-  XftColor color_fg;
+  XftColor color;
+  XftColor color_rev;
 #endif
 
 } keyboard;
@@ -199,7 +202,7 @@ typedef struct _button
 #endif
 
   char *txt[STD_LEVELS];
-  KeySym ks[LEVELS];
+  KeySym ks[STD_LEVELS];
 
 #define GET_TXT(b,i)	(b->txt[i])
 #define GET_KS(b,i)	(b->ks[i])
@@ -250,8 +253,8 @@ typedef struct _button
 			       set to -1 for no switch            */
 
 #ifdef USE_XFT
-  XftColor *xft_fg_col;  /* xft */
-  XftColor *xft_bg_col;
+  XftColor col;
+  XftColor col_rev;
 #endif
 
   Pixmap *pixmap;

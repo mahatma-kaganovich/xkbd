@@ -174,6 +174,12 @@ void button_update(button *b) {
 			b->txt[l] = txt;
                 }
 	}
+
+	if (b->bg_gc == b->kb->rev_gc) {
+		// must be in render, but no reason to unsimplify
+		if (b->modifier) b->bg_gc = b->kb->grey_gc;
+		else if (b->kc[0]>=0xff80 && b->kc[0]<=0xffb9) b->bg_gc = b->kb->kp_gc;
+	}
 #if 0
 	unsigned int i ,j, p;
 	n = maxkc-minkc+1;
@@ -310,7 +316,8 @@ void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
 			DefaultVisual(dpy,DefaultScreen(dpy)),
 			DefaultColormap(dpy,DefaultScreen(dpy)),
 			&colortmp, xc);
-	} else
+	}
+	//else
 #endif
 	{
 		if (gc && !*gc) *gc = _createGC(dpy, kb->win);
@@ -421,6 +428,9 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
   _simple_GC(kb,&kb->txt_rev_gc,1);
   _simple_GC(kb,&kb->bdr_gc,0);
 
+  _simple_GC(kb,&kb->grey_gc,1);
+  _simple_GC(kb,&kb->kp_gc,1);
+
 #ifdef USE_XFT
   kb->render_type = xft;
 #else
@@ -448,7 +458,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		     DefaultVisual(display, DefaultScreen(display)),
 		     DefaultColormap(display,DefaultScreen(display)),
 		     &colortmp,
-		     &kb->color_bg);
+		     &kb->color_rev);
 
   colortmp.red   = 0x0000;
   colortmp.green = 0x0000;
@@ -458,7 +468,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		     DefaultVisual(display, DefaultScreen(display)),
 		     DefaultColormap(display,DefaultScreen(display)),
 		     &colortmp,
-		     &kb->color_fg);
+		     &kb->color);
 
   /* --- end xft bits -------------------------- */
 
@@ -614,6 +624,10 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		  _set_color_fg(kb,tmpstr_C,&kb->bdr_gc,NULL);
 		else if (strcmp(tmpstr_A, "down_col") == 0)
 		  _set_color_fg(kb,tmpstr_C,&kb->gc,NULL);
+		else if (!strcmp(tmpstr_A, "gray_col") || !strcmp(tmpstr_A, "grey_col"))
+		  _set_color_fg(kb,tmpstr_C,&kb->grey_gc,NULL);
+		else if (!strcmp(tmpstr_A, "kp_col"))
+		  _set_color_fg(kb,tmpstr_C,&kb->kp_gc,NULL);
 		else if (strcmp(tmpstr_A, "width") == 0)
 		  {
 		    /* TODO fix! seg's as kb->vbox does not yet exist
@@ -636,7 +650,9 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		else if (strcmp(tmpstr_A, "repeat_time") == 0)
 		     kb->key_repeat = atoi(tmpstr_C);
 		else if (strcmp(tmpstr_A, "txt_col") == 0)
-		     _set_color_fg(kb,tmpstr_C,&kb->txt_gc,&kb->color_fg);
+		     _set_color_fg(kb,tmpstr_C,&kb->txt_gc,&kb->color);
+		else if (strcmp(tmpstr_A, "txt_col_rev") == 0)
+		     _set_color_fg(kb,tmpstr_C,&kb->txt_rev_gc,&kb->color_rev);
 		break;
 	      case rowdef: /* no rowdefs as yet */
 		break;
@@ -672,6 +688,10 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		  {tmp_but->bg_gc=NULL; _set_color_fg(kb,tmpstr_C,&tmp_but->bg_gc,NULL);}
 		else if (strcmp(tmpstr_A, "fg") == 0)
 		  {tmp_but->fg_gc=NULL; _set_color_fg(kb,tmpstr_C,&tmp_but->fg_gc,NULL);}
+		else if (strcmp(tmpstr_A, "txt_col") == 0)
+		  _set_color_fg(kb,tmpstr_C,NULL,&tmp_but->col);
+		else if (strcmp(tmpstr_A, "txt_col_rev") == 0)
+		  _set_color_fg(kb,tmpstr_C,NULL,&tmp_but->col_rev);
 		else if (strcmp(tmpstr_A, "slide_up_ks") == 0)
 		  button_set_slide_ks(tmp_but, tmpstr_C, UP);
 		else if (strcmp(tmpstr_A, "slide_down_ks") == 0)

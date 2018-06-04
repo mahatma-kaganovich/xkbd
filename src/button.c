@@ -143,17 +143,23 @@ void button_set_txt_ks(button *b, char *txt)
       b->modifier = STATE(KBIT_ALT);
   else if (strncmp(txt, "Meta", 4) == 0 )
       b->modifier = STATE(KBIT_META);
-  else if (strncmp(txt, "!Mod", 3) == 0 )
-  { b->modifier = STATE(KBIT_MOD); SET_KS(b,0,0); return; }
+  else if (strncmp(txt, "!Mod", 3) == 0 ) {
+	b->modifier = STATE(KBIT_MOD);
+//	SET_KS(b,0,0);
+	txt=NULL;
+  }
 
-  KeySym ks = XStringToKeysym(txt);
-  SET_KS(b,0,ks);
-  if (!ks)
-    fprintf(stderr, "Cant find keysym for %s \n", txt);
+  if (txt) {
+	KeySym ks = XStringToKeysym(txt);
+	SET_KS(b,0,ks);
+	if (!ks) fprintf(stderr, "Cant find keysym for %s \n", txt);
+  
 
-  /* for backwards compatibility */
-  if (DEFAULT_KS(b) >= 0x061 && DEFAULT_KS(b) <= 0x07a)
-    b->flags |= STATE(OBIT_OBEYCAPS);
+	/* for backwards compatibility */
+	if (DEFAULT_KS(b) >= 0x061 && DEFAULT_KS(b) <= 0x07a)
+	b->flags |= STATE(OBIT_OBEYCAPS);
+  }
+
 }
 
 void button_set_slide_ks(button *b, char *txt, int dir)
@@ -276,17 +282,24 @@ void button_render(button *b, int mode)
   if (mode & STATE(OBIT_PRESSED))
     {
       gc_solid = b->fg_gc;
-      gc_txt   = b->kb->txt_gc;
+      if (no_lock) {
+	gc_txt   = b->kb->txt_rev_gc;
 #ifdef USE_XFT
-      tmp_col  = b->kb->color_bg;
+	tmp_col  = b->col_rev;
 #endif
+     } else {
+	gc_txt   = b->kb->txt_gc;
+#ifdef USE_XFT
+	tmp_col = b->col;
+#endif
+     }
     }
   else if(mode & STATE(OBIT_LOCKED))
     {
       gc_solid = b->fg_gc;
       gc_txt   = b->kb->txt_rev_gc;
 #ifdef USE_XFT
-      tmp_col  = b->kb->color_bg;
+      tmp_col  = b->col_rev;
 #endif
     }
   else  /* BUTTON_RELEASED */
@@ -294,7 +307,7 @@ void button_render(button *b, int mode)
       gc_solid = b->bg_gc;
       gc_txt   = b->kb->txt_gc;
 #ifdef USE_XFT
-      tmp_col = b->kb->color_fg;
+      tmp_col = b->col;
 #endif
     }
 
@@ -432,6 +445,8 @@ button* button_new(keyboard *k)
 
   b->fg_gc      = k->gc;
   b->bg_gc      = k->rev_gc;
+  b->col = k->color;
+  b->col_rev = k->color_rev;
 
   b->layout_switch = -1;
 
