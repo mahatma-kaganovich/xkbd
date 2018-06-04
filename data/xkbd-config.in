@@ -97,15 +97,14 @@ sub key{
 		}
 		$s{$x}=$y if($y=~/\S/);
 	}
-	# now in binary
-#	$s{'bg'}=$p{'grey_col'} if(exists($s{'default'}) && length($s{'default'})>1);
-#	if(!exists($s{'width'}) && !exists($s{'img'})){
-#		$s{'width'}=7;
-#		if(exists($s{'default_ks'}) && substr($s{'default_ks'},0,3) eq 'KP_'){
-#			$s{'width'}=6;
-#			$s{'bg'}=$p{'kp_col'};
-#		}
-#	}
+	$s{'bg'}=$p{'grey_col'} if(exists($s{'default'}) && length($s{'default'})>1);
+	if(!exists($s{'width'}) && !exists($s{'img'})){
+		$s{'width'}=$p{'def_width'}||7;
+		if(exists($s{'default_ks'}) && substr($s{'default_ks'},0,3) eq 'KP_'){
+			$s{'width'}=$p{'kp_width'}||6;
+			$s{'bg'}=$p{'kp_col'};
+		}
+	}
 	$s{'obey_capslock'}='yes' if(exists($s{'default'}) && exists($s{'shift'}) && uc($s{'default'}) eq uc($s{'shift'}));
 	$s{'obey_capslock'}='yes' if(exists($s{'shift_ks'}) && uc($s{'default_ks'}) eq uc($s{'shift_ks'}));
 	return join("\n",'	<key>',(map{"		$_ $s{$_}"}sort keys %s),'	</key>');
