@@ -29,6 +29,9 @@
 'Page_Down'=>'Pg↓',
 'Scroll_Lock'=>'SclLk',
 'Num_Lock'=>'NumLk',
+'Sys_Req'=>'SysRq',
+'Meta_R'=>'Meta',
+'Meta_L'=>'Meta',
 );
 
 $h='/usr/include/X11/keysymdef.h';

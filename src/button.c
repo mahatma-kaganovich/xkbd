@@ -157,7 +157,11 @@ void button_set_txt_ks(button *b, char *txt)
 	KeySym ks = XStringToKeysym(txt);
 	SET_KS(b,0,ks);
 	if (!ks) fprintf(stderr, "Cant find keysym for %s \n", txt);
-  
+//	else if(!b->modifier) {
+//		int m = XkbKeysymToModifiers(b->kb->display, ks);
+//		if(m) fprintf(stderr,"Key=%s KeySym=0x%x modifiers=0x%x\n",txt,ks,m);
+//	}
+
 
 	/* for backwards compatibility */
 	if (DEFAULT_KS(b) >= 0x061 && DEFAULT_KS(b) <= 0x07a)

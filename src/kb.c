@@ -135,7 +135,7 @@ void button_update(button *b) {
 			if (!ks && (ks = b->ks[l&2]?:b->ks[0])) {
 				m = MODS(l);
 				XkbTranslateKeySym(dpy,&ks,m,buf,1,&n);
-				b->ks[l] = ks;
+				m=0;
 			}
 #ifdef SLIDERS
 		} else if (!ks && (ks = b->ks[l1=l&3])) {
@@ -162,6 +162,10 @@ void button_update(button *b) {
 			}
 		}
 found:
+		for(l1=0; l1<l; l1++) if (b->ks[l1]==b->ks[l]) {
+			b->mods[l]=b->mods[l1];
+			break;
+		}
 		if (ks && l<STD_LEVELS && !(txt = b->txt[l])) {
 			for (l1 = 0; l1<l && !txt; l1++) if (ks == b->ks[l1]) txt = b->txt[l1];
 #ifndef MINIMAL

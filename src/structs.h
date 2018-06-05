@@ -60,10 +60,12 @@ inline unsigned int LEVEL(unsigned int m, unsigned int o){
 	;
 }
 inline unsigned int MODS(unsigned int l){
+//	const unsigned int alt=BIT_MVL(l,1,KBIT_ALT);
+	const unsigned int alt=BIT_MVL(l,1,KBIT_MOD);
 #if LEVEL_BITS == 3
-	return BIT_MVL(l,0,KBIT_SHIFT)|((l&4)?STATE(KBIT_CTRL)|STATE(KBIT_ALT):BIT_MVL(l,1,KBIT_ALT));
+	return BIT_MVL(l,0,KBIT_SHIFT)|((l&4)?STATE(KBIT_CTRL)|STATE(KBIT_ALT):alt);
 #else
-	return BIT_MVL(l,0,KBIT_SHIFT)|BIT_MVL(l,1,KBIT_ALT);
+	return BIT_MVL(l,0,KBIT_SHIFT)|alt;
 #endif
 }
 
@@ -71,7 +73,6 @@ inline unsigned int MODS(unsigned int l){
 #define KBDLEVEL(kb)	LEVEL(kb->state|kb->state_locked,0)
 
 #define KB_STATE_KNOWN  (STATE(KBIT_SHIFT)|STATE(KBIT_CAPS)|STATE(KBIT_CTRL)|STATE(KBIT_ALT)|STATE(KBIT_MOD))
-
 
 #define TRUE            1
 #define FALSE           0
