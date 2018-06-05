@@ -113,7 +113,7 @@ kp_width 6
 	</key>
 	<key>
 		default NumLk
-		default_ks !Mod
+		default_ks Num_Lock
 	</key>
 	<key>
 		default -
@@ -226,17 +226,17 @@ kp_width 6
 	</key>
 	<key>
 		default_ks KP_Home
-		mod_ks 7
+		mod_ks KP_7
 	</key>
 	<key>
 		default ↑
 		default_ks KP_Up
-		mod_ks 8
+		mod_ks KP_8
 	</key>
 	<key>
 		default PgUp
 		default_ks KP_Prior
-		mod_ks 9
+		mod_ks KP_9
 	</key>
 </row>
 
@@ -287,16 +287,16 @@ kp_width 6
 	<key>
 		default ←
 		default_ks KP_Left
-		mod_ks 4
+		mod_ks KP_4
 	</key>
 	<key>
 		default_ks KP_Begin
-		mod_ks 5
+		mod_ks KP_5
 	</key>
 	<key>
 		default →
 		default_ks KP_Right
-		mod_ks 6
+		mod_ks KP_6
 	</key>
 </row>
 
@@ -343,17 +343,17 @@ kp_width 6
 	</key>
 	<key>
 		default_ks KP_End
-		mod_ks 1
+		mod_ks KP_1
 	</key>
 	<key>
 		default ↓
 		default_ks KP_Down
-		mod_ks 2
+		mod_ks KP_2
 	</key>
 	<key>
 		default PgDn
 		default_ks KP_Next
-		mod_ks 3
+		mod_ks KP_3
 	</key>
 </row>
 
@@ -400,7 +400,7 @@ kp_width 6
 	</key>
 	<key>
 		default_ks KP_Insert
-		mod_ks 0
+		mod_ks KP_0
 	</key>
 	<key>
 		default_ks KP_Delete
