@@ -55,6 +55,7 @@ static Bool
 load_a_single_font(keyboard *kb, char *fontname )
 {
 #ifdef USE_XFT
+  if (kb->xftfont) XftFontClose(kb->display, kb->xftfont);
   if ((kb->xftfont = XftFontOpenName(kb->display,
 				     DefaultScreen(kb->display),
 				     fontname)) != NULL)
@@ -529,8 +530,18 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 	    {
 	      switch (context) {
 		case kbddef:
-		  if (!font_loaded)
-		    _kb_load_font(kb, "fixed" );
+		  if (!font_loaded) {
+#ifdef USE_XFT
+			char fname[12] = "";
+			_kb_load_font(kb, "fixed-10");
+//			fsz = kb_width*10/(xx*_button_get_txt_size(kb, "ABCabc123+"));
+//			sprintf(fname,"fixed-%i",kb_width/_button_get_txt_size(kb, "ABCabc123+"));
+			sprintf(fname,"fixed-%i",kb_width/_button_get_txt_size(kb,"ABCabc123+"));
+			_kb_load_font(kb, fname);
+#else
+			_kb_load_font(kb, "fixed");
+#endif
+		  }
 		  break;
 		case rowdef:
 

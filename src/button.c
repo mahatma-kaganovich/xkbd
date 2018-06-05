@@ -203,21 +203,21 @@ KeySym button_ks(char *txt)
   return res;
 }
 
-int _button_get_txt_size(button *b, char *txt)
+int _button_get_txt_size(keyboard *kb, char *txt)
 {
   if (!txt) return 0;
 #ifdef USE_XFT
-  if (b->kb->render_type == xft)
+  if (kb->render_type == xft)
     {
       XGlyphInfo       extents;
-      XftTextExtentsUtf8(b->kb->display, b->kb->xftfont,
+      XftTextExtentsUtf8(kb->display, kb->xftfont,
 			 (unsigned char *) txt, strlen(txt),
 			 &extents);
       return extents.width;
 
     } else {
 #endif
-      return XTextWidth(b->kb->font_info, txt, strlen(txt));
+      return XTextWidth(kb->font_info, txt, strlen(txt));
 #ifdef USE_XFT
     }
 #endif
@@ -229,9 +229,9 @@ int button_calc_c_width(button *b)
     return b->c_width; /* already calculated from image or width_param */
 
   b->c_width = max3(
-	_button_get_txt_size(b, DEFAULT_TXT(b)),
-	_button_get_txt_size(b, SHIFT_TXT(b)),
-	_button_get_txt_size(b, MOD_TXT(b))
+	_button_get_txt_size(b->kb, DEFAULT_TXT(b)),
+	_button_get_txt_size(b->kb, SHIFT_TXT(b)),
+	_button_get_txt_size(b->kb, MOD_TXT(b))
 	);
   return b->c_width;
 }
@@ -376,8 +376,8 @@ void button_render(button *b, int mode)
   if (txt != NULL)
     {
        int xspace;
-       //if (b->c_width > _button_get_txt_size(b,txt))
-       xspace = x+((b->act_width - _button_get_txt_size(b,txt))/2);
+       //if (b->c_width > _button_get_txt_size(b->kb,txt))
+       xspace = x+((b->act_width - _button_get_txt_size(b->kb,txt))/2);
 	  //else
 	  //xspace = x+((b->c_width)/2);
 	  //xspace = x+(b->x_pad/2)+b->b_size;

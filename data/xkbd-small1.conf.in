@@ -1,9 +1,9 @@
 <global>
 
 # font name, for an xft font, specify the point size after a '-'
-# default font is fixed
+# default font is fixed (calibrated)
 #font verdana-12|fixed
-font sans-26|fixed
+#font sans-26|fixed
 
 # color of keboard background ( default white )
 col  0:0:0
