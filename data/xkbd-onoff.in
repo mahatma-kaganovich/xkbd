@@ -3,4 +3,7 @@
 [ "$1" != --nokill ] && killall -qw xkbd -u "$USER" && exit
 # around bug in configuring keyboard over xorg.conf
 setxkbmap
-exec xkbd -X -l -D 22 -k <(xkbd-config) -e $0 --nokill
+#exec xkbd -X -l -D 22 -k <(xkbd-config) -e $0 --nokill
+for i in /etc/xkbd-config.conf @pkgdatadir@/xkbd-kp-f.conf; do
+	[ -e $i ] && exec xkbd -X -l -D 22 -k $i -e $0 --nokill
+done
