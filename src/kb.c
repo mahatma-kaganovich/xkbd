@@ -162,10 +162,10 @@ void button_update(button *b) {
 			}
 		}
 found:
-		for(l1=0; l1<l; l1++) if (b->ks[l1]==b->ks[l]) {
-			b->mods[l]=b->mods[l1];
-			break;
-		}
+//		for(l1=0; l1<l; l1++) if (b->ks[l1]==b->ks[l]) {
+//			b->mods[l]=b->mods[l1];
+//			break;
+//		}
 		if (ks && l<STD_LEVELS && !(txt = b->txt[l])) {
 			for (l1 = 0; l1<l && !txt; l1++) if (ks == b->ks[l1]) txt = b->txt[l1];
 #ifndef MINIMAL
@@ -187,7 +187,7 @@ found:
 	int w = b->kb->def_width;
 	if (b->ks[0]>=0xff80 && b->ks[0]<=0xffb9) {
 		// KP_
-		for(l=0;l<LEVELS;l++) b->mods[l]&=~(STATE(KBIT_ALT)|STATE(KBIT_MOD));
+//		for(l=0;l<LEVELS;l++) b->mods[l]&=~(STATE(KBIT_ALT)|STATE(KBIT_MOD));
 		if (b->bg_gc == b->kb->rev_gc) b->bg_gc = b->kb->kp_gc;
 		if (b->kb->kp_width) w = b->kb->kp_width;
 	} else if ( b->bg_gc == b->kb->rev_gc && (b->modifier || !b->ks[0] || !is_sym))
