@@ -129,24 +129,13 @@ void button_update(button *b) {
 			b->kc[l]=kc;
 			b->mods[l]=m=MODS(l);
 			b->ks[l]=ks;
+			goto found;
 		} else if (l<4) {
 			m = MODS(l);
 			if (!ks && (ks = b->ks[l&2]?:b->ks[0])) {
+				m = MODS(l);
 				XkbTranslateKeySym(dpy,&ks,m,buf,1,&n);
 				b->ks[l] = ks;
-			}
-			if (ks) {
-				ks1=ks;
-				b->mods[l]=m;
-				b->kc[l]=kc=XKeysymToKeycode(dpy,ks);
-				if (!XkbLookupKeySym(dpy,kc,m,0,&ks1) || ks1!=ks){
-					for(l1=0; l1<STD_LEVELS; l1++) if ((m=MODS(l1))!=b->mods[l]) {
-						if (XkbLookupKeySym(dpy,kc,m,0,&ks1) && ks1==ks) {
-							b->mods[l]=m;
-							break;
-						}
-					}
-				}
 			}
 #ifdef SLIDERS
 		} else if (!ks && (ks = b->ks[l1=l&3])) {
@@ -159,6 +148,20 @@ void button_update(button *b) {
 			continue;
 #endif
 		}
+		if (ks) {
+			ks1=ks;
+			b->mods[l]=m;
+			b->kc[l]=kc=XKeysymToKeycode(dpy,ks);
+			if (!XkbLookupKeySym(dpy,kc,m,0,&ks1) || ks1!=ks){
+				for(l1=0; l1<STD_LEVELS; l1++) if ((m=MODS(l1))!=b->mods[l]) {
+					if (XkbLookupKeySym(dpy,kc,m,0,&ks1) && ks1==ks) {
+						b->mods[l]=m;
+						break;
+					}
+				}
+			}
+		}
+found:
 		if (ks && l<STD_LEVELS && !(txt = b->txt[l])) {
 			for (l1 = 0; l1<l && !txt; l1++) if (ks == b->ks[l1]) txt = b->txt[l1];
 #ifndef MINIMAL
@@ -178,7 +181,9 @@ void button_update(button *b) {
 	}
 
 	int w = b->kb->def_width;
-	if (b->kc[0]>=0xff80 && b->kc[0]<=0xffb9) {
+	if (b->ks[0]>=0xff80 && b->ks[0]<=0xffb9) {
+		// KP_
+		for(l=0;l<LEVELS;l++) b->mods[l]&=~(STATE(KBIT_ALT)|STATE(KBIT_MOD));
 		if (b->bg_gc == b->kb->rev_gc) b->bg_gc = b->kb->kp_gc;
 		if (b->kb->kp_width) w = b->kb->kp_width;
 	} else if ( b->bg_gc == b->kb->rev_gc && (b->modifier || !b->ks[0] || !is_sym))
@@ -692,6 +697,12 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		  SET_KS(tmp_but,2,button_ks(tmpstr_C))
 		else if (strcmp(tmpstr_A, "shift_mod_ks") == 0)
 		  SET_KS(tmp_but,3,button_ks(tmpstr_C))
+		else if (!strcmp(tmpstr_A, "modifier"))
+		  tmp_but->modifier = atoi(tmpstr_C);
+		else if (!strcmp(tmpstr_A, "lock")) {
+		  tmp_but->modifier = atoi(tmpstr_C);
+		  tmp_but->flags & STATE(OBIT_LOCK);
+		}
 #ifdef USE_XPM
 		else if (strcmp(tmpstr_A, "img") == 0)
 		  { button_set_pixmap(tmp_but, tmpstr_C); }
@@ -1026,7 +1037,7 @@ void _release(button *b){
 void _press(button *b, unsigned int flags){
 	flags |= STATE(OBIT_PRESSED);
 #ifdef MULTITOUCH
-	if (b->modifier & (KB_STATE_KNOWN ^ STATE(KBIT_CAPS))) {
+	if (b->modifier & KB_STATE_KNOWN && !(b->flags & STATE(OBIT_LOCK))) {
 		kb_process_keypress(b,0,flags);
 		return;
 	}
@@ -1333,7 +1344,7 @@ void kb_process_keypress(button *b, int repeat, unsigned int flags)
 		state ^= mod;
 	} else if (!(state & mod)) {
 		state |= mod;
-		if (mod & STATE(KBIT_CAPS)) lock |= mod;
+		if (b->flags & STATE(OBIT_LOCK)) lock |= mod;
 	} else if (no_lock) {
 		state ^= mod;
 	} else {

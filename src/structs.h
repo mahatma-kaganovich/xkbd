@@ -38,6 +38,7 @@
 #define OBIT_PRESSED	2
 #define OBIT_LOCKED	3
 #define OBIT_UGLY	4
+#define OBIT_LOCK	5
 
 #define KBIT_SHIFT	0
 #define KBIT_CAPS	1
@@ -60,7 +61,7 @@ inline unsigned int LEVEL(unsigned int m, unsigned int o){
 }
 inline unsigned int MODS(unsigned int l){
 #if LEVEL_BITS == 3
-	return BIT_MVL(l,0,KBIT_SHIFT)|((l&2)?STATE(KBIT_CTRL)|STATE(KBIT_ALT):BIT_MVL(l,1,KBIT_ALT));
+	return BIT_MVL(l,0,KBIT_SHIFT)|((l&4)?STATE(KBIT_CTRL)|STATE(KBIT_ALT):BIT_MVL(l,1,KBIT_ALT));
 #else
 	return BIT_MVL(l,0,KBIT_SHIFT)|BIT_MVL(l,1,KBIT_ALT);
 #endif
@@ -206,7 +207,7 @@ typedef struct _button
 #endif
 
   char *txt[STD_LEVELS];
-  KeySym ks[STD_LEVELS];
+  KeySym ks[LEVELS];
 
 #define GET_TXT(b,i)	(b->txt[i])
 #define GET_KS(b,i)	(b->ks[i])

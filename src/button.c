@@ -133,17 +133,21 @@ void button_set_pixmap(button *b, char *filename)
 
 void button_set_txt_ks(button *b, char *txt)
 {
-  if (strcmp(txt, "Caps_Lock") == 0 )
+  if (!strcmp(txt, "Caps_Lock")) {
     b->modifier = STATE(KBIT_CAPS);
-  else if (strncmp(txt, "Shift", 5) == 0 )
+    b->flags |= STATE(OBIT_LOCK);
+  } else if (!strncmp(txt, "Shift", 5))
     b->modifier = STATE(KBIT_SHIFT);
-  else if (strncmp(txt, "Control", 7) == 0 )
+  else if (!strncmp(txt, "Control", 7) || !strncmp(txt, "Ctrl", 4))
     b->modifier = STATE(KBIT_CTRL);
-  else if (strncmp(txt, "Alt", 3) == 0 )
+  else if (!strncmp(txt, "Alt",3))
       b->modifier = STATE(KBIT_ALT);
-  else if (strncmp(txt, "Meta", 4) == 0 )
+  else if (!strncmp(txt, "Meta",4))
       b->modifier = STATE(KBIT_META);
-  else if (strncmp(txt, "!Mod", 3) == 0 ) {
+  else if (!strcmp(txt, "Num_Lock")) {
+	b->modifier = STATE(KBIT_MOD);
+	b->flags |= STATE(OBIT_LOCK);
+  } else if (!strncmp(txt, "!Mod", 3)) {
 	b->modifier = STATE(KBIT_MOD);
 //	SET_KS(b,0,0);
 	txt=NULL;
