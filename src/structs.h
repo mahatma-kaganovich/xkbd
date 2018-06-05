@@ -43,8 +43,9 @@
 #define KBIT_CAPS	1
 #define KBIT_CTRL	2
 #define KBIT_ALT	3
-#define KBIT_META	4
-#define KBIT_MOD	5
+// numlock
+#define KBIT_MOD	4
+#define KBIT_META	5
 
 #define STATE(b)	(1U<<b)
 #define BIT_MV(m,b,b2)	(((m) & STATE(b))>>(b-b2))
@@ -68,7 +69,7 @@ inline unsigned int MODS(unsigned int l){
 #define KBLEVEL(b)	LEVEL(b->kb->state|b->kb->state_locked,b->flags)
 #define KBDLEVEL(kb)	LEVEL(kb->state|kb->state_locked,0)
 
-#define KB_STATE_KNOWN  (STATE(KBIT_SHIFT)|STATE(KBIT_CAPS)|STATE(KBIT_CTRL)|STATE(KBIT_ALT))
+#define KB_STATE_KNOWN  (STATE(KBIT_SHIFT)|STATE(KBIT_CAPS)|STATE(KBIT_CTRL)|STATE(KBIT_ALT)|STATE(KBIT_MOD))
 
 
 #define TRUE            1
