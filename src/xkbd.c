@@ -271,20 +271,8 @@ int main(int argc, char **argv)
    }
 stop_argv:
 
-#ifndef MINIMAL
-   if (Xkb_sync) {
-	int xkbError, reason_rtrn, mjr = XkbMajorVersion, mnr = XkbMinorVersion;
-
-	display = XkbOpenDisplay(display_name, &xkbEventType, &xkbError, &mjr, &mnr, &reason_rtrn);
-	if (!display) goto no_dpy;
-	XkbSelectEvents(display,XkbUseCoreKbd,XkbAllEventsMask,XkbStateNotifyMask|XkbNewKeyboardNotifyMask);
-	XkbSelectEventDetails(display,XkbUseCoreKbd,XkbStateNotifyMask,XkbAllStateComponentsMask,XkbModifierStateMask|XkbModifierLatchMask|XkbModifierLockMask|XkbModifierBaseMask);
-   } else
-#endif
-   {
-	display = XOpenDisplay(display_name);
-	if (!display) goto no_dpy;
-   }
+   display = XOpenDisplay(display_name);
+   if (!display) goto no_dpy;
    screen_num = DefaultScreen(display);
    rootWin = RootWindow(display, screen_num);
 /*
@@ -456,6 +444,14 @@ stop_argv:
       }
       signal(SIGUSR1, handle_sig); /* for extenal mapping / unmapping */
 
+#ifndef MINIMAL
+	// not found how to get keymap change on XInput, so keep Xkb events
+	int xkbError, reason_rtrn, xkbmjr = XkbMajorVersion, xkbmnr = XkbMinorVersion, xkbop;
+	if (XkbQueryExtension(display,&xkbop,&xkbEventType,&xkbError,&xkbmjr,&xkbmnr)) {
+		XkbSelectEvents(display,XkbUseCoreKbd,XkbAllEventsMask,XkbNewKeyboardNotifyMask);
+	}
+#endif
+
 #ifdef USE_XI
       int xiopcode, xievent, xierror;
       int ximajor = 2, ximinor = 2;
@@ -475,16 +471,42 @@ stop_argv:
 	XISetMask(mask.mask, XI_TouchEnd);
 	XISelectEvents(display, win, &mask, 1);
 	free(mask.mask);
-      }
-
+      } else
 #endif
-
+      {
+#ifndef MINIMAL
+	XkbSelectEvents(display,XkbUseCoreKbd,XkbStateNotifyMask,XkbStateNotifyMask);
+	XkbSelectEventDetails(display,XkbUseCoreKbd,XkbStateNotifyMask,XkbAllStateComponentsMask,XkbModifierStateMask|XkbModifierLatchMask|XkbModifierLockMask|XkbModifierBaseMask);
+#endif
+      }
 
       while (1)
       {
 	    int type = 0;
 	    XNextEvent(display, &ev);
 	    switch (ev.type) {
+#ifdef USE_XI
+		case GenericEvent: if (ev.xcookie.extension == xiopcode 
+//		    && ev.xgeneric.extension == 131
+		    && XGetEventData(display, &ev.xcookie)
+		    ) {
+#undef e
+#define e ((XIDeviceEvent*)ev.xcookie.data)
+//			switch(e->evtype) {
+			switch(ev.xcookie.evtype) {
+			    case XI_ButtonRelease:
+			    case XI_TouchEnd: type++;
+			    case XI_Motion:
+			    case XI_TouchUpdate: type++;
+			    case XI_ButtonPress:
+			    case XI_TouchBegin:
+				xkbd_process(kb, type, round(e->event_x), round(e->event_y), e->detail, e->sourceid, e->time);
+				//break;
+			}
+			XFreeEventData(display, &ev.xcookie);
+		}
+		break;
+#endif
 	    case ButtonRelease: type++;
 	    case MotionNotify: type++;
 	    case ButtonPress:
@@ -499,7 +521,7 @@ stop_argv:
 			exit(0);
 		  }
 		  break;
-		case ConfigureNotify:
+	    case ConfigureNotify:
 		  if ( ev.xconfigure.width != xkbd_get_width(kb)
 		       || ev.xconfigure.height != xkbd_get_height(kb))
 		  {
@@ -508,33 +530,9 @@ stop_argv:
 				 ev.xconfigure.height );
 		  }
 		  break;
-		case Expose:
+	    case Expose:
 		  xkbd_repaint(kb);
 		  break;
-#ifdef USE_XI
-		case GenericEvent: if (ev.xcookie.extension == xiopcode 
-//		    && ev.xgeneric.extension == 131
-		    && XGetEventData(display, &ev.xcookie)
-		    ) {
-#undef e
-#define e ((XIDeviceEvent*)ev.xcookie.data)
-//			switch(e->evtype) {
-			switch(ev.xcookie.evtype) {
-			    case XI_TouchEnd: type++;
-			    case XI_TouchUpdate: type++;
-			    case XI_TouchBegin:
-				xkbd_process(kb, type, round(e->event_x), round(e->event_y), e->detail, e->sourceid, e->time);
-				break;
-			    case XI_ButtonRelease: type++;
-			    case XI_Motion: type++;
-			    case XI_ButtonPress:
-				xkbd_process(kb, type, round(e->event_x), round(e->event_y), e->detail, e->sourceid, e->time);
-				break;
-			}
-			XFreeEventData(display, &ev.xcookie);
-		}
-		break;
-#endif
 #ifndef MINIMAL
 		default: if (ev.type == xkbEventType) {
 #undef e
