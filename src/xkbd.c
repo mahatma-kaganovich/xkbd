@@ -471,7 +471,7 @@ stop_argv:
 	XISetMask(mask.mask, XI_TouchEnd);
 	XISelectEvents(display, win, &mask, 1);
 	free(mask.mask);
-      } else
+      } // else
 #endif
       {
 #ifndef MINIMAL
