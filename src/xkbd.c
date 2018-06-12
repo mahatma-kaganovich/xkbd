@@ -431,6 +431,7 @@ stop_argv:
 		    // may be lost "release" on libinput
 		    // probably need all motions or nothing
 //		   Button1MotionMask |
+		   ButtonMotionMask |
 //#endif
 		   StructureNotifyMask |
 		   VisibilityChangeMask);
@@ -448,7 +449,8 @@ stop_argv:
 	// not found how to get keymap change on XInput, so keep Xkb events
 	int xkbError, reason_rtrn, xkbmjr = XkbMajorVersion, xkbmnr = XkbMinorVersion, xkbop;
 	if (XkbQueryExtension(display,&xkbop,&xkbEventType,&xkbError,&xkbmjr,&xkbmnr)) {
-		XkbSelectEvents(display,XkbUseCoreKbd,XkbAllEventsMask,XkbNewKeyboardNotifyMask);
+		XkbSelectEvents(display,XkbUseCoreKbd,XkbAllEventsMask,XkbNewKeyboardNotifyMask|XkbStateNotifyMask);
+		XkbSelectEventDetails(display,XkbUseCoreKbd,XkbStateNotifyMask,XkbAllStateComponentsMask,XkbModifierStateMask|XkbModifierLatchMask|XkbModifierLockMask|XkbModifierBaseMask);
 	}
 #endif
 
@@ -461,8 +463,9 @@ stop_argv:
 	XIEventMask mask = { .deviceid = XIAllDevices, .mask_len = XIMaskLen(XI_TouchEnd) };
 	mask.mask = (unsigned char*)calloc(3, sizeof(char));
 
-	XISetMask(mask.mask, XI_ButtonPress);
-	XISetMask(mask.mask, XI_ButtonRelease);
+	// keep "button" events in standard events while
+//	XISetMask(mask.mask, XI_ButtonPress);
+//	XISetMask(mask.mask, XI_ButtonRelease);
 
 //	XISetMask(mask.mask, XI_Motion);
 
@@ -471,14 +474,8 @@ stop_argv:
 	XISetMask(mask.mask, XI_TouchEnd);
 	XISelectEvents(display, win, &mask, 1);
 	free(mask.mask);
-      } // else
-#endif
-      {
-#ifndef MINIMAL
-	XkbSelectEvents(display,XkbUseCoreKbd,XkbStateNotifyMask,XkbStateNotifyMask);
-	XkbSelectEventDetails(display,XkbUseCoreKbd,XkbStateNotifyMask,XkbAllStateComponentsMask,XkbModifierStateMask|XkbModifierLatchMask|XkbModifierLockMask|XkbModifierBaseMask);
-#endif
       }
+#endif
 
       while (1)
       {
@@ -501,7 +498,6 @@ stop_argv:
 			    case XI_ButtonPress:
 			    case XI_TouchBegin:
 				xkbd_process(kb, type, round(e->event_x), round(e->event_y), e->detail, e->sourceid, e->time);
-				//break;
 			}
 			XFreeEventData(display, &ev.xcookie);
 		}
@@ -534,7 +530,8 @@ stop_argv:
 		  xkbd_repaint(kb);
 		  break;
 #ifndef MINIMAL
-		default: if (ev.type == xkbEventType) {
+		default: if (ev.type == xkbEventType) 
+		{
 #undef e
 #define e ((XkbEvent)ev)
 			switch (e.any.xkb_type) {

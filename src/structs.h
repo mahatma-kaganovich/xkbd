@@ -87,7 +87,7 @@ inline unsigned int MODS(unsigned int l){
 // features
 
 #ifndef MINIMAL
-#define SLIDES
+//#define SLIDES
 #define SIBLINGS
 #endif
 

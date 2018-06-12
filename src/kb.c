@@ -234,11 +234,12 @@ found:		if (i<n) {
 #ifdef SIBLINGS
 void kb_find_button_siblings(button *b) {
 	button *but = NULL, *tmp_but;
-	box *vbox = ((box*)b->parent)->parent, *bx;
+	box *bx1 = (box*)b->parent;
+	box *vbox = bx1->parent, *bx;
 	list *listp, *ip;
 	int bord = 1;
-	int x1 = b->x + vbox->x;
-	int y1 = b->y + vbox->y;
+	int x1 = b->x + bx1->x;
+	int y1 = b->y + bx1->y;
 	int x2 = x1 + b->act_width;
 	int y2 = y1 + b->act_height;
 	int i;
@@ -1037,6 +1038,11 @@ void kb_paint(keyboard *kb)
 	    kb->vbox->x, kb->vbox->y);
 }
 
+void bdraw(button *b, int flags){
+	button_render(b, flags);
+	button_paint(b);
+}
+
 void _release(button *b){
 #ifdef MULTITOUCH
 	if (b->flags & STATE(OBIT_PRESSED)) {
@@ -1044,9 +1050,7 @@ void _release(button *b){
 		return;
 	}
 #endif
-	button_render(b, 0);
-	button_paint(b);
-
+	bdraw(b,0);
 }
 
 void _press(button *b, unsigned int flags){
@@ -1057,9 +1061,7 @@ void _press(button *b, unsigned int flags){
 		return;
 	}
 #endif
-	button_render(b, flags);
-	button_paint(b);
-
+	bdraw(b,flags);
 }
 
 #if MAX_TOUCH == 16
@@ -1073,7 +1075,8 @@ void _press(button *b, unsigned int flags){
 button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int dev, Time time)
 {
 	button *b;
-	unsigned int i,j;
+	int i,j;
+	int n;
 	Time T;
 
 	static uint32_t touchid[MAX_TOUCH];
@@ -1084,7 +1087,7 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 //	static int Y[MAX_TOUCH];
 #ifdef SIBLINGS
 	static button *sib[MAX_TOUCH][MAX_SIBLINGS];
-	static short nsib[MAX_TOUCH];
+	static short nsib[MAX_TOUCH] = {};
 #endif
 #ifdef MULTITOUCH
 	static unsigned int N=0;
@@ -1120,6 +1123,8 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 //		X[t] = x;
 //		Y[t] = y;
 #ifdef SIBLINGS
+		n = nsib[t];
+		for(i=0;i<n;i++) _release(sib[t][i]);
 		nsib[t] = -1;
 #endif
 		_press(b,0);
@@ -1144,37 +1149,44 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 		    else must do other selections.
 		*/
 		if (but[t]) {
-			if (!b) goto drop; // button -> NULL
+			if (!b) return NULL;
+//			if (!b) goto drop; // button -> NULL
 			// button -> button
 			int ns = nsib[t], ns1 = b->nsiblings;
 			button **s1 = (button **)b->siblings;
-			button *b1 = NULL;
-			int n=0;
+			button *b1;
+			n=0;
 			if (ns<0) {
 				button **s = (button **)but[t]->siblings;
 				nsib[t] = ns = but[t]->nsiblings;
 				for(i=0; i<ns; i++)
 				    for(j=0; j<ns1; j++)
 					if (s[i]==s1[j]) {
-					    sib[t][n++]=s1[j];
+					    _press(sib[t][n++]=s1[j],STATE(OBIT_UGLY));
 					    break;
 					}
 			} else {
-				for(i=0; i<ns; i++)
-				    for(j=0; j<ns1; j++)
-					if (sib[t][i]==s1[j]) {
-					    sib[t][n++]=s1[j];
+				for(i=0; i<ns; i++) {
+				    b1=sib[t][i];
+				    for(j=0; j<ns1; j++) {
+					if (b1==s1[j]) {
+					    if (n!=i) _press(sib[t][n]=b1,STATE(OBIT_UGLY));
+					    b1=NULL;
+					    n++;
 					    break;
 					}
+				    }
+				    if (b1) _release(b1);
+				}
 			}
 			nsib[t]=n;
 			if (n==0) { // no siblings, drop touch
 				goto drop;
 			}else if (n==1) { // 1 intersection: found button
-				b1 = sib[t][0];
+				b = sib[t][0];
 			// unknown, need to calculate or touch more
 			}else {
-#if 0
+#if 1
 				if (type==2) goto drop;
 #else
 				// try set of 2 last buttons
@@ -1189,27 +1201,9 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 					    s3[n1++]=s2[j];
 					    break;
 					}
-				if (n1==1) b1 = sib[t][0];
+				if (n1==1) b = sib[t][0];
 				else if (type==2) goto drop;
 #endif
-			}
-			if (b1) {
-				if (b1!=but[t]) {
-					_press(b1,STATE(OBIT_UGLY));
-					_release(but[t]);
-				}
-				b = b1;
-			} else { // multiple: can draw whole set or nothing
-				b1 = but[t];
-#if 0
-				// incomplete. need to release
-				for(i=0; i<n; i++){
-					_press(sib[t][i],STATE(OBIT_UGLY));
-					if (sib[t][i]==b1) b1 = NULL;
-				}
-				if (b1)
-#endif
-					_release(b1);
 			}
 			but[t]=b;
 		} else if (b) { // NULL -> button: new siblings base list
@@ -1246,6 +1240,11 @@ drop:
 	}
 #ifdef MULTITOUCH
 	TOUCH_DEC(N);
+#ifdef SIBLINGS
+	n = nsib[t];
+	for(i=0;i<n;i++) _release(sib[t][i]);
+	nsib[t]=-1;
+#endif
 	if (t!=N) {
 		but[t] = but[N];
 		touchid[t] = touchid[N];
@@ -1254,7 +1253,8 @@ drop:
 //		X[t] = X[N];
 //		Y[t] = Y[N];
 #ifdef SIBLINGS
-		nsib[t] = nsib[N];
+	n = nsib[t] = nsib[N];
+	for(i=0;i<n;i++) sib[t][i]=sib[N][i];
 #endif
 	}
 #endif
@@ -1375,7 +1375,6 @@ void kb_process_keypress(button *b, int repeat, unsigned int flags)
     st = (state|lock) & KB_STATE_KNOWN;
 
     if (keypress) {
-	fprintf(stderr,"");
 	kb_send_keypress(b, st, flags);
 	DBG("%s clicked \n", DEFAULT_TXT(b));
     }
@@ -1437,7 +1436,7 @@ void kb_send_keypress(button *b, unsigned int next_state, unsigned int flags) {
 		mods0 = saved_mods;
 		saved_mods = next_state = mods;
 	}
-	
+
 	if (b->kc[l]<minkc || b->kc[l]>maxkc) return;
 	if ((mods0 ^ mods) & STATE(KBIT_CAPS)) mods ^= STATE(KBIT_CAPS)|STATE(KBIT_SHIFT);
 //	if ((mods0 ^ mods) & STATE(KBIT_MOD)) mods ^= STATE(KBIT_MOD)|STATE(KBIT_ALT);
