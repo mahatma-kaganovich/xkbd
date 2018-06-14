@@ -1137,98 +1137,95 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 #endif
 
 	b = kb_find_button(kb,x,y);
-	if (b != but[t]) {
-#ifdef SIBLINGS
-		/*
-		    intersection of sets of sibling buttons
-		    previous button or intersection with new button.
-		    if set size is 1 - this is result of touch.
-		    else must do other selections.
-		*/
-		if (!b) { // button -> NULL
-		} else if (but[t]) { // button -> button
-			int ns = nsib[t], ns1 = b->nsiblings;
-			button **s1 = (button **)b->siblings;
-			n=0;
-			if (ns<0) {
-				button **s = (button **)but[t]->siblings;
-				ns = but[t]->nsiblings;
-				for(i=0; i<ns; i++) {
-				    b1=s[i];
-				    for(j=0; j<ns1; j++) {
-					if (b1==s1[j]) {
-					    _press(sib[t][n++]=b1,STATE(OBIT_UGLY));
-					    break;
-					}
-				    }
-				}
-			} else {
-				for(i=0; i<ns; i++) {
-				    b1=sib[t][i];
-				    for(j=0; j<ns1; j++) {
-					if (b1==s1[j]) {
-					    sib[t][n++]=b1;
-					    b1=NULL;
-					    break;
-					}
-				    }
-				    if (b1) _release(b1);
-				}
-			}
-			nsib[t]=n;
-			if (n==0) { // no siblings, drop touch
-				goto drop;
-			} else if (n==1) { // 1 intersection: found button
-				but[t] = b = sib[t][0];
-			} else { // multiple, need to calculate or touch more
-#if 0
-				if (type==2) goto drop;
+	b1 = but[t];
+#ifndef SIBLINGS
+	if (b != b1 && b1) goto drop;
 #else
-				// try set of 2 buttons (first & last)
-				// unsure in this logic, but there are
-				// last chance to 1) draw 2) press something
-				button *s2[2] = { but[t], b };
-				int n1=0;
-				for(j=0; j<2; j++)
-				    for(i=0; i<n; i++)
-					if (sib[t][i]==s2[j]) {
-					    s2[n1++]=s2[j];
-					    break;
-					}
-				if (n1==1) {
-					b = s2[0];
-#if 1
-					n=nsib[t];
-					for(i=0;i<n;i++) if (sib[t][i]!=b) _release(sib[t][i]);
-					sib[t][0]=b;
-					nsib[t]=1;
-					but[t] = b;
-#else
-					// 2do? keep all set, but highlite
-					if (type==1) {
-						_press(but[t],STATE(OBIT_UGLY));
-						_press(b,STATE(OBIT_UGLY)|STATE(OBIT_SELECT));
-					}
-#endif
-				} else if (type==2) goto drop;
-#endif
-			}
-		} else { // NULL -> button: new siblings base list
-			// probably never, but keep case visible
-			n=nsib[t];
-			for(i=0;i<n;i++) _release(sib[t][i]);
-			nsib[t]=-1;
-			_press(b,STATE(OBIT_UGLY));
-		}
-#else
-		// simple logic: no button change in one touch
-		if (but[t]) goto drop;
-#endif
-	} else if ((n=nsib[t])>1) { // b==but[t], again
-		for(i=0;i<n;i++) if ((b1=sib[t][i])!=b) _release(b1);
+	/*
+		intersection of sets of sibling buttons
+		previous button or intersection with new button.
+		if set size is 1 - this is result of touch.
+		else must do other selections.
+	*/
+	n=nsib[t];
+	if (!b) {
+	} else if (!b1) { // NULL -> button: new siblings base list
+		// probably never, but keep case visible
+		for(i=0;i<n;i++) _release(sib[t][i]);
 		nsib[t]=-1;
-//		nsib[t]=1; sib[t][0]=b;
+		_press(b,STATE(OBIT_UGLY));
+	} else if (n>1 || b1!=b) { // button -> button, invariant
+		int ns, ns1 = b->nsiblings;
+		button **s1 = (button **)b->siblings;
+		if (n<0) {
+			button **s = (button **)b1->siblings;
+			ns = b1->nsiblings;
+			n = 0;
+			for(i=0; i<ns; i++) {
+				b1=s[i];
+				for(j=0; j<ns1; j++) {
+					if (b1==s1[j]) {
+						_press(sib[t][n++]=b1,STATE(OBIT_UGLY));
+						break;
+					}
+				}
+			}
+		} else if (b1!=b) {
+			ns = n;
+			n = 0;
+			for(i=0; i<ns; i++) {
+				b1=sib[t][i];
+				for(j=0; j<ns1; j++) {
+					if (b1==s1[j]) {
+						sib[t][n++]=b1;
+						b1=NULL;
+						break;
+					}
+				}
+				if (b1) _release(b1);
+			}
+		}
+		nsib[t]=n;
+		if (n==0) { // no siblings, drop touch
+			goto drop;
+		} else if (n==1) { // 1 intersection: found button
+			but[t] = b = sib[t][0];
+		} else { // multiple, need to calculate or touch more
+#if 0
+			if (type==2) goto drop;
+#else
+			// try set of 2 buttons (first & last)
+			// unsure in this logic, but there are
+			// last chance to 1) draw 2) press something
+			button *s2[2] = { but[t], b };
+			int n1=0;
+			for(j=(b==but[t]); j<2; j++) {
+				b1=s2[j];
+				for(i=0; i<n; i++) if (sib[t][i]==b1) {
+					s2[n1++]=b1;
+					break;
+				}
+			}
+			if (n1==1) {
+				b = s2[0];
+#if 1
+				n=nsib[t];
+				for(i=0;i<n;i++) if (sib[t][i]!=b) _release(sib[t][i]);
+				but[t] = b;
+				//nsib[t]=1; sib[t][0]=b;
+				nsib[t]=-1;
+#else
+				// 2do? keep all set, but highlite
+				if (type==1) {
+					_press(but[t],STATE(OBIT_UGLY));
+					_press(b,STATE(OBIT_UGLY)|STATE(OBIT_SELECT));
+				}
+#endif
+			} else if (type==2) goto drop;
+#endif
+		}
 	}
+#endif // SIBLINGS
 
 	if (type!=2){ // motion/to be continued
 	    if (b) {
