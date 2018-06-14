@@ -1139,7 +1139,6 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 #endif
 
 	b = kb_find_button(kb,x,y);
-	// simple logic: no button change in one touch
 	if (b != but[t]) {
 #ifdef SIBLINGS
 		/*
@@ -1148,31 +1147,31 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 		    if set size is 1 - this is result of touch.
 		    else must do other selections.
 		*/
-		if (but[t]) {
-			if (!b) return NULL;
-//			if (!b) goto drop; // button -> NULL
-			// button -> button
+		if (!b) { // button -> NULL
+		} else if (but[t]) { // button -> button
 			int ns = nsib[t], ns1 = b->nsiblings;
 			button **s1 = (button **)b->siblings;
 			button *b1;
 			n=0;
 			if (ns<0) {
 				button **s = (button **)but[t]->siblings;
-				nsib[t] = ns = but[t]->nsiblings;
-				for(i=0; i<ns; i++)
-				    for(j=0; j<ns1; j++)
-					if (s[i]==s1[j]) {
-					    _press(sib[t][n++]=s1[j],STATE(OBIT_UGLY));
+				ns = but[t]->nsiblings;
+				for(i=0; i<ns; i++) {
+				    b1=s[i];
+				    for(j=0; j<ns1; j++) {
+					if (b1==s1[j]) {
+					    _press(sib[t][n++]=b1,STATE(OBIT_UGLY));
 					    break;
 					}
+				    }
+				}
 			} else {
 				for(i=0; i<ns; i++) {
 				    b1=sib[t][i];
 				    for(j=0; j<ns1; j++) {
 					if (b1==s1[j]) {
-					    if (n!=i) _press(sib[t][n]=b1,STATE(OBIT_UGLY));
+					    sib[t][n++]=b1;
 					    b1=NULL;
-					    n++;
 					    break;
 					}
 				    }
@@ -1182,34 +1181,48 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 			nsib[t]=n;
 			if (n==0) { // no siblings, drop touch
 				goto drop;
-			}else if (n==1) { // 1 intersection: found button
-				b = sib[t][0];
-			// unknown, need to calculate or touch more
-			}else {
-#if 1
+			} else if (n==1) { // 1 intersection: found button
+				but[t] = b = sib[t][0];
+			} else { // multiple, need to calculate or touch more
+#if 0
 				if (type==2) goto drop;
 #else
-				// try set of 2 last buttons
+				// try set of 2 buttons (first & last)
 				// unsure in this logic, but there are
 				// last chance to 1) draw 2) press something
 				button *s2[2] = { but[t], b };
-				button *s3[2];
 				int n1=0;
 				for(j=0; j<2; j++)
 				    for(i=0; i<n; i++)
 					if (sib[t][i]==s2[j]) {
-					    s3[n1++]=s2[j];
+					    s2[n1++]=s2[j];
 					    break;
 					}
-				if (n1==1) b = sib[t][0];
-				else if (type==2) goto drop;
+				if (n1==1) {
+					b = s2[0];
+#if 1
+					n=nsib[t];
+					for(i=0;i<n;i++) if (sib[t][i]!=b) _release(sib[t][i]);
+					sib[t][0]=b;
+					nsib[t]=1;
+					but[t]=b;
+#else
+					// 2do? keep all set, but highlite
+					if (type==1) {
+						_press(but[t],STATE(OBIT_UGLY));
+						_press(b,STATE(OBIT_UGLY)|STATE(OBIT_SELECT));
+					}
+#endif
+				} else if (type==2) goto drop;
 #endif
 			}
-			but[t]=b;
-		} else if (b) { // NULL -> button: new siblings base list
+		} else { // NULL -> button: new siblings base list
+			n=nsib[t];
+			for(i=0;i<n;i++) _release(sib[t][i]);
 			nsib[t]=-1;
 		}
 #else
+		// simple logic: no button change in one touch
 		if (but[t]) goto drop;
 #endif
 	}
@@ -1229,7 +1242,11 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 	kb_set_slide(b, x, y );
 #endif
 	kb_process_keypress(b,0,0);
-	if (b->modifier || b->layout_switch > -1) but[t] = NULL;
+	if (b->layout_switch != -1) {
+		N=P=0;
+		return NULL;
+	}
+	if (b->modifier) but[t] = NULL;
 drop:
 	if (b=but[t]) {
 		but[t] = NULL;
@@ -1253,8 +1270,8 @@ drop:
 //		X[t] = X[N];
 //		Y[t] = Y[N];
 #ifdef SIBLINGS
-	n = nsib[t] = nsib[N];
-	for(i=0;i<n;i++) sib[t][i]=sib[N][i];
+		n = nsib[t] = nsib[N];
+		for(i=0;i<n;i++) sib[t][i]=sib[N][i];
 #endif
 	}
 #endif
