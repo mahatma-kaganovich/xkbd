@@ -1081,8 +1081,6 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 	static int devid[MAX_TOUCH];
 	static Time times[MAX_TOUCH];
 	static button *but[MAX_TOUCH];
-//	static int X[MAX_TOUCH];
-//	static int Y[MAX_TOUCH];
 #ifdef SIBLINGS
 	static button *sib[MAX_TOUCH][MAX_SIBLINGS];
 	static short nsib[MAX_TOUCH] = {};
@@ -1129,8 +1127,6 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 		touchid[t] = ptr;
 		devid[t] = dev;
 		times[t] = time;
-//		X[t] = x;
-//		Y[t] = y;
 		_press(b,0);
 		return b;
 	}
@@ -1152,7 +1148,12 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 		for(i=0;i<n;i++) _release(sib[t][i]);
 		nsib[t]=-1;
 		_press(b,STATE(OBIT_UGLY));
-	} else if (n>1 || b1!=b) { // button -> button, invariant
+	} else if (b1==b) { // first/main button, reset motions
+		n=nsib[t];
+		for(i=0;i<n;i++) if (sib[t][i]!=b) _release(sib[t][i]);
+		//nsib[t]=1; sib[t][0]=b;
+		nsib[t]=-1;
+	} else { // button -> button, invariant
 		int ns, ns1 = b->nsiblings;
 		button **s1 = (button **)b->siblings;
 		if (n<0) {
@@ -1168,7 +1169,7 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 					}
 				}
 			}
-		} else if (b1!=b) {
+		} else {
 			ns = n;
 			n = 0;
 			for(i=0; i<ns; i++) {
@@ -1192,50 +1193,42 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 #if 0
 			if (type==2) goto drop;
 #else
-			// try set of 2 buttons (first & last)
-			// unsure in this logic, but there are
-			// last chance to 1) draw 2) press something
+			// check set of 2 buttons (first & last)
 			button *s2[2] = { but[t], b };
 			int n1=0;
-			for(j=(b==but[t]); j<2; j++) {
+			for(j=0; j<2; j++) {
 				b1=s2[j];
 				for(i=0; i<n; i++) if (sib[t][i]==b1) {
 					s2[n1++]=b1;
 					break;
 				}
 			}
+			b = NULL;
 			if (n1==1) {
-				b = s2[0];
-#if 1
-				n=nsib[t];
-				for(i=0;i<n;i++) if (sib[t][i]!=b) _release(sib[t][i]);
-				but[t] = b;
-				//nsib[t]=1; sib[t][0]=b;
-				nsib[t]=-1;
-#else
-				// 2do? keep all set, but highlite
-				if (type==1) {
-					_press(but[t],STATE(OBIT_UGLY));
-					_press(b,STATE(OBIT_UGLY)|STATE(OBIT_SELECT));
-				}
+				but[t] = b = s2[0];
+				// in this place we can select single button, but no preview is wrong
+#if 0
+				// 2do? keep all set, but highlite or "press" (release)
+				else if (type==1) _press(b,STATE(OBIT_UGLY)|STATE(OBIT_SELECT));
+				if (type==2) nsib[t]=1;
 #endif
-			} else if (type==2) goto drop;
+			}
 #endif
 		}
 	}
 #endif // SIBLINGS
 
 	if (type!=2){ // motion/to be continued
-	    if (b) {
 		times[t] = time;
-//		X[t] = x;
-//		Y[t] = y;
-	    }
-	    return b;
+		return b;
 	}
 
 	// the END/release
 	if (!b) goto drop;
+#ifdef SIBLINGS
+	// on any logic, don't press without preview
+	if (nsib[t]>1) goto drop;
+#endif
 #ifdef SLIDES
 	kb_set_slide(b, x, y );
 #endif
@@ -1270,8 +1263,6 @@ drop:
 		touchid[t] = touchid[N];
 		devid[t] = devid[N];
 		times[t] = times[N];
-//		X[t] = X[N];
-//		Y[t] = Y[N];
 #ifdef SIBLINGS
 		n = nsib[t] = nsib[N];
 		for(i=0;i<n;i++) sib[t][i]=sib[N][i];
