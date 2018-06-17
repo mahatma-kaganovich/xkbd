@@ -1102,11 +1102,17 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 			break;
 		}
 	}
+	if (type && t<0) {
+//		fprintf(stderr,"untracked touch on state %i\n",type);
+		return NULL;
+	}
+
 #else
 	const int t=0;
 #endif
+	b = kb_find_button(kb,x,y);
+
 	if (!type) { // BEGIN/press
-		b = kb_find_button(kb,x,y);
 		if (!b) return NULL;
 #ifdef MULTITOUCH
 		t=N;
@@ -1129,14 +1135,6 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 		return b;
 	}
 
-#ifdef MULTITOUCH
-	if (t<0) {
-//		fprintf(stderr,"untracked touch on state %i\n",type);
-		return NULL;
-	}
-#endif
-
-	b = kb_find_button(kb,x,y);
 	b1 = but[t];
 #ifndef SIBLINGS
 	if (b != b1 && b1) goto drop;
@@ -1244,9 +1242,11 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 	kb_process_keypress(b,0,0);
 	if (b->layout_switch != -1) {
 		b->flags &= ~(STATE(OBIT_PRESSED)|STATE(OBIT_UGLY));
+#ifdef SIBLINGS
 		n = nsib[t];
 		for(i=0;i<n;i++) sib[t][i]->flags &= ~(STATE(OBIT_PRESSED)|STATE(OBIT_UGLY));
 		N=P=0;
+#endif
 		return NULL;
 	}
 	if (b->modifier) but[t] = NULL;
