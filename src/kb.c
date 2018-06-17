@@ -1211,7 +1211,7 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 				else if (type==1) _press(b,STATE(OBIT_UGLY)|STATE(OBIT_SELECT));
 				if (type==2) nsib[t]=1;
 #endif
-			} else if (!n1) b = NULL;
+			} else b = n1 ? but[t] : NULL;
 #endif
 		}
 	}
