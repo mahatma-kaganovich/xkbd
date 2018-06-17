@@ -1203,7 +1203,6 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 					break;
 				}
 			}
-			b = NULL;
 			if (n1==1) {
 				but[t] = b = s2[0];
 				// in this place we can select single button, but no preview is wrong
@@ -1212,7 +1211,7 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 				else if (type==1) _press(b,STATE(OBIT_UGLY)|STATE(OBIT_SELECT));
 				if (type==2) nsib[t]=1;
 #endif
-			}
+			} else if (!n1) b = NULL;
 #endif
 		}
 	}
