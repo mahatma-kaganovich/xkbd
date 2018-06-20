@@ -20,7 +20,6 @@
 #include <string.h>
 #include <unistd.h>
 #include <signal.h>
-#include <math.h>
 
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -491,13 +490,13 @@ stop_argv:
 #define e ((XIDeviceEvent*)ev.xcookie.data)
 //			switch(e->evtype) {
 			switch(ev.xcookie.evtype) {
-			    case XI_ButtonRelease:
+			    //case XI_ButtonRelease:
 			    case XI_TouchEnd: type++;
-			    case XI_Motion:
+			    //case XI_Motion:
 			    case XI_TouchUpdate: type++;
-			    case XI_ButtonPress:
+			    //case XI_ButtonPress:
 			    case XI_TouchBegin:
-				xkbd_process(kb, type, round(e->event_x), round(e->event_y), e->detail, e->sourceid, e->time);
+				xkbd_process(kb, type, e->event_x + .5, e->event_y + .5, e->detail, e->sourceid, e->time);
 			}
 			XFreeEventData(display, &ev.xcookie);
 		}
