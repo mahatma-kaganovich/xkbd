@@ -458,8 +458,8 @@ stop_argv:
       if(XQueryExtension(display, "XInputExtension", &xiopcode, &xievent, &xierror) &&
 		XIQueryVersion(display, &ximajor, &ximinor) != BadRequest) {
 
-	XIEventMask mask = { .deviceid = XIAllDevices, .mask_len = XIMaskLen(XI_TouchEnd) };
-	mask.mask = (unsigned char*)calloc(3, sizeof(char));
+	unsigned char mask_[3] = {0, 0, 0};
+	XIEventMask mask = { .deviceid = XIAllDevices, .mask_len = XIMaskLen(XI_TouchEnd), .mask = (unsigned char *)&mask_ };
 
 	// keep "button" events in standard events while
 //	XISetMask(mask.mask, XI_ButtonPress);
@@ -471,7 +471,6 @@ stop_argv:
 	XISetMask(mask.mask, XI_TouchUpdate);
 	XISetMask(mask.mask, XI_TouchEnd);
 	XISelectEvents(display, win, &mask, 1);
-	free(mask.mask);
       }
 #endif
 
