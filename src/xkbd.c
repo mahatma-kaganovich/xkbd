@@ -294,6 +294,7 @@ stop_argv:
 
       /* HACK to get libvirtkeys to work without mode_switch */
 	/* ??? 2delete? */
+/*
       if  (XKeysymToKeycode(display, XK_Mode_switch) == 0)
 	{
 	  int keycode;
@@ -312,7 +313,6 @@ stop_argv:
 	      }
       }
 
-/*
       wm_name = get_current_window_manager_name ();
 
       if (wm_name)
@@ -387,8 +387,6 @@ stop_argv:
       XSetStandardProperties(display, win, window_name,
 			     icon_name, None,
 			     argv, argc, &size_hints);
-      XStoreName(display, win, window_name);
-      XSetIconName(display, win, icon_name);
       wm_hints = XAllocWMHints();
       wm_hints->input = False;
       wm_hints->flags = InputHint;
