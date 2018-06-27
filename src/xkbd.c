@@ -395,7 +395,8 @@ stop_argv:
 	wm_hints->initial_state = WithdrawnState;
 	wm_hints->icon_window = wm_hints->window_group = win;
       }
-      XSetWMHints(display, win, wm_hints );
+      XSetWMHints(display, win, wm_hints);
+      XFree(wm_hints);
       XSetWMProtocols(display, win, wm_protocols, sizeof(wm_protocols) /
 		      sizeof(Atom));
 		      
