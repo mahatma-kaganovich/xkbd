@@ -37,12 +37,28 @@ if test x$enable_xpm != xno; then
 	_set_pkg xpm -DUSE_XPM -lXpm
 fi
 
+AC_ARG_ENABLE(ss,
+  [  --disable-ss         disable XScreenSaver support, [default=no]],
+  enable_ss=$enableval, enable_ss=yes)
+
+if test x$enable_ss != xno; then
+	_set_pkg xscrnsaver -DUSE_SS -lXss
+fi
+
 AC_ARG_ENABLE(xi,
   [  --disable-xi         disable XInput2, [default=no]],
   enable_xi=$enableval, enable_xi=yes)
 
 if test x$enable_xi != xno; then
 	_set_pkg xi -DUSE_XI -lXi
+fi
+
+AC_ARG_ENABLE(xrandr,
+  [  --disable-xrandr         disable xrandr support, [default=no]],
+  enable_xrandr=$enableval, enable_xrandr=yes)
+
+if test x$enable_xrandr != xno; then
+	_set_pkg xrandr -DUSE_XR -lXrandr
 fi
 
 AC_ARG_ENABLE(minimal,

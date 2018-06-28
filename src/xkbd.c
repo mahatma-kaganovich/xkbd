@@ -34,6 +34,10 @@
 #include <X11/extensions/XInput2.h>
 #endif
 
+#ifdef USE_XR
+#include <X11/extensions/Xrandr.h>
+#endif
+
 #include "../config.h"
 
 #include "libXkbd.h"
@@ -443,6 +447,11 @@ stop_argv:
       }
       signal(SIGUSR1, handle_sig); /* for extenal mapping / unmapping */
 
+#ifdef USE_XR
+   int xr, xrevent, xrerror;
+   xr = XRRQueryExtension(display, &xrevent, &xrerror);
+#endif
+
 #ifndef MINIMAL
 	// not found how to get keymap change on XInput, so keep Xkb events
 	int xkbError, reason_rtrn, xkbmjr = XkbMajorVersion, xkbmnr = XkbMinorVersion, xkbop;
@@ -506,29 +515,29 @@ stop_argv:
 		xkbd_process(kb, type, ev.xmotion.x, ev.xmotion.y, 0, 0, ev.xmotion.time);
 		break;
 	    case ClientMessage:
-		  if ((ev.xclient.message_type == wm_protocols[1])
+		if ((ev.xclient.message_type == wm_protocols[1])
 		      && (ev.xclient.data.l[0] == wm_protocols[0]))
-		  {
+		{
 			xkbd_destroy(kb);
 			XCloseDisplay(display);
 			exit(0);
-		  }
-		  break;
+		}
+		break;
 	    case ConfigureNotify:
-		  if ( ev.xconfigure.width != xkbd_get_width(kb)
-		       || ev.xconfigure.height != xkbd_get_height(kb))
-		  {
-		     xkbd_resize(kb,
+		if ( ev.xconfigure.width != xkbd_get_width(kb)
+		    || ev.xconfigure.height != xkbd_get_height(kb))
+		{
+			xkbd_resize(kb,
 				 ev.xconfigure.width,
 				 ev.xconfigure.height );
-		  }
-		  break;
+		}
+		break;
 	    case Expose:
-		  xkbd_repaint(kb);
-		  break;
+		xkbd_repaint(kb);
+		break;
+	    default:
 #ifndef MINIMAL
-		default: if (ev.type == xkbEventType) 
-		{
+		if (ev.type == xkbEventType) {
 #undef e
 #define e ((XkbEvent)ev)
 			switch (e.any.xkb_type) {
@@ -544,19 +553,23 @@ stop_argv:
 				// Xkbd send false notify, so we must compare maps
 				if (e.min_key_code != e.old_min_key_code || e.max_key_code != e.old_max_key_code || e.device != e.old_device
 				    || kb_load_keymap(display)
-				    ) {
-					XCloseDisplay(display);
-					xkbd_destroy(kb);
-					execvp(exec_cmd[0], exec_cmd);
-				}
+				    ) goto restart;
 				break;
 			}
 		}
+#endif
+#ifdef USE_XR
+		if (xr && ev.type == xrevent + RRScreenChangeNotify) goto restart;
 #endif
 	    }
 	    while (xkbd_process_repeats(kb) && !XPending(display))
 		usleep(10000L); /* sleep for a 10th of a second */
       }
+restart:
+	XCloseDisplay(display);
+	xkbd_destroy(kb);
+	execvp(exec_cmd[0], exec_cmd);
+	exit(1);
 no_dpy:
 	fprintf(stderr, "%s: cannot connect to X server '%s'\n", argv[0], display_name);
 	exit(1);
