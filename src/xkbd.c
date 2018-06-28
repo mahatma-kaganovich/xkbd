@@ -210,7 +210,7 @@ int main(int argc, char **argv)
    int dock = 0;
 
    XEvent ev;
-   int  xkbEventType = Expose; // any used berfore
+   int xkbEventType = 0;
 
    int i;
    char userconffile[256];
@@ -448,8 +448,10 @@ stop_argv:
       signal(SIGUSR1, handle_sig); /* for extenal mapping / unmapping */
 
 #ifdef USE_XR
-   int xr, xrevent, xrerror;
-   xr = XRRQueryExtension(display, &xrevent, &xrerror);
+      int xrevent, xrerror;
+      if (XRRQueryExtension(display, &xrevent, &xrerror))
+	XRRSelectInput(display, win, RRScreenChangeNotifyMask);
+      else xrevent = 0;
 #endif
 
 #ifndef MINIMAL
@@ -458,11 +460,11 @@ stop_argv:
 	if (XkbQueryExtension(display,&xkbop,&xkbEventType,&xkbError,&xkbmjr,&xkbmnr)) {
 		XkbSelectEvents(display,XkbUseCoreKbd,XkbAllEventsMask,XkbNewKeyboardNotifyMask|XkbStateNotifyMask);
 		XkbSelectEventDetails(display,XkbUseCoreKbd,XkbStateNotifyMask,XkbAllStateComponentsMask,XkbModifierStateMask|XkbModifierLatchMask|XkbModifierLockMask|XkbModifierBaseMask);
-	}
+	} else xkbEventType = 0;
 #endif
 
 #ifdef USE_XI
-      int xiopcode, xievent, xierror;
+      int xiopcode, xievent = 0, xierror, xi = 0;
       int ximajor = 2, ximinor = 2;
       if(XQueryExtension(display, "XInputExtension", &xiopcode, &xievent, &xierror) &&
 		XIQueryVersion(display, &ximajor, &ximinor) != BadRequest) {
@@ -480,6 +482,7 @@ stop_argv:
 	XISetMask(mask.mask, XI_TouchUpdate);
 	XISetMask(mask.mask, XI_TouchEnd);
 	XISelectEvents(display, win, &mask, 1);
+	xi = 1;
       }
 #endif
 
@@ -489,7 +492,7 @@ stop_argv:
 	    XNextEvent(display, &ev);
 	    switch (ev.type) {
 #ifdef USE_XI
-		case GenericEvent: if (ev.xcookie.extension == xiopcode 
+		case GenericEvent: if (xi && ev.xcookie.extension == xiopcode
 //		    && ev.xgeneric.extension == 131
 		    && XGetEventData(display, &ev.xcookie)
 		    ) {
@@ -535,6 +538,7 @@ stop_argv:
 	    case Expose:
 		xkbd_repaint(kb);
 		break;
+	    case 0: break;
 	    default:
 #ifndef MINIMAL
 		if (ev.type == xkbEventType) {
@@ -556,10 +560,11 @@ stop_argv:
 				    ) goto restart;
 				break;
 			}
+			break;
 		}
 #endif
 #ifdef USE_XR
-		if (xr && ev.type == xrevent + RRScreenChangeNotify) goto restart;
+		if (xrevent && ev.type == xrevent + RRScreenChangeNotify) goto restart;
 #endif
 	    }
 	    while (xkbd_process_repeats(kb) && !XPending(display))
