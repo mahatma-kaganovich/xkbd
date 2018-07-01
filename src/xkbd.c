@@ -550,9 +550,11 @@ stop_argv:
 		unsigned int nw;
 		XWindowAttributes wa;
 
-		if (ev.xvisibility.state!=VisibilityFullyObscured) break;
-		if (display != ev.xvisibility.display && win!=ev.xvisibility.window) break;
-		if(!XQueryTree(display, rootWin, &rw, &pw, &wins, &nw)) break;
+		if (ev.xvisibility.state!=VisibilityFullyObscured ||
+			display!=ev.xvisibility.display ||
+			win!=ev.xvisibility.window ||
+			!XQueryTree(display, rootWin, &rw, &pw, &wins, &nw)
+			) break;
 		while (nw--) {
 			// BUG! can fail on OpenBox menu (async?)
 			if (XGetWindowAttributes(display, wins[nw],&wa) &&
