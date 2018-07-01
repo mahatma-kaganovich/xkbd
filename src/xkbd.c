@@ -55,6 +55,7 @@ Window   win;
 Window rootWin;
 Atom mwm_atom;
 int screen_num;
+Screen *scr;
 
 #ifndef MINIMAL
 int Xkb_sync = 0;
@@ -163,7 +164,8 @@ Options:\n\
   -s  strut\n\
   -D  Dock/options bitmask: 1=dock, 2=strut, 4=_NET_WM_WINDOW_TYPE_DOCK,\n\
       8=_NET_WM_WINDOW_TYPE_TOOLBAR, 16=_NET_WM_STATE_STICKY.\n\
-      For OpenBox I use 22 = $[2+4+16].\n\
+      32=resize (slock)\n\
+      For OpenBox I use 54 = $[2+4+16+32].\n\
   -X  Xkb state interaction\n\
   -l  disable modifiers lock\n\
   -v  version\n\
@@ -278,6 +280,7 @@ stop_argv:
    if (!display) goto no_dpy;
    screen_num = DefaultScreen(display);
    rootWin = RootWindow(display, screen_num);
+   scr = XScreenOfDisplay(display, screen_num);
 /*
     // if you know where & how to use relative root window
    Window rootWin0;
@@ -458,8 +461,12 @@ stop_argv:
 	// not found how to get keymap change on XInput, so keep Xkb events
 	int xkbError, reason_rtrn, xkbmjr = XkbMajorVersion, xkbmnr = XkbMinorVersion, xkbop;
 	if (XkbQueryExtension(display,&xkbop,&xkbEventType,&xkbError,&xkbmjr,&xkbmnr)) {
-		XkbSelectEvents(display,XkbUseCoreKbd,XkbAllEventsMask,XkbNewKeyboardNotifyMask|XkbStateNotifyMask);
-		XkbSelectEventDetails(display,XkbUseCoreKbd,XkbStateNotifyMask,XkbAllStateComponentsMask,XkbModifierStateMask|XkbModifierLatchMask|XkbModifierLockMask|XkbModifierBaseMask);
+		if (Xkb_sync) {
+			XkbSelectEvents(display,XkbUseCoreKbd,XkbAllEventsMask,XkbNewKeyboardNotifyMask|XkbStateNotifyMask);
+			XkbSelectEventDetails(display,XkbUseCoreKbd,XkbStateNotifyMask,XkbAllStateComponentsMask,XkbModifierStateMask|XkbModifierLatchMask|XkbModifierLockMask|XkbModifierBaseMask);
+		} else {
+			XkbSelectEvents(display,XkbUseCoreKbd,XkbAllEventsMask,XkbNewKeyboardNotifyMask);
+		}
 	} else xkbEventType = 0;
 #endif
 
@@ -538,6 +545,25 @@ stop_argv:
 	    case Expose:
 		xkbd_repaint(kb);
 		break;
+	    case VisibilityNotify: if (dock & 32) {
+		Window rw, pw, *wins;
+		unsigned int nw;
+		XWindowAttributes wa;
+
+		if (ev.xvisibility.state!=VisibilityFullyObscured) break;
+		if (display != ev.xvisibility.display && win!=ev.xvisibility.window) break;
+		if(!XQueryTree(display, rootWin, &rw, &pw, &wins, &nw)) break;
+		while (nw--) {
+			// BUG! can fail on OpenBox menu (async?)
+			if (XGetWindowAttributes(display, wins[nw],&wa) &&
+				wa.screen == scr &&
+				wa.x<=xret && wa.y<yret && wa.width>=wret && wa.height>hret &&
+				wa.x+wa.width>xret && wa.y+wa.height>yret
+				) XResizeWindow(display, wins[nw], wa.width, yret-wa.y);
+		}
+		XFree(wins);
+	    }
+	    break;
 	    case 0: break;
 	    default:
 #ifndef MINIMAL
@@ -579,5 +605,3 @@ no_dpy:
 	fprintf(stderr, "%s: cannot connect to X server '%s'\n", argv[0], display_name);
 	exit(1);
 }
-
-
