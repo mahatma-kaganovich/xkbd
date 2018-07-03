@@ -50,6 +50,8 @@
 #define WIN_OVERIDE_AWAYS_TOP 0
 #define WIN_OVERIDE_NOT_AWAYS_TOP 1
 
+char *IAM = "xkbd";
+
 Display* display; /* ack globals due to sighandlers - another way ? */
 Window   win;
 Window rootWin;
@@ -68,6 +70,20 @@ enum {
   WM_METACITY,
   WM_MATCHBOX,
 };
+
+static int xerrh(Display *dsp, XErrorEvent *ev) {
+	char buf[256];
+
+	fprintf(stderr,"%s: X error %i ",IAM,ev->error_code);
+	if (!XFlush(dsp)) {
+		fprintf(stderr,"fatal\n");
+		exit(1);
+	}
+	buf[0]=0;
+	XGetErrorText(dsp,ev->error_code,(char*)&buf,sizeof(buf));
+	fprintf(stderr,"on screen %s - %s\n",XDisplayString(dsp),buf);
+	return 0;
+}
 
 static unsigned char*
 get_current_window_manager_name (void)
@@ -152,7 +168,7 @@ void version()
 
 void usage(void)
 {
-   printf("Usage: xkbd <options>\n\
+   printf("Usage: %s <options>\n\
 Options:\n\
   -display  <display>\n\
   -geometry <geometry>\n\
@@ -170,11 +186,11 @@ Options:\n\
   -l  disable modifiers lock\n\
   -v  version\n\
   -e {<...>}   exec on restart (to end of line)\n\
-  -h  this help\n");
+  -h  this help\n", IAM);
 #ifdef USE_XFT
-   printf("  -font <font name>  Select the xft AA font for xkbd\n");
+   printf("  -font <font name>  Select the xft AA font\n");
 #else
-   printf("  -font <font name>  Select the X11 font for xkbd\n");
+   printf("  -font <font name>  Select the X11 font\n");
 #endif
 }
 
@@ -189,9 +205,8 @@ void _propAtom32(char *prop, char *data){
 
 int main(int argc, char **argv)
 {
-   char *window_name = "xkbd";
-
-   char *icon_name = "xkbd";
+   char *window_name = IAM;
+   char *icon_name = IAM;
 
    XSizeHints size_hints;
    XWMHints *wm_hints;
@@ -354,7 +369,8 @@ stop_argv:
       if (conf_file == NULL)
 	{
 	  strcpy(userconffile,getenv("HOME"));
-	  strcat(userconffile, "/.xkbd");
+	  strcat(userconffile, "/.");
+	  strcat(userconffile, IAM);
 
 	  if ((fp = fopen(userconffile, "r")) != NULL)
 	    {
@@ -446,7 +462,6 @@ stop_argv:
 	 fclose(stdout);
       } else {
 	 XMapWindow(display, win);
-	 XSync(display, False);
       }
       signal(SIGUSR1, handle_sig); /* for extenal mapping / unmapping */
 
@@ -492,6 +507,8 @@ stop_argv:
 	xi = 1;
       }
 #endif
+      XSetErrorHandler(xerrh);
+      XSync(display, False);
 
       while (1)
       {
