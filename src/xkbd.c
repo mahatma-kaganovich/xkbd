@@ -81,7 +81,7 @@ static int xerrh(Display *dsp, XErrorEvent *ev) {
 	}
 	buf[0]=0;
 	XGetErrorText(dsp,ev->error_code,(char*)&buf,sizeof(buf));
-	fprintf(stderr,"on screen %s - %s\n",XDisplayString(dsp),buf);
+	fprintf(stderr,"%s %s\n",XDisplayString(dsp),buf);
 	return 0;
 }
 
@@ -466,10 +466,9 @@ stop_argv:
       signal(SIGUSR1, handle_sig); /* for extenal mapping / unmapping */
 
 #ifdef USE_XR
-      int xrevent, xrerror;
-      if (XRRQueryExtension(display, &xrevent, &xrerror))
+      int xrevent, xrerror, xrr;
+      if (xrr = XRRQueryExtension(display, &xrevent, &xrerror))
 	XRRSelectInput(display, win, RRScreenChangeNotifyMask);
-      else xrevent = 0;
 #endif
 
 #ifndef MINIMAL
@@ -566,6 +565,7 @@ stop_argv:
 		Window rw, pw, *wins;
 		unsigned int nw;
 		XWindowAttributes wa;
+		static int lock_cnt = 0;
 
 		if (ev.xvisibility.state!=VisibilityFullyObscured ||
 			display!=ev.xvisibility.display ||
@@ -581,6 +581,8 @@ stop_argv:
 				) XResizeWindow(display, wins[nw], wa.width, yret-wa.y);
 		}
 		XFree(wins);
+		// first lock: fork (to realize init-lock safe wait)
+		if (!lock_cnt++ && fork()) exit(0);
 	    }
 	    break;
 	    case 0: break;
@@ -609,7 +611,7 @@ stop_argv:
 		}
 #endif
 #ifdef USE_XR
-		if (xrevent && ev.type == xrevent + RRScreenChangeNotify) goto restart;
+		if (xrr && ev.type == xrevent + RRScreenChangeNotify) goto restart;
 #endif
 	    }
 	    while (xkbd_process_repeats(kb) && !XPending(display))
