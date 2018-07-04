@@ -266,11 +266,7 @@ typedef struct _button
     button;
 
 
-#ifdef MINIMAL
-#define Xkb_sync 0
-#else
 extern int Xkb_sync;
-#endif
 
 extern int no_lock;
 

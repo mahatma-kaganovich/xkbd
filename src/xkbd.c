@@ -28,6 +28,7 @@
 #include <X11/keysym.h>
 #include <X11/XKBlib.h>
 #include <X11/extensions/shape.h>
+#include <X11/Xresource.h>
 
 #ifdef USE_XI
 #include <X11/extensions/XInput.h>
@@ -59,9 +60,7 @@ Atom mwm_atom;
 int screen_num;
 Screen *scr;
 
-#ifndef MINIMAL
 int Xkb_sync = 0;
-#endif
 int no_lock = 0;
 
 enum {
@@ -218,13 +217,14 @@ int main(int argc, char **argv)
 //   char *wm_name;
 //   int wm_type = WM_UNKNOWN;
 
-   char *geometry = NULL;
+   static char *geometry = NULL;
    int xret=0, yret=0, wret=0, hret=0;
-   char *conf_file = NULL;
-   char *font_name = NULL;
+   static char *conf_file = NULL;
+   static char *font_name = NULL;
    int cmd_xft_selected = 0; /* ugly ! */
    int embed = 0;
-   int dock = 0;
+   static int dock = 0;
+   XrmDatabase xrm;
 
    XEvent ev;
    int xkbEventType = 0;
@@ -236,56 +236,83 @@ int main(int argc, char **argv)
 
    char **exec_cmd = argv;
 
+   static struct {
+	char *name;
+	int type;
+	void *ptr;
+   } resources[] = {
+	{ "xkbd.geometry", 0, &geometry },
+	{ "xkbd.font_name", 0, &font_name },
+	{ "xkbd.conf_file", 0, &conf_file },
+	{ "xkbd.dock", 1, &dock },
+	{ "xkbd.sync", 2, &Xkb_sync },
+	{ "xkbd.no_lock", 2, &no_lock },
+	{ NULL, 0, NULL }
+   };
+
+
    for (i=1; argv[i]; i++) {
       char *arg = argv[i];
+      int res = -1;
       if (*arg=='-') {
 	 switch (arg[1]) {
 	    case 'd' : /* display */
 	       display_name = argv[++i];
 	       break;
 	    case 'g' :
-	       geometry = argv[++i];
-	       break;
+		res = 0;
+		break;
 	    case 'f':
-	       font_name = argv[++i];
-#ifdef USE_XFT
-	       cmd_xft_selected = 1;
-#endif
-	       break;
+		res = 1;
+		break;
 	    case 'k' :
-	       conf_file = argv[++i];
-	       break;
+		res = 2;
+		break;
 	    case 'x' :
-	       embed = 1;
-	       break;
+		embed = 1;
+		break;
 	    case 'c' :
-	       dock |= 1;
-	       break;
+		dock |= 1;
+		break;
 	    case 's' :
-	       dock |= 2;
-	       break;
+		dock |= 2;
+		break;
 	    case 'D' :
-	       dock = atoi(argv[++i]);
-	       break;
+		res = 3;
+		break;
 	    case 'X' :
 #ifndef MINIMAL
-	       Xkb_sync = 1;
+		res = 4;
 #endif
-	       break;
+		break;
 	    case 'e' :
-	       exec_cmd = &argv[++i];
-	       goto stop_argv;
+		exec_cmd = &argv[++i];
+		goto stop_argv;
 	    case 'l' :
-	       no_lock = 1;
-	       break;
+		res = 5;
+		break;
 	    case 'v' :
-	       version();
-	       exit(0);
-	       break;
+		version();
+		exit(0);
+		break;
 	    default:
-	       usage();
-	       exit(0);
-	       break;
+		usage();
+		exit(0);
+		break;
+	 }
+	 if (res > -1) {
+	    resources[res].name = ""; // top priority
+	    switch (resources[res].type) {
+	    case 0: 
+		*(char **)resources[res].ptr = argv[++i];
+		break;
+	    case 1:
+		*(int *)resources[res].ptr = atoi(argv[++i]);
+		break;
+	    case 2:
+		*(int *)resources[res].ptr = 1;
+		break;
+	    }
 	 }
       }
    }
@@ -296,6 +323,29 @@ stop_argv:
    screen_num = DefaultScreen(display);
    rootWin = RootWindow(display, screen_num);
    scr = XScreenOfDisplay(display, screen_num);
+
+   char* xrms;
+   if ((xrms = XResourceManagerString(display)) && (xrm = XrmGetStringDatabase(xrms)))
+   for (i=0; resources[i].name; i++) {
+	char *type = NULL;
+	XrmValue val;
+	int n;
+	val.addr = NULL;
+
+	if (*resources[0].name && XrmGetResource(xrm,resources[i].name,NULL,&type,&val) && val.addr) {
+		switch (resources[i].type) {
+		case 0:
+			n = strlen((char *)val.addr);
+			memcpy(*(char **)(resources[i].ptr) = malloc(n), val.addr, n);
+			break;
+		case 1:
+		case 2:
+			*(int *)resources[i].ptr=atoi(*(int *)val.addr);
+			break;
+		}
+	}
+   }
+
 /*
     // if you know where & how to use relative root window
    Window rootWin0;
@@ -391,6 +441,9 @@ stop_argv:
       _reset(0);
       signal(SIGTERM, _reset);
 
+#ifdef USE_XFT
+      cmd_xft_selected = font_name!=NULL;
+#endif
       kb = xkbd_realize(display, win, conf_file, font_name, 0, 0,
 			wret, hret, cmd_xft_selected);
       if (wret != xkbd_get_width(kb) || hret != xkbd_get_height(kb)) {
