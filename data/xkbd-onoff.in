@@ -56,7 +56,6 @@ if [ -n "$lock" ]; then
 	}
 	$lock &
 	pid=$!
-	echo kill=$kill
 	$kill && { 
 		xkbd $opt &
 		wait $pid
