@@ -298,15 +298,15 @@ int kb_load_keymap(Display *dpy) {
 
  if (!keymap || minkc1 != minkc || maxkc1 != maxkc || ks_per_kc1 != ks_per_kc ||
    memcmp(keymap, keymap1, (maxkc-minkc+1)*ks_per_kc1)) {
-   if (keymap) free(keymap);
-      keymap = keymap1;
-      minkc = minkc1;
-      maxkc = maxkc1;
-      notkc = minkc1 - 1;
-      ks_per_kc = ks_per_kc1;
-      return 1;
+	XFree(keymap);
+	keymap = keymap1;
+	minkc = minkc1;
+	maxkc = maxkc1;
+	notkc = minkc1 - 1;
+	ks_per_kc = ks_per_kc1;
+	return 1;
    }
-   free(keymap1);
+   XFree(keymap1);
    /* keymap not changed */
    return 0;
 }
