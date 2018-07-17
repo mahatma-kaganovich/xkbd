@@ -60,6 +60,9 @@ Atom mwm_atom;
 int screen_num;
 Screen *scr;
 
+Xkbd *kb = NULL;
+char **exec_cmd;
+
 int Xkb_sync = 0;
 int no_lock = 0;
 
@@ -143,6 +146,14 @@ void handle_sig(int sig)
    }
 }
 
+void restart(){
+	// display will be closed anymore, but prefer to ignore exec failures
+//	XCloseDisplay(display);
+//	xkbd_destroy(kb);
+	execvp(exec_cmd[0], exec_cmd);
+//	exit(1);
+}
+
 static int stopped = 0;
 void _reset(int sig){
 	if (!stopped) {
@@ -212,7 +223,6 @@ int main(int argc, char **argv)
 
    char *display_name = (char *)getenv("DISPLAY");
 
-   Xkbd *kb = NULL;
 
 //   char *wm_name;
 //   int wm_type = WM_UNKNOWN;
@@ -234,7 +244,6 @@ int main(int argc, char **argv)
    FILE *fp;
    KeySym mode_switch_ksym;
 
-   char **exec_cmd = argv;
 
    static struct {
 	char *name;
@@ -250,6 +259,8 @@ int main(int argc, char **argv)
 	{ NULL, 0, NULL }
    };
 
+
+   exec_cmd = argv;
 
    for (i=1; argv[i]; i++) {
       char *arg = argv[i];
@@ -340,7 +351,7 @@ stop_argv:
 			break;
 		case 1:
 		case 2:
-			*(int *)resources[i].ptr=atoi(*(int *)val.addr);
+			*(int *)resources[i].ptr=atoi((char *)val.addr);
 			break;
 		}
 	}
@@ -657,24 +668,19 @@ stop_argv:
 				// Xkbd send false notify, so we must compare maps
 				if (e.min_key_code != e.old_min_key_code || e.max_key_code != e.old_max_key_code || e.device != e.old_device
 				    || kb_load_keymap(display)
-				    ) goto restart;
+				    ) restart();
 				break;
 			}
 			break;
 		}
 #endif
 #ifdef USE_XR
-		if (xrr && ev.type == xrevent + RRScreenChangeNotify) goto restart;
+		if (xrr && ev.type == xrevent + RRScreenChangeNotify) restart();
 #endif
 	    }
 	    while (xkbd_process_repeats(kb) && !XPending(display))
 		usleep(10000L); /* sleep for a 10th of a second */
       }
-restart:
-	XCloseDisplay(display);
-	xkbd_destroy(kb);
-	execvp(exec_cmd[0], exec_cmd);
-	exit(1);
 no_dpy:
 	fprintf(stderr, "%s: cannot connect to X server '%s'\n", argv[0], display_name);
 	exit(1);
