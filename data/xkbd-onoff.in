@@ -1,7 +1,6 @@
 #!/bin/bash
 
 _kill(){
-	$kill &&
 	if [ -x /usr/bin/pkill ]; then
 		pkill -x xkbd -u "$EUID" ${@} && exit
 	else
@@ -16,7 +15,7 @@ touch=true
 n=
 for i in "${@}"; do
 	[ -n "$n" ] && eval $n='"$i"' && n='' ||
-	case "$1" in
+	case "$i" in
 	--nokill)eval "${i#--no}"=false;;
 	--lock-touch)
 		# probably safer for multiple X
@@ -29,8 +28,12 @@ for i in "${@}"; do
 	*)echo "$0: unknown param: $i
 Params:
   --nokill
-  --lock[-touch] <lock_program> - usual '--lock slock'
-  --conf <xkbd_config>"; exit 1;;
+  --lock[-touch] <lock_program>
+  --conf <xkbd_config>
+Examples:
+  $0 --nokill --lock-touch slock - on .Xinitrc
+  $0 --lock-touch slock - lock with xkbd
+"; exit 1;;
 	esac
 done
 
@@ -41,19 +44,28 @@ done
 
 opt="-X -l -D 54 -k $conf -e $0 --nokill"
 
-[ -n "$lock" ] && {
-	$touch || {
-		exec $lock
+if [ -n "$lock" ]; then
+	! $touch || pgrep -x xkbd -u "$EUID" >/dev/null && {
+		if $kill; then
+			exec $lock
+		else
+			$lock &
+			sleep 0.5
+		fi
 		exit
 	}
-	pgrep -x xkbd -u "$EUID" >/dev/null && xkbd=true || xkbd=false
-	$xkbd || xkbd $opt &
-	$lock
-	$xkbd || _kill
-	exit
-}
-
-_kill
+	$lock &
+	pid=$!
+	echo kill=$kill
+	$kill && { 
+		xkbd $opt &
+		wait $pid
+		_kill
+		exit
+	}
+else
+	$kill && _kill
+fi
 # around bug in configuring keyboard over xorg.conf
 setxkbmap
 exec xkbd $opt
