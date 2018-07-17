@@ -12,16 +12,24 @@ _kill(){
 conf=
 kill=true
 lock=
+touch=true
 n=
 for i in "${@}"; do
 	[ -n "$n" ] && eval $n='"$i"' && n='' ||
 	case "$1" in
 	--nokill)eval "${i#--no}"=false;;
+	--lock-touch)
+		# probably safer for multiple X
+		which xinput >/dev/null && {
+			xinput list --long|grep -q 'Touch mode:' || touch=false
+		}
+		n=lock
+	;;
 	--lock|--conf)n="${i#--}";;
 	*)echo "$0: unknown param: $i
 Params:
   --nokill
-  --lock <lock_program> - usual '--lock slock'
+  --lock[-touch] <lock_program> - usual '--lock slock'
   --conf <xkbd_config>"; exit 1;;
 	esac
 done
@@ -34,6 +42,10 @@ done
 opt="-X -l -D 54 -k $conf -e $0 --nokill"
 
 [ -n "$lock" ] && {
+	$touch || {
+		exec $lock
+		exit
+	}
 	pgrep -x xkbd -u "$EUID" >/dev/null && xkbd=true || xkbd=false
 	$xkbd || xkbd $opt &
 	$lock
