@@ -1,9 +1,47 @@
 #!/bin/bash
 
-[ "$1" != --nokill ] && killall -qw xkbd -u "$USER" && exit
+_kill(){
+	$kill &&
+	if [ -x /usr/bin/pkill ]; then
+		pkill -x xkbd -u "$EUID" ${@} && exit
+	else
+		killall -qw xkbd -u "$USER" ${@} && exit
+	fi
+}
+
+conf=
+kill=true
+lock=
+n=
+for i in "${@}"; do
+	[ -n "$n" ] && eval $n='"$i"' && n='' ||
+	case "$1" in
+	--nokill)eval "${i#--no}"=false;;
+	--lock|--conf)n="${i#--}";;
+	*)echo "$0: unknown param: $i
+Params:
+  --nokill
+  --lock <lock_program> - usual '--lock slock'
+  --conf <xkbd_config>"; exit 1;;
+	esac
+done
+
+[ -z "$conf" ] &&
+for conf in /etc/xkbd-config.conf @pkgdatadir@/xkbd-kp-f.conf; do
+	[ -e $conf ] && break
+done
+
+opt="-X -l -D 54 -k $conf -e $0 --nokill"
+
+[ -n "$lock" ] && {
+	pgrep -x xkbd -u "$EUID" >/dev/null && xkbd=true || xkbd=false
+	$xkbd || xkbd $opt &
+	$lock
+	$xkbd || _kill
+	exit
+}
+
+_kill
 # around bug in configuring keyboard over xorg.conf
 setxkbmap
-#exec xkbd -X -l -D 22 -k <(xkbd-config) -e $0 --nokill
-for i in /etc/xkbd-config.conf @pkgdatadir@/xkbd-kp-f.conf; do
-	[ -e $i ] && exec xkbd -X -l -D 54 -k $i -e $0 --nokill
-done
+exec xkbd $opt
