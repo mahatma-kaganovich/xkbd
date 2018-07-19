@@ -1,5 +1,19 @@
 #!/bin/bash
 
+_help(){
+echo "$0: unknown param: $i
+Params:
+  --nokill
+  --lock[-touch] [<lock_program>]
+  --sudo{1|2} <cmd>
+  --conf <xkbd_config>
+Examples:
+  $0 --nokill --lock-touch slock - on .Xinitrc
+  $0 --lock-touch slock - lock with xkbd
+"
+exit 1
+}
+
 _kill(){
 	if [ -x /usr/bin/pkill ]; then
 		pkill -x xkbd -u "$EUID" ${@} && exit
@@ -8,15 +22,21 @@ _kill(){
 	fi
 }
 
-conf=
+_lock(){
+	[ -n "$sudo1" ] && sudo -n $sudo1 &
+	$lock1
+	[ -n "$sudo2" ] && sudo -n $sudo2 &
+}
+
+unset conf
 kill=true
-lock=
+unset lock
+unset lock1
 touch=true
 n=
 for i in "${@}"; do
-	[ -n "$n" ] && eval $n='"$i"' && n='' ||
 	case "$i" in
-	--nokill)eval "${i#--no}"=false;;
+	--nokill)eval "${i#--no}"=false ; n='';;
 	--lock-touch)
 		# probably safer for multiple X
 		which xinput >/dev/null && {
@@ -24,30 +44,34 @@ for i in "${@}"; do
 		}
 		n=lock
 	;;
-	--lock|--conf)n="${i#--}";;
-	*)echo "$0: unknown param: $i
-Params:
-  --nokill
-  --lock[-touch] <lock_program>
-  --conf <xkbd_config>
-Examples:
-  $0 --nokill --lock-touch slock - on .Xinitrc
-  $0 --lock-touch slock - lock with xkbd
-"; exit 1;;
+	--lock|--conf|--sudo1|--sudo2)n="${i#--}";;
+	-h|--help)_help;;
+	*)
+		[ -n "$n" ] && declare $n+="${!n:+ }$i" || _help
+		continue
+	;;
 	esac
+	[ -n "$n" -a ! -v "$n" ] && declare $n=''
 done
 
-[ -z "$conf" ] &&
+[ -v conf ] ||
 for conf in /etc/xkbd-config.conf @pkgdatadir@/xkbd-kp-f.conf; do
 	[ -e $conf ] && break
 done
 
 opt="-X -l -D 54 -k $conf -e $0 --nokill"
 
+[ -v lock -a -z "$lock" ] && for lock in /usr/bin/slock; do [ -x "$lock" ] && break;done
+
 if [ -n "$lock" ]; then
+	[ -n "$sudo1$sudo2" ] && {
+		lock1="$lock"
+		lock=_lock
+	}
 	! $touch || pgrep -x xkbd -u "$EUID" >/dev/null && {
-		if $kill; then
+		if $kill && [ "$lock" != _lock ]; then
 			exec $lock
+			$lock
 		else
 			$lock &
 			sleep 0.5
@@ -56,7 +80,7 @@ if [ -n "$lock" ]; then
 	}
 	$lock &
 	pid=$!
-	$kill && { 
+	$kill && {
 		xkbd $opt &
 		wait $pid
 		_kill
