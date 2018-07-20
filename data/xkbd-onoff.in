@@ -28,6 +28,10 @@ _lock(){
 	[ -n "$sudo2" ] && sudo -n $sudo2 &
 }
 
+pchk(){
+	pgrep -x "${1##*/}" -u "$EUID" >/dev/null
+}
+
 unset conf
 kill=true
 unset lock
@@ -64,11 +68,15 @@ opt="-X -l -D 54 -k $conf -e $0 --nokill"
 [ -v lock -a -z "$lock" ] && for lock in /usr/bin/slock; do [ -x "$lock" ] && break;done
 
 if [ -n "$lock" ]; then
+    $touch && pchk xkbd && touch=false
+    if pchk $lock; then
+	$touch || exit
+    else
 	[ -n "$sudo1$sudo2" ] && {
 		lock1="$lock"
 		lock=_lock
 	}
-	! $touch || pgrep -x xkbd -u "$EUID" >/dev/null && {
+	$touch || {
 		if $kill && [ "$lock" != _lock ]; then
 			exec $lock
 			$lock
@@ -86,6 +94,7 @@ if [ -n "$lock" ]; then
 		_kill
 		exit
 	}
+    fi
 else
 	$kill && _kill
 fi
