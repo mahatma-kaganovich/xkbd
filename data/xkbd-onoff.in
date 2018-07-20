@@ -7,6 +7,7 @@ Params:
   --lock[-touch] [<lock_program>]
   --sudo{1|2} <cmd>
   --conf <xkbd_config>
+  --displays
 Examples:
   $0 --nokill --lock-touch slock - on .Xinitrc
   $0 --lock-touch slock - lock with xkbd
@@ -47,6 +48,19 @@ for i in "${@}"; do
 			xinput list --long|grep -qF 'Touch mode:' || touch=false
 		}
 		n=lock
+	;;
+	--displays)
+		pchk(){
+			local i r=1
+			for i in $(pgrep -x "${1##*/}" -u "$EUID"); do
+				grep -xFzw "DISPLAY=$DISPLAY" /proc/environ && r=0 && echo $i
+			done
+			return $r
+		}
+		_kill(){
+			kill $(pchk "$1") 2>/dev/null
+		}
+		n=
 	;;
 	--lock|--conf|--sudo1|--sudo2)n="${i#--}";;
 	-h|--help)_help;;
