@@ -114,7 +114,7 @@ if [ -n "$lock" ]; then
 		exit
 	}
     fi
-elif [ -v "$xss" ]; then
+elif [ -v xss ]; then
 	case "$xss" in
 	on)exec sudo -n $sudo1;;
 	off|disable)exec sudo -n $sudo2;;
