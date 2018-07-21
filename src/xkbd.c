@@ -180,8 +180,7 @@ void usage(void)
 {
    printf("Usage: %s <options>\n\
 Options:\n\
-  -display  <display>\n\
-  -geometry <geometry>\n\
+  -g <geometry>\n\
      ( NOTE: The above will overide the configs font )\n\
   -k  <keyboard file> Select the keyboard definition file\n\
                       other than" DEFAULTCONFIG "\n\
@@ -220,9 +219,6 @@ int main(int argc, char **argv)
 
    XSizeHints size_hints;
    XWMHints *wm_hints;
-
-   char *display_name = (char *)getenv("DISPLAY");
-
 
 //   char *wm_name;
 //   int wm_type = WM_UNKNOWN;
@@ -267,9 +263,6 @@ int main(int argc, char **argv)
       int res = -1;
       if (*arg=='-') {
 	 switch (arg[1]) {
-	    case 'd' : /* display */
-	       display_name = argv[++i];
-	       break;
 	    case 'g' :
 		res = 0;
 		break;
@@ -329,7 +322,7 @@ int main(int argc, char **argv)
    }
 stop_argv:
 
-   display = XOpenDisplay(display_name);
+   display = XOpenDisplay(NULL);
    if (!display) goto no_dpy;
    screen_num = DefaultScreen(display);
    rootWin = RootWindow(display, screen_num);
@@ -682,6 +675,6 @@ stop_argv:
 		usleep(10000L); /* sleep for a 10th of a second */
       }
 no_dpy:
-	fprintf(stderr, "%s: cannot connect to X server '%s'\n", argv[0], display_name);
+	fprintf(stderr, "%s: cannot connect to X server\n", argv[0]);
 	exit(1);
 }

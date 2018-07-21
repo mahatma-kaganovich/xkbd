@@ -37,17 +37,18 @@ unset conf
 kill=true
 unset lock
 unset lock1
+unset xss
 touch=true
 n=
 for i in "${@}"; do
 	case "$i" in
-	--nokill)eval "${i#--no}"=false ; n='';;
-	--lock-touch)
+	--nokill)declare "${i#--no}"=false;n='';;
+	--test-touch)
 		# probably safer for multiple X
 		which xinput >/dev/null && {
 			xinput list --long|grep -qF 'Touch mode:' || touch=false
 		}
-		n=lock
+		n=
 	;;
 	--displays)
 		pchk(){
@@ -62,14 +63,13 @@ for i in "${@}"; do
 		}
 		n=
 	;;
-	--lock|--conf|--sudo1|--sudo2)n="${i#--}";;
+	--lock|--conf|--sudo1|--sudo2|--xss)n="${i#--}";declare $n='';;
 	-h|--help)_help;;
 	*)
 		[ -n "$n" ] && declare $n+="${!n:+ }$i" || _help
 		continue
 	;;
 	esac
-	[ -n "$n" -a ! -v "$n" ] && declare $n=''
 done
 
 [ -v conf ] ||
@@ -80,6 +80,11 @@ done
 opt="-X -l -D 54 -k $conf -e $0 --nokill"
 
 [ -v lock -a -z "$lock" ] && for lock in /usr/bin/slock; do [ -x "$lock" ] && break;done
+
+[ -v xss -a -z "$xss" ] && {
+	xssevent $0 ${@} &
+	unset xss
+}
 
 if [ -n "$lock" ]; then
     $touch && pchk xkbd && touch=false
@@ -109,6 +114,13 @@ if [ -n "$lock" ]; then
 		exit
 	}
     fi
+elif [ -v "$xss" ]; then
+	case "$xss" in
+	on)exec sudo -n $sudo1;;
+	off|disable)exec sudo -n $sudo2;;
+	cycle);;
+	esac
+	exit
 else
 	$kill && _kill
 fi
