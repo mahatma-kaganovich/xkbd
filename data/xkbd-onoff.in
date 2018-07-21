@@ -105,6 +105,7 @@ opt="-X -l -D 54 -k $conf -e $0 --nokill"
 }
 
 if [ -n "$lock" ]; then
+    [ -v xss -a "$xss" != on ] && exit
     $touch && pchk xkbd && touch=false
     if pchk $lock; then
 	$touch || exit
