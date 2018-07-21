@@ -4,6 +4,7 @@
 
 #include <stdlib.h>
 #include <unistd.h>
+#include <wait.h>
 #include <X11/Xlib.h>
 #include <X11/extensions/scrnsaver.h>
 
@@ -32,6 +33,7 @@ int main(int argc, char **argv) {
 			case ScreenSaverDisabled: *msg="disabled";break;
 			default: *msg="unknown";
 			}
+			waitpid(-1,NULL,WNOHANG);
 			if (!fork()){
 				execvp(a[0], a);
 				return 1;
