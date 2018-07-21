@@ -4,10 +4,12 @@ _help(){
 echo "$0: unknown param: $i
 Params:
   --nokill
-  --lock[-touch] [<lock_program>]
+  --lock [<lock_program>]
+  --test-touch
   --sudo{1|2} <cmd>
   --conf <xkbd_config>
   --displays
+  --xrdb
 Examples:
   $0 --nokill --lock-touch slock - on .Xinitrc
   $0 --lock-touch slock - lock with xkbd
@@ -33,6 +35,13 @@ pchk(){
 	pgrep -x "${1##*/}" -u "$EUID" >/dev/null
 }
 
+_bool(){
+	case "${1,,}" in
+	true|yes|on|1)echo "$2=\"\$$2\";";;
+	false|no|off|0)echo "unset $2;";;
+	esac
+}
+
 unset conf
 kill=true
 unset lock
@@ -42,6 +51,14 @@ touch=true
 n=
 for i in "${@}"; do
 	case "$i" in
+	--xrdb)
+		eval "$(xrdb -query|while read x y; do
+		case "$x" in
+		xscreensaver.lock:)_bool "$y" lock;;
+		esac
+		done)"
+		n=
+	;;
 	--nokill)declare "${i#--no}"=false;n='';;
 	--test-touch)
 		# probably safer for multiple X
@@ -54,7 +71,7 @@ for i in "${@}"; do
 		pchk(){
 			local i r=1
 			for i in $(pgrep -x "${1##*/}" -u "$EUID"); do
-				grep -xFzw "DISPLAY=$DISPLAY" /proc/environ && r=0 && echo $i
+				grep -xFzw "DISPLAY=$DISPLAY" /proc/"$i"/environ && r=0 && echo $i
 			done
 			return $r
 		}
@@ -71,6 +88,7 @@ for i in "${@}"; do
 	;;
 	esac
 done
+
 
 [ -v conf ] ||
 for conf in /etc/xkbd-config.conf @pkgdatadir@/xkbd-kp-f.conf; do

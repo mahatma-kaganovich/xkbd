@@ -1,5 +1,8 @@
 /*
-	simple run "<cmdline> --xss <state>" on XScreenSaver events
+ simple run "<cmdline> --xss <state>" on XScreenSaver events
+ examples:
+  xssevents xkbd-onoff --xrdb
+  xssevents xkbd-onoff --xrdb --sudo1 /usr/sbin/ya-nrg light 20 cores 0 save --sudo2 /usr/sbin/ya-nrg restore
 */
 
 #include <stdlib.h>
@@ -33,7 +36,7 @@ int main(int argc, char **argv) {
 			case ScreenSaverDisabled: *msg="disabled";break;
 			default: *msg="unknown";
 			}
-			waitpid(-1,NULL,WNOHANG);
+			while(waitpid(-1,NULL,WNOHANG)>0);
 			if (!fork()){
 				execvp(a[0], a);
 				return 1;
