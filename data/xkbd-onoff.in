@@ -100,7 +100,7 @@ opt="-X -l -D 54 -k $conf -e $0 --nokill"
 [ -v lock -a -z "$lock" ] && for lock in /usr/bin/slock; do [ -x "$lock" ] && break;done
 
 [ -v xss -a -z "$xss" ] && {
-	xssevent $0 ${@} &
+	xssevent $0 "${@}" -xss &
 	unset xss
 }
 
