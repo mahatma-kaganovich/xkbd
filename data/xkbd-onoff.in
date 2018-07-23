@@ -34,7 +34,7 @@ _deflock(){
 	[ -n "${!1}" ] && return 0
 	local i
 	for i in /usr/bin/slock; do [ -x "$i" ] && break;done
-	declare $1="$i"
+	eval "$1=\"\$i\""
 }
 
 _kill(){
