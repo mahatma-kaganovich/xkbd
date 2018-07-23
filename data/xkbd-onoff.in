@@ -127,7 +127,7 @@ if _deflock lock; then
 		_lock(){ $lock ; exec sudo -n $sudo2 ; }
 		if $touch; then
 			_lock &
-			pid=$1
+			pid=$!
 		elif $kill; then
 			_lock
 		else
