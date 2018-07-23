@@ -45,12 +45,6 @@ _kill(){
 	fi
 }
 
-_lock(){
-	[ -n "$sudo1" ] && sudo -n $sudo1 &
-	$lock1
-	[ -n "$sudo2" ] && sudo -n $sudo2 &
-}
-
 pchk(){
 	pgrep -x "${1##*/}" -u "$EUID" >/dev/null
 }
@@ -128,28 +122,35 @@ if _deflock lock; then
     if pchk $lock; then
 	$touch || exit
     else
-	[ -n "$sudo1$sudo2" ] && {
-		lock1="$lock"
-		lock=_lock
-	}
-	$touch || {
-		if $kill && [ "$lock" != _lock ]; then
-			exec $lock
-			$lock
+	[ -n "$sudo1" ] && sudo -n $sudo1 &
+	if [ -n "$sudo2" ]; then
+		_lock(){ $lock ; exec sudo -n $sudo2 ; }
+		if $touch; then
+			_lock &
+			pid=$1
+		elif $kill; then
+			_lock
 		else
-			$lock &
+			_lock &
 			sleep 0.5
 		fi
-		exit
-	}
-	$lock &
-	pid=$!
+	elif $touch; then
+		$lock &
+		pid=$!
+	elif $kill; then
+		exec $lock
+		#$lock
+	else
+		$lock &
+		sleep 0.5
+	fi
+	$touch || exit
 	$kill && {
 		xkbd $opt &
 		wait $pid
 		_kill
 		exit
-	}
+	
     fi
 elif [ -v xss ]; then
 	case "$xss" in
