@@ -4,17 +4,37 @@ _help(){
 echo "$0: unknown param: $i
 Params:
   --nokill
-  --lock [<lock_program>]
+  --[ext]lock [</usr/bin/slock>]
   --test-touch
   --sudo{1|2} <cmd>
   --conf <xkbd_config>
   --displays
   --xrdb
 Examples:
-  $0 --nokill --lock-touch slock - on .Xinitrc
-  $0 --lock-touch slock - lock with xkbd
+  $0 --nokill --test-touch --lock - on .Xinitrc
+  $0 --lock - lock with xkbd
+ {
+  # powersave script, NOPASSWORD in sudo
+  nrg=/usr/sbin/ya-nrg
+  # common cmd part
+  xk=\"xkbd-onoff --sudo2 \$nrg restore --sudo1 \$nrg light 20 cores 0\"
+  # run login/lock once, keep xkbd on unlock, powersave always
+  \$xk save --lock --nokill
+  # run power save/restore on XScreenSaver/dpms, lock by .Xresources xscreensaver.lock
+  # or power track locks by elsewere if =false, powersave on battery
+  xssevent \$xk auto --xrdb --extlock --xss &
+ }
+
 "
 exit 1
+}
+
+_deflock(){
+	[ -v $1 ] || return 1
+	[ -n "${!1}" ] && return 0
+	local i
+	for i in /usr/bin/slock; do [ -x "$i" ] && break;done
+	declare $1="$i"
 }
 
 _kill(){
@@ -80,7 +100,7 @@ for i in "${@}"; do
 		}
 		n=
 	;;
-	--lock|--conf|--sudo1|--sudo2|--xss)n="${i#--}";declare $n='';;
+	--lock|--conf|--sudo1|--sudo2|--xss|--extlock)n="${i#--}";declare $n='';;
 	-h|--help)_help;;
 	*)
 		[ -n "$n" ] && declare $n+="${!n:+ }$i" || _help
@@ -97,14 +117,12 @@ done
 
 opt="-X -l -D 54 -k $conf -e $0 --nokill"
 
-[ -v lock -a -z "$lock" ] && for lock in /usr/bin/slock; do [ -x "$lock" ] && break;done
-
 [ -v xss -a -z "$xss" ] && {
 	xssevent $0 "${@}" -xss &
 	unset xss
 }
 
-if [ -n "$lock" ]; then
+if _deflock lock; then
     [ -v xss -a "$xss" != on ] && exit
     $touch && pchk xkbd && touch=false
     if pchk $lock; then
@@ -136,7 +154,10 @@ if [ -n "$lock" ]; then
 elif [ -v xss ]; then
 	case "$xss" in
 	on)exec sudo -n $sudo1;;
-	off|disable)exec sudo -n $sudo2;;
+	off|disable)
+		_deflock extlock && pchk $extlock && exit
+		exec sudo -n $sudo2
+	;;
 	cycle);;
 	esac
 	exit
