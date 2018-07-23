@@ -150,7 +150,7 @@ if _deflock lock; then
 		wait $pid
 		_kill
 		exit
-	
+	}
     fi
 elif [ -v xss ]; then
 	case "$xss" in
