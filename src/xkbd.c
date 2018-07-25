@@ -180,7 +180,7 @@ void usage(void)
 {
    printf("Usage: %s <options>\n\
 Options:\n\
-  -d <display>
+  -d <display>\n\
   -g <geometry>\n\
      ( NOTE: The above will overide the configs font )\n\
   -k  <keyboard file> Select the keyboard definition file\n\
