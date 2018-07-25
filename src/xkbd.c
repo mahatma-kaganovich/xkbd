@@ -328,7 +328,7 @@ int main(int argc, char **argv)
    }
 stop_argv:
 
-   display = XOpenDisplay(NULL);
+   display = XOpenDisplay(display_name);
    if (!display) goto no_dpy;
    screen_num = DefaultScreen(display);
    rootWin = RootWindow(display, screen_num);
