@@ -145,12 +145,18 @@ if _deflock lock; then
 		sleep 0.5
 	fi
 	$touch || exit
-	$kill && {
-		xkbd $opt &
+
+	# can one fork less, but unsafe to locker bugs
+	xkbd $opt &
+	pid1+=$!
+	if $kill; then
 		wait $pid
 		_kill
-		exit
-	}
+	else
+		wait -n $pid $pid1
+	fi
+	exit
+
     fi
 elif [ -v xss ]; then
 	case "$xss" in
