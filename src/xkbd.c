@@ -180,6 +180,7 @@ void usage(void)
 {
    printf("Usage: %s <options>\n\
 Options:\n\
+  -d <display>
   -g <geometry>\n\
      ( NOTE: The above will overide the configs font )\n\
   -k  <keyboard file> Select the keyboard definition file\n\
@@ -219,6 +220,8 @@ int main(int argc, char **argv)
 
    XSizeHints size_hints;
    XWMHints *wm_hints;
+   
+   char *display_name = NULL;
 
 //   char *wm_name;
 //   int wm_type = WM_UNKNOWN;
@@ -263,6 +266,9 @@ int main(int argc, char **argv)
       int res = -1;
       if (*arg=='-') {
 	 switch (arg[1]) {
+	    case 'd' :
+		display_name = argv[++i];
+		break;
 	    case 'g' :
 		res = 0;
 		break;

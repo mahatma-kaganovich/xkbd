@@ -1,0 +1,4 @@
+nrg=/usr/sbin/ya-nrg
+xk="./xkbd-onoff --sudo2 $nrg restore --sudo1 $nrg light 20 cores 0"
+$xk save --lock xslock --nokill
+#xssevent $xk auto --xrdb --extlock --xss &
