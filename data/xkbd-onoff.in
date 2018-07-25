@@ -126,6 +126,7 @@ if _deflock lock; then
     if pchk $lock; then
 	$touch || exit
     else
+	(
 	if [ -n "$sudo2" ]; then
 		( $lock ; exec sudo -n $sudo2 ) &
 	else
@@ -135,7 +136,7 @@ if _deflock lock; then
 	if $touch; then
 		setxkbmap
 		xkbd $opt &
-		wait -n "$pid" "$!"
+		wait -n
 	fi
 	[ -n "$sudo1" ] && sudo -n $sudo1 &
 	if $kill; then
@@ -146,6 +147,7 @@ if _deflock lock; then
 			sleep 0.5
 		fi
 	fi
+	)
 	exit
     fi
 elif [ -v xss ]; then
