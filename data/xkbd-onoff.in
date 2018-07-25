@@ -149,7 +149,7 @@ if _deflock lock; then
 	# can one fork less, but unsafe to locker bugs
 	setxkbmap
 	xkbd $opt &
-	pid1+=$!
+	pid1=$!
 	if $kill; then
 		wait $pid
 		_kill
