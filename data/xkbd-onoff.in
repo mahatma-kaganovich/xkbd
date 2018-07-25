@@ -147,6 +147,7 @@ if _deflock lock; then
 	$touch || exit
 
 	# can one fork less, but unsafe to locker bugs
+	setxkbmap
 	xkbd $opt &
 	pid1+=$!
 	if $kill; then
