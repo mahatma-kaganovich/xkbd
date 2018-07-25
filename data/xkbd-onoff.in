@@ -10,19 +10,14 @@ Params:
   --conf <xkbd_config>
   --displays
   --xrdb
+  --boot
 Examples:
   $0 --nokill --test-touch --lock - on .Xinitrc
   $0 --lock - lock with xkbd
  {
-  # powersave script, NOPASSWORD in sudo
+ # .xinitrc
   nrg=/usr/sbin/ya-nrg
-  # common cmd part
-  xk=\"xkbd-onoff --sudo2 \$nrg restore --sudo1 \$nrg light 20 cores 0\"
-  # run login/lock once, keep xkbd on unlock, powersave always
-  \$xk save --lock --nokill
-  # run power save/restore on XScreenSaver/dpms, lock by .Xresources xscreensaver.lock
-  # or power track locks by elsewere if =false, powersave on battery
-  xssevent \$xk auto --xrdb --extlock --xss &
+  xkbd-onoff --sudo2 \$nrg bat restore --sudo1 \$nrg light 20 cores 0 auto --boot -xss
  }
 
 "
@@ -46,6 +41,7 @@ _kill(){
 }
 
 pchk(){
+	$boot && return 1
 	pgrep -x "${1##*/}" -u "$EUID" >/dev/null
 }
 
@@ -56,12 +52,17 @@ _bool(){
 	esac
 }
 
+_xss(){
+	xssevent $0 --conf $conf ${sudo1:+--sudo1 $sudo1} ${sudo2:+--sudo2 $sudo2} --lock $lock --extlock $lock --xrdb --xss &
+}
+
 unset conf
 kill=true
 unset lock
 unset lock1
 unset xss
 touch=true
+boot=false
 n=
 for i in "${@}"; do
 	case "$i" in
@@ -71,6 +72,12 @@ for i in "${@}"; do
 		xscreensaver.lock:)_bool "$y" lock;;
 		esac
 		done)"
+		n=
+	;;
+	--boot)
+		boot=true
+		lock="$lock"
+		kill=false
 		n=
 	;;
 	--nokill)declare "${i#--no}"=false;n='';;
@@ -98,11 +105,9 @@ for i in "${@}"; do
 	-h|--help)_help;;
 	*)
 		[ -n "$n" ] && declare $n+="${!n:+ }$i" || _help
-		continue
 	;;
 	esac
 done
-
 
 [ -v conf ] ||
 for conf in /etc/xkbd-config.conf @pkgdatadir@/xkbd-kp-f.conf; do
@@ -111,53 +116,37 @@ done
 
 opt="-X -l -D 54 -k $conf -e $0 --nokill"
 
-[ -v xss -a -z "$xss" ] && {
-	xssevent $0 "${@}" -xss &
-	unset xss
-}
-
 if _deflock lock; then
-    [ -v xss -a "$xss" != on ] && exit
+    [ -v xss ] && case "$xss" in
+    on);;
+    '')_xss;;
+    *)exit;;
+    esac
     $touch && pchk xkbd && touch=false
     if pchk $lock; then
 	$touch || exit
     else
-	[ -n "$sudo1" ] && sudo -n $sudo1 &
 	if [ -n "$sudo2" ]; then
-		_lock(){ $lock ; exec sudo -n $sudo2 ; }
+		( $lock ; exec sudo -n $sudo2 ) &
+	else
+		$lock &
+	fi
+	pid=$!
+	if $touch; then
+		setxkbmap
+		xkbd $opt &
+		wait -n "$pid" "$!"
+	fi
+	[ -n "$sudo1" ] && sudo -n $sudo1 &
+	if $kill; then
 		if $touch; then
-			_lock &
-			pid=$!
-		elif $kill; then
-			_lock
+			wait $pid
+			_kill
 		else
-			_lock &
 			sleep 0.5
 		fi
-	elif $touch; then
-		$lock &
-		pid=$!
-	elif $kill; then
-		exec $lock
-		#$lock
-	else
-		$lock &
-		sleep 0.5
-	fi
-	$touch || exit
-
-	# can one fork less, but unsafe to locker bugs
-	setxkbmap
-	xkbd $opt &
-	pid1=$!
-	if $kill; then
-		wait $pid
-		_kill
-	else
-		wait -n $pid $pid1
 	fi
 	exit
-
     fi
 elif [ -v xss ]; then
 	case "$xss" in
@@ -167,6 +156,7 @@ elif [ -v xss ]; then
 		exec sudo -n $sudo2
 	;;
 	cycle);;
+	'')_xss;;
 	esac
 	exit
 else
