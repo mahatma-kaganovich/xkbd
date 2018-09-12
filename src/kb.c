@@ -1448,7 +1448,7 @@ void kb_send_keypress(button *b, unsigned int next_state, unsigned int flags) {
 	}
 
 	if (b->kc[l]<minkc || b->kc[l]>maxkc) return;
-	if ((mods0 ^ mods) & STATE(KBIT_CAPS)) mods ^= STATE(KBIT_CAPS)|STATE(KBIT_SHIFT);
+	if ((mods0 ^ mods) & BIT_MVL(b->flags,OBIT_OBEYCAPS,KBIT_CAPS)) mods ^= STATE(KBIT_CAPS)|STATE(KBIT_SHIFT);
 //	if ((mods0 ^ mods) & STATE(KBIT_MOD)) mods ^= STATE(KBIT_MOD)|STATE(KBIT_ALT);
 	_xsync(False);
 	if (mods != mods0) {
