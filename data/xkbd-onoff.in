@@ -11,6 +11,7 @@ Params:
   --displays
   --xrdb
   --boot
+  --nodpms
 Examples:
   $0 --nokill --test-touch --lock - on .Xinitrc
   $0 --lock - lock with xkbd
@@ -46,7 +47,7 @@ pchk(){
 }
 
 _bool(){
-	case "${1,,}" in
+	case "$1" in
 	true|yes|on|1)echo "$2=\"\$$2\";";;
 	false|no|off|0)echo "unset $2;";;
 	esac
@@ -56,20 +57,55 @@ _xss(){
 	xssevent $0 --conf $conf ${sudo1:+--sudo1 $sudo1} ${sudo2:+--sudo2 $sudo2} --lock $lock --extlock $lock --xrdb --xss &
 }
 
+_dpms(){
+	[ -v nodpms ] && return
+	$dpmsenabled || return
+	local x1=${1:-0} x2=${2:-0} x3=${3:-0} y1=${4:-0} y2=${5:-0} y3=${6:-0}
+	if [ $x2 = 0 ]; then
+		[ $x3 !=0 -a $x3 -lt $x1 ] && x3=$x1
+		
+	else
+		[ $x2 -lt $x1 ] && x2=$x1
+		[ $x3 != 0 -a $x3 -lt $x2 ] && x3=$x2
+	fi
+	if [ $y2 = 0 ]; then
+		[ $y3 !=0 -a $y3 -lt $y1 ] && x3=$y1
+		
+	else
+		[ $y2 -lt $y1 ] && y2=$y1
+		[ $y3 != 0 -a $y3 -lt $y2 ] && y3=$y2
+	fi
+	echo "$y1 $y2 $y3"
+	[[ "$(xset q)" == *"Standby: $y1 "*"Suspend: $y2 "*"Off: $y3
+"*'DPMS is Enabled'* ]] || return
+	xset dpms "$x1" "$x2" "$x3"
+}
+
 unset conf
 kill=true
 unset lock
 unset lock1
 unset xss
+unset nodpms
 touch=true
 boot=false
+dpmslockstandby=10
+dpmslocksuspend=12
+dpmslockoff=14
 n=
 for i in "${@}"; do
 	case "$i" in
 	--xrdb)
 		eval "$(xrdb -query|while read x y; do
 		case "$x" in
-		xscreensaver.lock:)_bool "$y" lock;;
+		xscreensaver.*:)
+			x=${x#*.}
+			x=${x%:}
+			case "$x" in
+			local|dpmsenabled)_bool "$y" $x;;
+			dpms*[^a-z]*);;
+			dpms*)echo "$x=${y//[^a-zA-Z0-9.]/_};";;
+			esac
 		esac
 		done)"
 		n=
@@ -101,7 +137,7 @@ for i in "${@}"; do
 		}
 		n=
 	;;
-	--lock|--conf|--sudo1|--sudo2|--xss|--extlock)n="${i#--}";declare $n='';;
+	--lock|--conf|--sudo1|--sudo2|--xss|--extlock|--nodpms)n="${i#--}";declare $n='';;
 	-h|--help)_help;;
 	*)
 		[ -n "$n" ] && declare $n+="${!n:+ }$i" || _help
@@ -128,8 +164,10 @@ if _deflock lock; then
     else
 	(
 	if [ -n "$sudo2" ]; then
+		_dpms "$dpmsstandby" "$dpmssuspend" "$dpmsoff" "$dpmslockstandby" "$dpmslocksuspend" "$dpmslockoff"
 		( $lock ; exec sudo -n $sudo2 ) &
 	else
+		_dpms "$dpmslockstandby" "$dpmslocksuspend" "$dpmslockoff" "$dpmsstandby" "$dpmssuspend" "$dpmsoff"
 		$lock &
 	fi
 	pid=$!
