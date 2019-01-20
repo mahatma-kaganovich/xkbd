@@ -47,7 +47,7 @@ pchk(){
 }
 
 _bool(){
-	case "$1" in
+	case "${1,,}" in
 	true|yes|on|1)echo "$2=\"\$$2\";";;
 	false|no|off|0)echo "unset $2;";;
 	esac
