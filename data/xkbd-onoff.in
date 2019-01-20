@@ -11,7 +11,7 @@ Params:
   --displays
   --xrdb
   --boot
-  --nodpms
+  --dpms [on|off|auto]
 Examples:
   $0 --nokill --test-touch --lock - on .Xinitrc
   $0 --lock - lock with xkbd
@@ -53,12 +53,33 @@ _bool(){
 	esac
 }
 
+_sec(){
+	local v=$1 h m
+	if [ -n "$v" -a -z "${v//[0-9:]}" ]; then
+		s="${v##*:}"
+		if [ "$s" = "$v" ]; then
+			v=$[s*60]
+		else
+			v="${v%:*}"
+			m="${v##*:}"
+			m="${m:-0}"
+			v="${v%:*}"
+			h="${v##*:}"
+			h="${h:-0}"
+			v=$[h*60*60+m*60+s]
+		fi
+		echo "$2=$v;"
+	else
+		echo "unset $2;"
+	fi
+}
+
 _xss(){
 	xssevent $0 --conf $conf ${sudo1:+--sudo1 $sudo1} ${sudo2:+--sudo2 $sudo2} --lock $lock --extlock $lock --xrdb --xss &
 }
 
 _dpms(){
-	[ -v nodpms ] && return
+	[ "$dpms" = off ] && return
 	$dpmsenabled || return
 	local x1=${1:-0} x2=${2:-0} x3=${3:-0} y1=${4:-0} y2=${5:-0} y3=${6:-0}
 	if [ $x2 = 0 ]; then
@@ -76,7 +97,7 @@ _dpms(){
 		[ $y3 != 0 -a $y3 -lt $y2 ] && y3=$y2
 	fi
 	echo "$y1 $y2 $y3"
-	[[ "$(xset q)" == *"Standby: $y1 "*"Suspend: $y2 "*"Off: $y3
+	[ "$dpms" = on ] || [[ "$(xset q)" == *"Standby: $y1 "*"Suspend: $y2 "*"Off: $y3
 "*'DPMS is Enabled'* ]] || return
 	xset dpms "$x1" "$x2" "$x3"
 }
@@ -86,7 +107,7 @@ kill=true
 unset lock
 unset lock1
 unset xss
-unset nodpms
+unset dpms
 touch=true
 boot=false
 dpmslockstandby=10
@@ -103,8 +124,8 @@ for i in "${@}"; do
 			x=${x%:}
 			case "$x" in
 			local|dpmsenabled)_bool "$y" $x;;
-			dpms*[^a-z]*);;
-			dpms*)echo "$x=${y//[^a-zA-Z0-9.]/_};";;
+			*[^a-z]*);;
+			dpms*)_sec "$y" $x;;
 			esac
 		esac
 		done)"
@@ -137,7 +158,7 @@ for i in "${@}"; do
 		}
 		n=
 	;;
-	--lock|--conf|--sudo1|--sudo2|--xss|--extlock|--nodpms)n="${i#--}";declare $n='';;
+	--lock|--conf|--sudo1|--sudo2|--xss|--extlock|--dpms)n="${i#--}";declare $n='';;
 	-h|--help)_help;;
 	*)
 		[ -n "$n" ] && declare $n+="${!n:+ }$i" || _help
