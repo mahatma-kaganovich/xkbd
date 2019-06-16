@@ -1156,19 +1156,14 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 		for(i=0;i<n;i++) _release(sib[t][i]);
 		nsib[t]=-1;
 		_press(b,STATE(OBIT_UGLY));
-	} else if (b1==b
-		|| b->flags & STATE(OBIT_PRESSED)
-			) {
-		// first/main button, reset motions
+	} else if (b1==b) { // first/main button - reset motions
 		for(i=0;i<n;i++) if (sib[t][i]!=b) _release(sib[t][i]);
 		//nsib[t]=1; sib[t][0]=b;
 		nsib[t]=-1;
-	} else if (b1->flags & STATE(OBIT_PRESSED)) {
-		// slide pressed: keep & same
+	} else if (b1->flags & STATE(OBIT_PRESSED)) { // slide from pressed
 		b=b1;
-		for(i=0;i<n;i++) if (sib[t][i]!=b) _release(sib[t][i]);
-		//nsib[t]=1; sib[t][0]=b;
-		nsib[t]=-1;
+	} else if (b->flags & STATE(OBIT_PRESSED)) { // pressed somewere
+		b=NULL;
 	} else { // button -> button, invariant
 		int ns, ns1 = b->nsiblings;
 		button **s1 = (button **)b->siblings;
