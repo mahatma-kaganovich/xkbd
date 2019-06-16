@@ -1089,6 +1089,8 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 	static unsigned int N=0;
 	static unsigned int P=0;
 	int t=-1;
+	int cnt=0;
+#define IF_CNT(B) if (!cnt) for (i=P; i!=N; TOUCH_INC(i)) if (but[i] == B && devid[i] == dev) cnt++; if (cnt<2)
 
 	// find touch
 	for (i=P; i!=N; TOUCH_INC(i)) {
@@ -1107,6 +1109,7 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 
 #else
 	const int t=0;
+#define IF_CNT(B)
 #endif
 	b = kb_find_button(kb,x,y);
 
@@ -1122,12 +1125,17 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 		for(i=0;i<n;i++) if ((b1=sib[t][i])!=but[t]) _release(b1);
 		nsib[t] = -1;
 #endif
-		if (but[t]) _release(but[t]);
+		if ((b1=but[t]) && b1!=b) {
+			IF_CNT(b1) {
+				_release(b1);
+				b1=NULL;
+			}
+		}
 		but[t] = b;
+		times[t] = time;
 		touchid[t] = ptr;
 		devid[t] = dev;
-		times[t] = time;
-		_press(b,0);
+		if (b1!=b) _press(b,0);
 		return b;
 	}
 
@@ -1148,8 +1156,16 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 		for(i=0;i<n;i++) _release(sib[t][i]);
 		nsib[t]=-1;
 		_press(b,STATE(OBIT_UGLY));
-	} else if (b1==b) { // first/main button, reset motions
-		n=nsib[t];
+	} else if (b1==b
+		|| b->flags & STATE(OBIT_PRESSED)
+			) {
+		// first/main button, reset motions
+		for(i=0;i<n;i++) if (sib[t][i]!=b) _release(sib[t][i]);
+		//nsib[t]=1; sib[t][0]=b;
+		nsib[t]=-1;
+	} else if (b1->flags & STATE(OBIT_PRESSED)) {
+		// slide pressed: keep & same
+		b=b1;
 		for(i=0;i<n;i++) if (sib[t][i]!=b) _release(sib[t][i]);
 		//nsib[t]=1; sib[t][0]=b;
 		nsib[t]=-1;
@@ -1231,7 +1247,7 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 #ifdef SLIDES
 	kb_set_slide(b, x, y );
 #endif
-	kb_process_keypress(b,0,0);
+	IF_CNT(b) kb_process_keypress(b,0,0);
 	if (b->layout_switch != -1) {
 		b->flags &= ~(STATE(OBIT_PRESSED)|STATE(OBIT_UGLY));
 #ifdef SIBLINGS
@@ -1243,9 +1259,15 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 	}
 	if (b->modifier) but[t] = NULL;
 drop:
-	if (b=but[t]) {
+	if (b!=but[t]) {
+		b=but[t];
+#ifdef MULTITOUCH
+		cnt=0;
+#endif
+	}
+	if (b) {
 		but[t] = NULL;
-		_release(b);
+		IF_CNT(b) _release(b);
 #ifdef SLIDES
 		b->slide = 0;
 #endif
