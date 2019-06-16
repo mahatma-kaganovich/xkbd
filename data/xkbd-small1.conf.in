@@ -1,7 +1,7 @@
 <global>
 
 # font name, for an xft font, specify the point size after a '-'
-# default font is fixed (calibrated)
+# default font is Fixedsys (calibrated)
 #font verdana-12|fixed
 #font sans-26|fixed
 

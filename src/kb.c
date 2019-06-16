@@ -534,10 +534,9 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		  if (!font_loaded) {
 #ifdef USE_XFT
 			char fname[12] = "";
-			_kb_load_font(kb, "fixed-10");
+			_kb_load_font(kb, "Fixedsys-10");
 //			fsz = kb_width*10/(xx*_button_get_txt_size(kb, "ABCabc123+"));
-//			sprintf(fname,"fixed-%i",kb_width/_button_get_txt_size(kb, "ABCabc123+"));
-			sprintf(fname,"fixed-%i",kb_width/_button_get_txt_size(kb,"ABCabc123+"));
+			sprintf(fname,"Fixedsys-%i",kb_width/_button_get_txt_size(kb, "ABCabc123+"));
 			_kb_load_font(kb, fname);
 #else
 			_kb_load_font(kb, "fixed");
