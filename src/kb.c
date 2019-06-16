@@ -533,14 +533,15 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		case kbddef:
 		  if (!font_loaded) {
 #ifdef USE_XFT
-			char fname[12] = "";
-			_kb_load_font(kb, "Fixedsys-10");
-//			fsz = kb_width*10/(xx*_button_get_txt_size(kb, "ABCabc123+"));
-			sprintf(fname,"Fixedsys-%i",kb_width/_button_get_txt_size(kb, "ABCabc123+"));
+#define FNT "Monospace-%i"
+			char fname[32] = "";
+			sprintf(fname,FNT,10);
 			_kb_load_font(kb, fname);
+			sprintf(fname,FNT,kb_width/_button_get_txt_size(kb,"ABCabc123+"));
 #else
-			_kb_load_font(kb, "fixed");
+#define fname "fixed"
 #endif
+			_kb_load_font(kb, fname);
 		  }
 		  break;
 		case rowdef:

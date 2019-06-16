@@ -3,7 +3,7 @@
 # render xft ***DEPRECIATED***
 
 # font name, for an xft font, specify the point size after a '-'
-# default font is Fixedsys
+# default font is Monospace
 font   verdana-7:bold|fixed
 
 # color of keboard background ( default white )
