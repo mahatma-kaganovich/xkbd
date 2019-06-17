@@ -21,7 +21,7 @@ void _kb_load_font(keyboard *kb, char *fontname );
 keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		 int kb_width, int kb_height, char *conf_file,
 		 char *font_name, int font_is_xft);
-void kb_switch_layout(keyboard *kb, int kbd_layout_num);
+void kb_switch_layout(keyboard *kb, int kbd_layout_num, int shift);
 void kb_send_keypress(button *b, unsigned int next_state, unsigned int press);
 void kb_size(keyboard *kb);
 void kb_render(keyboard *kb);

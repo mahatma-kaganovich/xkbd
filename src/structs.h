@@ -148,6 +148,7 @@ typedef struct _keyboard
   int total_layouts;
   int group;
   box *vbox;  /* container */
+  box *vvbox;  /* visible */
 
   int x;      /* but vbox contains this ? */
   int y;

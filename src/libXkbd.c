@@ -104,7 +104,7 @@ unsigned int xkbd_sync_state(Xkbd *xkbd, unsigned int mods, unsigned int locked_
 	if (((mods|locked_mods) ^ ((xkbd->kb->state|xkbd->kb->state_locked)) && KB_STATE_KNOWN))
 		ch|=_set_state(&xkbd->kb->state, mods)|_set_state(&xkbd->kb->state_locked, locked_mods);
 	if (group!=xkbd->kb->group){
-		kb_switch_layout(xkbd->kb,group);
+		kb_switch_layout(xkbd->kb,group,0);
 		ch=0;
 	}
 //	XkbGetIndicatorState(dpy,XkbUseCoreKbd,&i);

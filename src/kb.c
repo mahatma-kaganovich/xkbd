@@ -886,6 +886,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
   /* TODO: copy all temp vboxs  */
 
 
+  kb->vvbox =
   kb->vbox = kb->kbd_layouts[kb->group = 0];
 
   return kb;
@@ -994,22 +995,26 @@ void kb_size(keyboard *kb)
 }
 
 void
-kb_switch_layout(keyboard *kb, int kbd_layout_num)
+kb_switch_layout(keyboard *kb, int kbd_layout_num, int shift)
 {
-  int w = kb->vbox->act_width;
-  int h = kb->vbox->act_height;
-  int mw = kb->vbox->min_width;
-  int mh = kb->vbox->min_height;
+  box *b = kb->vbox;
+  int w = b->act_width;
+  int h = b->act_height;
+  int mw = b->min_width;
+  int mh = b->min_height;
 
   for(; kbd_layout_num >= kb->total_layouts; kb->total_layouts++)
     kb->kbd_layouts[kb->total_layouts] = clone_box(kb->display,kb->kbd_layouts[0],kb->total_layouts);
 
-  kb->vbox = kb->kbd_layouts[kb->group = kbd_layout_num];
+  b = kb->kbd_layouts[kb->group = kbd_layout_num];
 
-  kb->vbox->act_width = w;
-  kb->vbox->act_height = h;
-  kb->vbox->min_width = mw;
-  kb->vbox->min_height = mh;
+  b->act_width = w;
+  b->act_height = h;
+  b->min_width = mw;
+  b->min_height = mh;
+
+  kb->vbox = b;
+  if (!shift) kb->vvbox = b;
 
   kb_size(kb);
   kb_render(kb);
@@ -1018,8 +1023,7 @@ kb_switch_layout(keyboard *kb, int kbd_layout_num)
 
 void kb_render(keyboard *kb)
 {
-	list *listp = kb->vbox->root_kid;
-	box *tmp_box;
+	list *listp = kb->vvbox->root_kid;
 	while (listp != NULL) {
 		list *ip = ((box *)listp->data)->root_kid;
 		while (ip != NULL) {
@@ -1039,6 +1043,11 @@ void kb_paint(keyboard *kb)
 }
 
 inline void bdraw(button *b, int flags){
+	keyboard *kb=b->kb;
+	if (kb->vbox!=kb->vvbox){
+		if (b->layout_switch==-1) return;
+		flags|=STATE(OBIT_PRESSED);
+	}
 	button_render(b, flags);
 	button_paint(b);
 }
@@ -1347,8 +1356,9 @@ void kb_process_keypress(button *b, int repeat, unsigned int flags)
     unsigned int state = kb->state;
     unsigned int lock = kb->state_locked;
     const unsigned int mod = b->modifier;
+    int layout = b->layout_switch;
     int keypress = 1;
-    int st;
+    unsigned int st,st0;
 #ifndef MINIMAL
     Display *dpy = kb->display;
 #endif
@@ -1394,7 +1404,7 @@ void kb_process_keypress(button *b, int repeat, unsigned int flags)
 	}
 	DBG("got a modifier key - %i \n", state);
     } else {
-	state_used |= state|lock;
+	state_used |= st0 = state|lock;
 	state = lock;
 	DBG("kbd is shifted, unshifting - %i \n", state);
     }
@@ -1421,8 +1431,9 @@ void kb_process_keypress(button *b, int repeat, unsigned int flags)
 	kb_render(kb);
 	kb_paint(kb);
    }
-   if (b->layout_switch!=-1) {
-    if (b->layout_switch>-1) {
+
+   if (layout!=-1) {
+    if (layout>-1) {
 #ifndef MINIMAL
 	if (Xkb_sync) {
 		XSync(dpy,False);
@@ -1430,12 +1441,16 @@ void kb_process_keypress(button *b, int repeat, unsigned int flags)
 		XSync(dpy,True);
 	}
 #endif
-	kb_switch_layout(kb, b->layout_switch);
     } else {
         XkbStateRec s;
 	XkbGetState(dpy,XkbUseCoreKbd,&s);
-	kb_switch_layout(kb, s.group);
+	layout = s.group;
     }
+    // shift-layout: trans-layout mode (silent)
+    st0 &= STATE(KBIT_SHIFT);
+    kb_switch_layout(kb,layout,st0);
+    if (st0)
+	bdraw(b,0);
    }
 }
 
