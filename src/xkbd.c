@@ -181,7 +181,7 @@ void usage(void)
    printf("Usage: %s <options>\n\
 Options:\n\
   -d <display>\n\
-  -g <geometry>\n\
+  -g <geometry> (default +0-0, top +0+0)\n\
      ( NOTE: The above will overide the configs font )\n\
   -k  <keyboard file> Select the keyboard definition file\n\
                       other than" DEFAULTCONFIG "\n\
@@ -228,6 +228,7 @@ int main(int argc, char **argv)
 
    static char *geometry = NULL;
    int xret=0, yret=0, wret=0, hret=0;
+   int top=0;
    static char *conf_file = NULL;
    static char *font_name = NULL;
    int cmd_xft_selected = 0; /* ugly ! */
@@ -412,13 +413,13 @@ stop_argv:
 
       wret = screen_width;
       hret = screen_height/4;
-      xret = 0;
-      yret = screen_height - hret;
       if (geometry) {
+        // default = +0-0 = WxH+0-0
 	int flags = XParseGeometry(geometry, &xret, &yret, &wret, &hret );
-	if( flags & XNegative ) xret += screen_width - wret;
-	if( flags & YNegative ) yret += screen_height - hret;
+	if(flags & XNegative) xret += screen_width - wret;
+	top = !(flags & YNegative);
       }
+      if (!top) yret += screen_height - hret;
 
       win = XCreateSimpleWindow(display, rootWin, xret, yret, wret, hret, 0,
 				BlackPixel(display, screen_num),
@@ -499,11 +500,20 @@ stop_argv:
 //      Atom version = 4;
 //      _prop(32,"XdndAware",XA_ATOM,&version,1);
       if (dock & 2) {
-        prop[0] = 0;
-	prop[3] = screen_height - yret; // hret unless shifted geometry
+	//0: left, right, top, bottom,
+	//4: left_start_y, left_end_y, right_start_y, right_end_y,
+	//8: top_start_x, top_end_x, bottom_start_x, bottom_end_x
+	prop[0] = 0; // left
+	if (top) {
+		prop[2] = yret + hret; // top
+		prop[8] = xret; prop[9] = xret + wret - 1; // top_start_x, top_end_x
+//		prop[9] = screen_width - 1; // top_end_x
+	} else {
+		prop[3] = screen_height - yret; // bottom
+		prop[10] = xret; prop[11] = xret + wret - 1; // bottom_start_x, bottom_end_x
+//		prop[11] = screen_width - 1; // bottom_end_x
+	}
 	_prop(32,"_NET_WM_STRUT",XA_CARDINAL,&prop,4);
-	prop[10] = xret; prop[11] = xret + wret - 1;
-//	prop[11] = screen_width - 1;
 	_prop(32,"_NET_WM_STRUT_PARTIAL",XA_CARDINAL,&prop,12);
       }
 
