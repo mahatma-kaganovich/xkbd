@@ -190,7 +190,7 @@ Options:\n\
   -s  strut\n\
   -D  Dock/options bitmask: 1=dock, 2=strut, 4=_NET_WM_WINDOW_TYPE_DOCK,\n\
       8=_NET_WM_WINDOW_TYPE_TOOLBAR, 16=_NET_WM_STATE_STICKY.\n\
-      32=resize (slock)\n\
+      32=resize (slock), 64=strut horizontal\n\
       For OpenBox I use 54 = $[2+4+16+32].\n\
   -X  Xkb state interaction\n\
   -l  disable modifiers lock\n\
@@ -228,12 +228,12 @@ int main(int argc, char **argv)
 
    static char *geometry = NULL;
    int xret=0, yret=0, wret=0, hret=0;
-   int top=0;
+   int top=0, left=0;
    static char *conf_file = NULL;
    static char *font_name = NULL;
    int cmd_xft_selected = 0; /* ugly ! */
    int embed = 0;
-   static int dock = 0;
+   static unsigned int dock = 0;
    XrmDatabase xrm;
 
    XEvent ev;
@@ -416,9 +416,10 @@ stop_argv:
       if (geometry) {
         // default = +0-0 = WxH+0-0
 	int flags = XParseGeometry(geometry, &xret, &yret, &wret, &hret );
-	if(flags & XNegative) xret += screen_width - wret;
+	left = !(flags & XNegative);
 	top = !(flags & YNegative);
       }
+      if (!left) xret += screen_width - wret;
       if (!top) yret += screen_height - hret;
 
       win = XCreateSimpleWindow(display, rootWin, xret, yret, wret, hret, 0,
@@ -499,21 +500,34 @@ stop_argv:
 //      _propAtom32("_NET_WM_STATE","_NET_WM_STATE_FOCUSED");
 //      Atom version = 4;
 //      _prop(32,"XdndAware",XA_ATOM,&version,1);
+      prop[0] = 0;
       if (dock & 2) {
+	if (top) {
+		prop[2] = yret + hret;
+		prop[8] = xret; prop[9] = xret + wret - 1;
+//		prop[9] = screen_width - 1;
+	} else {
+		prop[3] = screen_height - yret;
+		prop[10] = xret; prop[11] = xret + wret - 1;
+//		prop[11] = screen_width - 1;
+	}
+      }
+      if (dock & 64) {
+	if (left) {
+		prop[0] = xret + wret;
+		prop[4] = yret; prop[5] = yret + hret - 1;
+//		prop[5] = screen_height - 1;
+	} else {
+		prop[1] = screen_width - xret;
+		prop[6] = yret; prop[7] = yret + hret - 1;
+//		prop[7] = screen_height - 1;
+	}
+      }
+      if (dock & (2|64)) {
 	//0: left, right, top, bottom,
+	_prop(32,"_NET_WM_STRUT",XA_CARDINAL,&prop,4);
 	//4: left_start_y, left_end_y, right_start_y, right_end_y,
 	//8: top_start_x, top_end_x, bottom_start_x, bottom_end_x
-	prop[0] = 0; // left
-	if (top) {
-		prop[2] = yret + hret; // top
-		prop[8] = xret; prop[9] = xret + wret - 1; // top_start_x, top_end_x
-//		prop[9] = screen_width - 1; // top_end_x
-	} else {
-		prop[3] = screen_height - yret; // bottom
-		prop[10] = xret; prop[11] = xret + wret - 1; // bottom_start_x, bottom_end_x
-//		prop[11] = screen_width - 1; // bottom_end_x
-	}
-	_prop(32,"_NET_WM_STRUT",XA_CARDINAL,&prop,4);
 	_prop(32,"_NET_WM_STRUT_PARTIAL",XA_CARDINAL,&prop,12);
       }
 
