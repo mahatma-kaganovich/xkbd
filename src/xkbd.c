@@ -58,7 +58,7 @@ Window   win;
 Window rootWin;
 Atom mwm_atom;
 int screen_num;
-Screen *scr;
+XWindowAttributes wa0;
 
 Xkbd *kb = NULL;
 char **exec_cmd;
@@ -181,6 +181,7 @@ void usage(void)
    printf("Usage: %s <options>\n\
 Options:\n\
   -d <display>\n\
+  -o <output>\n\
   -g <geometry> (default +0-0, top +0+0)\n\
      ( NOTE: The above will overide the configs font )\n\
   -k  <keyboard file> Select the keyboard definition file\n\
@@ -213,6 +214,10 @@ void _propAtom32(char *prop, char *data){
 	_prop(32,prop,XA_ATOM,&a,1);
 }
 
+int inbound(int x,int xin,int x1,int x2){
+	return (xin>x1 && xin<x2)?xin:x;
+}
+
 int main(int argc, char **argv)
 {
    char *window_name = IAM;
@@ -227,6 +232,7 @@ int main(int argc, char **argv)
 //   int wm_type = WM_UNKNOWN;
 
    static char *geometry = NULL;
+   static char *output = NULL;
    int xret=0, yret=0, wret=0, hret=0;
    int top=0, left=0;
    static char *conf_file = NULL;
@@ -256,6 +262,7 @@ int main(int argc, char **argv)
 	{ "xkbd.dock", 1, &dock },
 	{ "xkbd.sync", 2, &Xkb_sync },
 	{ "xkbd.no_lock", 2, &no_lock },
+	{ "xkbd.output", 0, &output },
 	{ NULL, 0, NULL }
    };
 
@@ -272,6 +279,9 @@ int main(int argc, char **argv)
 		break;
 	    case 'g' :
 		res = 0;
+		break;
+	    case 'o' :
+		res = 6;
 		break;
 	    case 'f':
 		res = 1;
@@ -333,7 +343,9 @@ stop_argv:
    if (!display) goto no_dpy;
    screen_num = DefaultScreen(display);
    rootWin = RootWindow(display, screen_num);
-   scr = XScreenOfDisplay(display, screen_num);
+   XGetWindowAttributes(display,rootWin,&wa0);
+   int sx=wa0.x, sy=wa0.y;
+   unsigned int screen_width=wa0.width, screen_height=wa0.height;
 
    char* xrms;
    if ((xrms = XResourceManagerString(display)) && (xrm = XrmGetStringDatabase(xrms)))
@@ -357,15 +369,71 @@ stop_argv:
 	}
    }
 
-/*
-    // if you know where & how to use relative root window
-   Window rootWin0;
-   int sx,sy;
-   unsigned int screen_width, screen_height, sbord. sdeph;
-   XGetGeometry(display, rootWin, &rootWin0, &sx, &sy, &screen_width, &screen_height, &sbord, &sdepth);
-*/
-   unsigned int screen_width = DisplayWidth(display, screen_num);
-   unsigned int screen_height = DisplayHeight(display, screen_num);
+   const Atom atomWorkArea = XInternAtom(display, "_NET_WORKAREA", True);
+   if (atomWorkArea) {
+	Atom type;
+	int format;
+	unsigned long numItems;
+	unsigned long bytesRemaining;
+	long *workareas = NULL;
+	if (XGetWindowProperty(display,rootWin,atomWorkArea,0,4,False,XA_CARDINAL,&type,&format,&numItems,&bytesRemaining,(unsigned char **)&workareas)==Success
+		&& type == XA_CARDINAL && format == 32 && numItems == 4
+	){	
+		sx=workareas[0];
+		sy=workareas[1];
+		screen_width=workareas[2];
+		screen_height=workareas[3];
+	}
+    }
+
+#ifdef USE_XR
+	// auto select top/bottom if strut on multiple CRTs
+	int xrevent, xrerror, xrr, found=0, crts=0;
+	if ((xrr = XRRQueryExtension(display, &xrevent, &xrerror))) {
+		XRRScreenResources *xrrr = XRRGetScreenResources(display,rootWin);
+		for (i = 0; i < xrrr->noutput; i++) {
+			XRROutputInfo *oinf = XRRGetOutputInfo(display, xrrr, xrrr->outputs[i]);
+			if (oinf && oinf->crtc && oinf->connection == RR_Connected) {
+				crts++;
+				if(found || (output?
+				    strcmp(oinf->name,output):
+				    !strncasecmp(oinf->name,"HDMI",4))
+				    ) continue;
+				found++;
+				XRRCrtcInfo *cinf = XRRGetCrtcInfo (display, xrrr, oinf->crtc);
+
+				if (cinf->x==0) left=1;
+				if (cinf->y==0) top=1;
+#if 0
+				sx=cinf->x;
+				sy=cinf->y;
+				screen_width=cinf->width;
+				screen_height=cinf->height;
+#else
+				int x1=sx+screen_width;
+				int x2=cinf->x+cinf->width;
+				if (sx>=cinf->x && sx<=x2) sx+=cinf->x;
+				else sx=cinf->x;
+				if (x1<x2 && x1>sx) x2=x1;
+				screen_width=x2-sx;
+
+				int y1=sy+screen_height;
+				int y2=cinf->y+cinf->height;
+				if (sy>=cinf->y && sy<=y2) sy+=cinf->y;
+				else sy=cinf->y;
+				if (y1<y2 && y1>sy) y2=y1;
+				screen_height=y2-sy;
+#endif
+
+				XRRFreeCrtcInfo(cinf);
+			}
+			XRRFreeOutputInfo(oinf);
+		}
+		if (!found) fprintf(stderr,"Output '%s' not found, ignoring\n",output?:"!HDMI");
+		XRRFreeScreenResources(xrrr);
+		if (crts==1 || !(dock & (2|64))) top=left=0;
+	}
+#endif
 
       Atom wm_protocols[]={
 	 XInternAtom(display, "WM_DELETE_WINDOW",False),
@@ -419,6 +487,8 @@ stop_argv:
 	left = !(flags & XNegative);
 	top = !(flags & YNegative);
       }
+      xret+=sx;
+      yret+=sy;
       if (!left) xret += screen_width - wret;
       if (!top) yret += screen_height - hret;
 
@@ -463,6 +533,9 @@ stop_argv:
         XMoveWindow(display,win,xret,yret);
         XResizeWindow(display, win, wret = xkbd_get_width(kb), hret = xkbd_get_height(kb));
       }
+
+
+
 //      if (xret || yret)
 //	 XMoveWindow(display,win,xret,yret);
       size_hints.flags = PPosition | PSize | PMinSize;
@@ -507,7 +580,7 @@ stop_argv:
 		prop[8] = xret; prop[9] = xret + wret - 1;
 //		prop[9] = screen_width - 1;
 	} else {
-		prop[3] = screen_height - yret;
+		prop[3] = sy + screen_height - yret;
 		prop[10] = xret; prop[11] = xret + wret - 1;
 //		prop[11] = screen_width - 1;
 	}
@@ -518,7 +591,7 @@ stop_argv:
 		prop[4] = yret; prop[5] = yret + hret - 1;
 //		prop[5] = screen_height - 1;
 	} else {
-		prop[1] = screen_width - xret;
+		prop[1] = sx + screen_width - xret;
 		prop[6] = yret; prop[7] = yret + hret - 1;
 //		prop[7] = screen_height - 1;
 	}
@@ -553,9 +626,9 @@ stop_argv:
       signal(SIGUSR1, handle_sig); /* for extenal mapping / unmapping */
 
 #ifdef USE_XR
-      int xrevent, xrerror, xrr;
-      if (xrr = XRRQueryExtension(display, &xrevent, &xrerror))
+      if (xrr) {
 	XRRSelectInput(display, win, RRScreenChangeNotifyMask);
+      }
 #endif
 
 #ifndef MINIMAL
@@ -662,7 +735,7 @@ stop_argv:
 		while (nw--) {
 			// BUG! can fail on OpenBox menu (async?)
 			if (XGetWindowAttributes(display, wins[nw],&wa) &&
-				wa.screen == scr &&
+				wa.screen == wa0.screen &&
 				wa.x<=xret && wa.y<yret && wa.width>=wret && wa.height>hret &&
 				wa.x+wa.width>xret && wa.y+wa.height>yret
 				) XResizeWindow(display, wins[nw], wa.width, yret-wa.y);
