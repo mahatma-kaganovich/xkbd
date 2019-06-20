@@ -218,6 +218,7 @@ int inbound(int x,int xin,int x1,int x2){
 	return (xin>x1 && xin<x2)?xin:x;
 }
 
+
 int main(int argc, char **argv)
 {
    char *window_name = IAM;
@@ -246,48 +247,40 @@ int main(int argc, char **argv)
    int xkbEventType = 0;
 
    int i;
+   char *s;
    char userconffile[256];
    FILE *fp;
    KeySym mode_switch_ksym;
 
-
-   static struct {
+   static struct resource {
+	char param;
 	char *name;
 	int type;
 	void *ptr;
    } resources[] = {
-	{ "xkbd.geometry", 0, &geometry },
-	{ "xkbd.font_name", 0, &font_name },
-	{ "xkbd.conf_file", 0, &conf_file },
-	{ "xkbd.dock", 1, &dock },
-	{ "xkbd.sync", 2, &Xkb_sync },
-	{ "xkbd.no_lock", 2, &no_lock },
-	{ "xkbd.output", 0, &output },
-	{ NULL, 0, NULL }
+	{ 'g', "xkbd.geometry", 0, &geometry },
+	{ 'f', "xkbd.font_name", 0, &font_name },
+	{ 'k', "xkbd.conf_file", 0, &conf_file },
+	{ 'D', "xkbd.dock", 1, &dock },
+#ifndef MINIMAL
+	{ 'X', "xkbd.sync", 2, &Xkb_sync },
+#else
+	{ 'X' },
+#endif
+	{ 'l', "xkbd.no_lock", 2, &no_lock },
+	{ 'o', "xkbd.output", 0, &output },
+	{ 0, NULL }
    };
-
+   struct resource *res1;
 
    exec_cmd = argv;
 
-   for (i=1; argv[i]; i++) {
-      char *arg = argv[i];
+   for (i=1; s=argv[i]; i++) {
       int res = -1;
-      if (*arg=='-') {
-	 switch (arg[1]) {
+      if (*s=='-') {
+	 switch (s[1]) {
 	    case 'd' :
 		display_name = argv[++i];
-		break;
-	    case 'g' :
-		res = 0;
-		break;
-	    case 'o' :
-		res = 6;
-		break;
-	    case 'f':
-		res = 1;
-		break;
-	    case 'k' :
-		res = 2;
 		break;
 	    case 'x' :
 		embed = 1;
@@ -298,42 +291,33 @@ int main(int argc, char **argv)
 	    case 's' :
 		dock |= 2;
 		break;
-	    case 'D' :
-		res = 3;
-		break;
-	    case 'X' :
-#ifndef MINIMAL
-		res = 4;
-#endif
-		break;
 	    case 'e' :
 		exec_cmd = &argv[++i];
 		goto stop_argv;
-	    case 'l' :
-		res = 5;
-		break;
 	    case 'v' :
 		version();
 		exit(0);
 		break;
 	    default:
-		usage();
-		exit(0);
+		for (res=0; (res1=&resources[res])->param!=s[1]; res++) {
+			if (!res1->param) {
+				usage();
+				exit(0);
+			}
+		};
+		res1->name = ""; // top priority
+		switch (res1->type) {
+		    case 0: 
+			*(char **)res1->ptr = argv[++i];
+			break;
+		    case 1:
+			*(int *)res1->ptr = atoi(argv[++i]);
+			break;
+		    case 2:
+			*(int *)res1->ptr = 1;
+			break;
+		}
 		break;
-	 }
-	 if (res > -1) {
-	    resources[res].name = ""; // top priority
-	    switch (resources[res].type) {
-	    case 0: 
-		*(char **)resources[res].ptr = argv[++i];
-		break;
-	    case 1:
-		*(int *)resources[res].ptr = atoi(argv[++i]);
-		break;
-	    case 2:
-		*(int *)resources[res].ptr = 1;
-		break;
-	    }
 	 }
       }
    }
@@ -347,23 +331,22 @@ stop_argv:
    int sx=wa0.x, sy=wa0.y;
    unsigned int screen_width=wa0.width, screen_height=wa0.height;
 
-   char* xrms;
-   if ((xrms = XResourceManagerString(display)) && (xrm = XrmGetStringDatabase(xrms)))
-   for (i=0; resources[i].name; i++) {
+   if ((s = XResourceManagerString(display)) && (xrm = XrmGetStringDatabase(s)))
+   for (i=0; s=(res1=&resources[i])->name; i++) {
 	char *type = NULL;
 	XrmValue val;
 	int n;
 	val.addr = NULL;
 
-	if (*resources[0].name && XrmGetResource(xrm,resources[i].name,NULL,&type,&val) && val.addr) {
-		switch (resources[i].type) {
+	if (*s && XrmGetResource(xrm,s,NULL,&type,&val) && val.addr) {
+		switch (res1->type) {
 		case 0:
-			n = strlen((char *)val.addr);
-			memcpy(*(char **)(resources[i].ptr) = malloc(n), val.addr, n);
+			n = strlen((char *)val.addr)+1;
+			memcpy(*(char **)(res1->ptr) = malloc(n), val.addr, n);
 			break;
 		case 1:
 		case 2:
-			*(int *)resources[i].ptr=atoi((char *)val.addr);
+			*(int *)res1->ptr=atoi((char *)val.addr);
 			break;
 		}
 	}
