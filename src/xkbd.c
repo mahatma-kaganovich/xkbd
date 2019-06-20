@@ -252,12 +252,19 @@ int main(int argc, char **argv)
    FILE *fp;
    KeySym mode_switch_ksym;
 
+//   static struct resource {
+//	char param;
+//	char *name;
+//	int type;
+//	void *ptr;
+  // } __attribute__ ((__packed__)) resources[] = {
+
    static struct resource {
 	char param;
 	char *name;
 	int type;
 	void *ptr;
-   } resources[] = {
+   } __attribute__ ((__packed__)) resources[] = {
 	{ 'g', "xkbd.geometry", 0, &geometry },
 	{ 'f', "xkbd.font_name", 0, &font_name },
 	{ 'k', "xkbd.conf_file", 0, &conf_file },
