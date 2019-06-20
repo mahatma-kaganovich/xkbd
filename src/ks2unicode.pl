@@ -32,6 +32,8 @@
 'Sys_Req'=>'SysRq',
 'Meta_R'=>'Meta',
 'Meta_L'=>'Meta',
+'Delete'=>'Del',
+'Insert'=>'Ins',
 );
 
 $h='/usr/include/X11/keysymdef.h';

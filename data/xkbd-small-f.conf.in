@@ -23,7 +23,7 @@ grey_col 0:31:31
 # color of keypad
 kp_col 0:31:31
 
-# keyboard dimentions
+# max keyboard dimentions, mm
 #width  xxx
 #height xxx
 
@@ -162,11 +162,9 @@ kp_width 6
 		default_ks BackSpace
 	</key>
 	<key>
-		default Ins
 		default_ks Insert
 	</key>
 	<key>
-		default Del
 		default_ks Delete
 	</key>
 	<key>

@@ -20,7 +20,7 @@ down_col  100:100:200
 # color of key borders ( default black )
 # border_col black
 
-# keyboard dimentions
+# max keyboard dimentions, mm
 #width  xxx
 #height xxx
 

@@ -271,8 +271,16 @@ typedef struct _button
 
 
 extern int Xkb_sync;
-
 extern int no_lock;
+// todo: width/height in mm
+extern unsigned long int scr_width;
+extern unsigned long int scr_height;
+extern unsigned long scr_mwidth;
+extern unsigned long scr_mheight;
+
+inline long min(long x,long y){ return x<y?x:y; }
+inline long max(long x,long y){ return x>y?x:y; }
+
 
 #endif
 

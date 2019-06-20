@@ -57,7 +57,7 @@ Display* display; /* ack globals due to sighandlers - another way ? */
 Window   win;
 Window rootWin;
 Atom mwm_atom;
-int screen_num;
+int screen;
 XWindowAttributes wa0;
 
 Xkbd *kb = NULL;
@@ -65,6 +65,15 @@ char **exec_cmd;
 
 int Xkb_sync = 0;
 int no_lock = 0;
+
+// dpi
+unsigned long scr_width;
+unsigned long scr_height;
+unsigned long scr_mwidth;
+unsigned long scr_mheight;
+
+// IBM standard 500x200mm, ~22x6 keys? or key 20x20mm
+// int max_width = 440, max_height=120;
 
 enum {
   WM_UNKNOWN,
@@ -192,7 +201,7 @@ Options:\n\
   -D  Dock/options bitmask: 1=dock, 2=strut, 4=_NET_WM_WINDOW_TYPE_DOCK,\n\
       8=_NET_WM_WINDOW_TYPE_TOOLBAR, 16=_NET_WM_STATE_STICKY.\n\
       32=resize (slock), 64=strut horizontal\n\
-      For OpenBox I use 54 = $[2+4+16+32].\n\
+      For OpenBox I use 50 = $[2+16+32].\n\
   -X  Xkb state interaction\n\
   -l  disable modifiers lock\n\
   -v  version\n\
@@ -218,7 +227,6 @@ int inbound(int x,int xin,int x1,int x2){
 	return (xin>x1 && xin<x2)?xin:x;
 }
 
-
 int main(int argc, char **argv)
 {
    char *window_name = IAM;
@@ -234,14 +242,16 @@ int main(int argc, char **argv)
 
    static char *geometry = NULL;
    static char *output = NULL;
-   int xret=0, yret=0, wret=0, hret=0;
+   int x=0, y=0, width=0, height=0;
    int top=0, left=0;
+   int crts=0;
    static char *conf_file = NULL;
    static char *font_name = NULL;
    int cmd_xft_selected = 0; /* ugly ! */
    int embed = 0;
    static unsigned int dock = 0;
    XrmDatabase xrm;
+   Window win1;
 
    XEvent ev;
    int xkbEventType = 0;
@@ -332,11 +342,12 @@ stop_argv:
 
    display = XOpenDisplay(display_name);
    if (!display) goto no_dpy;
-   screen_num = DefaultScreen(display);
-   rootWin = RootWindow(display, screen_num);
+   screen = DefaultScreen(display);
+   rootWin = RootWindow(display, screen);
+   scr_mwidth=DisplayWidthMM(display, screen);
+   scr_mheight=DisplayHeightMM(display, screen);
    XGetWindowAttributes(display,rootWin,&wa0);
-   int sx=wa0.x, sy=wa0.y;
-   unsigned int screen_width=wa0.width, screen_height=wa0.height;
+   int X1=wa0.x,Y1=wa0.y,X2=wa0.x+wa0.width-1,Y2=wa0.y+wa0.height-1;
 
    if ((s = XResourceManagerString(display)) && (xrm = XrmGetStringDatabase(s)))
    for (i=0; s=(res1=&resources[i])->name; i++) {
@@ -359,26 +370,8 @@ stop_argv:
 	}
    }
 
-   const Atom atomWorkArea = XInternAtom(display, "_NET_WORKAREA", True);
-   if (atomWorkArea) {
-	Atom type;
-	int format;
-	unsigned long numItems;
-	unsigned long bytesRemaining;
-	long *workareas = NULL;
-	if (XGetWindowProperty(display,rootWin,atomWorkArea,0,4,False,XA_CARDINAL,&type,&format,&numItems,&bytesRemaining,(unsigned char **)&workareas)==Success
-		&& type == XA_CARDINAL && format == 32 && numItems == 4
-	){	
-		sx=workareas[0];
-		sy=workareas[1];
-		screen_width=workareas[2];
-		screen_height=workareas[3];
-	}
-    }
-
 #ifdef USE_XR
-	// auto select top/bottom if strut on multiple CRTs
-	int xrevent, xrerror, xrr, found=0, crts=0;
+	int xrevent, xrerror, xrr, found=0;
 	if ((xrr = XRRQueryExtension(display, &xrevent, &xrerror))) {
 		XRRScreenResources *xrrr = XRRGetScreenResources(display,rootWin);
 		for (i = 0; i < xrrr->noutput; i++) {
@@ -391,37 +384,18 @@ stop_argv:
 				    ) continue;
 				found++;
 				XRRCrtcInfo *cinf = XRRGetCrtcInfo (display, xrrr, oinf->crtc);
-
-				if (cinf->x==0) left=1;
-				if (cinf->y==0) top=1;
-#if 0
-				sx=cinf->x;
-				sy=cinf->y;
-				screen_width=cinf->width;
-				screen_height=cinf->height;
-#else
-				int x1=sx+screen_width;
-				int x2=cinf->x+cinf->width;
-				if (sx>=cinf->x && sx<=x2) sx+=cinf->x;
-				else sx=cinf->x;
-				if (x1<x2 && x1>sx) x2=x1;
-				screen_width=x2-sx;
-
-				int y1=sy+screen_height;
-				int y2=cinf->y+cinf->height;
-				if (sy>=cinf->y && sy<=y2) sy+=cinf->y;
-				else sy=cinf->y;
-				if (y1<y2 && y1>sy) y2=y1;
-				screen_height=y2-sy;
-#endif
-
+				X1=max(X1,cinf->x);
+				Y1=max(Y1,cinf->y);
+				X2=min(X2,cinf->x+cinf->width-1);
+				Y2=min(Y2,cinf->y+cinf->height-1);
+				scr_mwidth=oinf->mm_width;
+				scr_mheight=oinf->mm_height;
 				XRRFreeCrtcInfo(cinf);
 			}
 			XRRFreeOutputInfo(oinf);
 		}
 		if (!found) fprintf(stderr,"Output '%s' not found, ignoring\n",output?:"!HDMI");
 		XRRFreeScreenResources(xrrr);
-		if (crts==1 || !(dock & (2|64))) top=left=0;
 	}
 #endif
 
@@ -469,24 +443,36 @@ stop_argv:
 	}
 */
 
-      wret = screen_width;
-      hret = screen_height/4;
+      scr_width=X2-X1+1;
+      scr_height=Y2-Y1+1;
+#ifdef USE_XR
+      if (found && crts>1) {
+		if (dock & 64 && X1==0 && scr_width<wa0.width) left=1;
+		if (dock & 2 && Y1==0 && scr_height<wa0.height) top=1;
+      }
+#endif
+      width=scr_width;
+      height=scr_height/4;
       if (geometry) {
-        // default = +0-0 = WxH+0-0
-	int flags = XParseGeometry(geometry, &xret, &yret, &wret, &hret );
+        // default = +0-0 = xH+0-0 = WxH+0-0
+	int flags = XParseGeometry(geometry, &x, &y, &width, &height);
 	left = !(flags & XNegative);
 	top = !(flags & YNegative);
       }
-      xret+=sx;
-      yret+=sy;
-      if (!left) xret += screen_width - wret;
-      if (!top) yret += screen_height - hret;
 
-      win = XCreateSimpleWindow(display, rootWin, xret, yret, wret, hret, 0,
-				BlackPixel(display, screen_num),
-				WhitePixel(display, screen_num));
+      x += X1;
+      y += Y1;
+      if (!left) x += scr_width - width;
+      if (!top) y += scr_height - height;
+
+      win = XCreateSimpleWindow(display, rootWin, x, y, width, height, 0,
+				BlackPixel(display, screen),
+				WhitePixel(display, screen));
+
+
 
       /* check for user selected keyboard conf file */
+
 
       if (conf_file == NULL)
 	{
@@ -517,24 +503,24 @@ stop_argv:
       cmd_xft_selected = font_name!=NULL;
 #endif
       kb = xkbd_realize(display, win, conf_file, font_name, 0, 0,
-			wret, hret, cmd_xft_selected);
-      if (wret != xkbd_get_width(kb) || hret != xkbd_get_height(kb)) {
-	yret += hret - xkbd_get_height(kb);
-        XMoveWindow(display,win,xret,yret);
-        XResizeWindow(display, win, wret = xkbd_get_width(kb), hret = xkbd_get_height(kb));
+			width, height, cmd_xft_selected);
+      if (width != xkbd_get_width(kb) || height != xkbd_get_height(kb)) {
+	if (!left) x += width - xkbd_get_width(kb);
+	if (!top) y += height - xkbd_get_height(kb);
+        XMoveWindow(display,win,x,y);
+        XResizeWindow(display, win, width = xkbd_get_width(kb), height = xkbd_get_height(kb));
       }
 
 
-
-//      if (xret || yret)
-//	 XMoveWindow(display,win,xret,yret);
+//      if (x || y)
+//	 XMoveWindow(display,win,x,y);
       size_hints.flags = PPosition | PSize | PMinSize;
       size_hints.x = 0;
       size_hints.y = 0;
-      size_hints.width      =  wret;
-      size_hints.height     =  hret;
-      size_hints.min_width  =  wret;
-      size_hints.min_height =  hret;
+      size_hints.width      =  width;
+      size_hints.height     =  height;
+      size_hints.min_width  =  width;
+      size_hints.min_height =  height;
       XSetStandardProperties(display, win, window_name,
 			     icon_name, None,
 			     argv, argc, &size_hints);
@@ -553,6 +539,7 @@ stop_argv:
 		      
       long prop[12] = {2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
       XChangeProperty(display,win, mwm_atom, mwm_atom,32,PropModeReplace,(unsigned char *)&prop,5);
+      prop[0] = 0;
       if(dock & 4)
 	_propAtom32("_NET_WM_WINDOW_TYPE","_NET_WM_WINDOW_TYPE_DOCK");
       if (dock & 8)
@@ -563,36 +550,8 @@ stop_argv:
 //      _propAtom32("_NET_WM_STATE","_NET_WM_STATE_FOCUSED");
 //      Atom version = 4;
 //      _prop(32,"XdndAware",XA_ATOM,&version,1);
-      prop[0] = 0;
-      if (dock & 2) {
-	if (top) {
-		prop[2] = yret + hret;
-		prop[8] = xret; prop[9] = xret + wret - 1;
-//		prop[9] = screen_width - 1;
-	} else {
-		prop[3] = sy + screen_height - yret;
-		prop[10] = xret; prop[11] = xret + wret - 1;
-//		prop[11] = screen_width - 1;
-	}
-      }
-      if (dock & 64) {
-	if (left) {
-		prop[0] = xret + wret;
-		prop[4] = yret; prop[5] = yret + hret - 1;
-//		prop[5] = screen_height - 1;
-	} else {
-		prop[1] = sx + screen_width - xret;
-		prop[6] = yret; prop[7] = yret + hret - 1;
-//		prop[7] = screen_height - 1;
-	}
-      }
-      if (dock & (2|64)) {
-	//0: left, right, top, bottom,
-	_prop(32,"_NET_WM_STRUT",XA_CARDINAL,&prop,4);
-	//4: left_start_y, left_end_y, right_start_y, right_end_y,
-	//8: top_start_x, top_end_x, bottom_start_x, bottom_end_x
-	_prop(32,"_NET_WM_STRUT_PARTIAL",XA_CARDINAL,&prop,12);
-      }
+
+
 
       XSelectInput(display, win,
 		   ExposureMask |
@@ -611,9 +570,11 @@ stop_argv:
 	 fprintf(stdout, "%li\n", win);
 	 fclose(stdout);
       } else {
-	 XMapWindow(display, win);
+	XMapWindow(display, win);
       }
       signal(SIGUSR1, handle_sig); /* for extenal mapping / unmapping */
+
+
 
 #ifdef USE_XR
       if (xrr) {
@@ -711,6 +672,40 @@ stop_argv:
 	    case Expose:
 		xkbd_repaint(kb);
 		break;
+	    case MapNotify:
+		XTranslateCoordinates(display,win,rootWin,0,0,&x,&y,&win1);
+		if (dock & 2) {
+			if (top) {
+				prop[2] = y + height;
+				prop[8] = x;
+				prop[9] = x + width - 1;
+			} else {
+				prop[3] = wa0.height - y;
+				prop[10] = x;
+				prop[11] = x + width - 1;
+			}
+		}
+		if (dock & 64) {
+			if (left) {
+				prop[0] = x + width;
+				prop[4] = y;
+				prop[5] = y + height - 1;
+			} else {
+				prop[1] = wa0.width - x;
+				prop[6] = y;
+				prop[7] = y + height - 1;
+			}
+		}
+		if (dock & (2|64)) {
+//			for(i=0;i<12;i++) fprintf(stderr," %li",prop[i]);fprintf(stderr," crts=%i\n",crts);
+			//0: left, right, top, bottom,
+			// don't strut global on xrandr multihead
+			if (crts<2) _prop(32,"_NET_WM_STRUT",XA_CARDINAL,&prop,4);
+			//4: left_start_y, left_end_y, right_start_y, right_end_y,
+			//8: top_start_x, top_end_x, bottom_start_x, bottom_end_x
+			_prop(32,"_NET_WM_STRUT_PARTIAL",XA_CARDINAL,&prop,12);
+		}
+		break;
 	    case VisibilityNotify: if (dock & 32) {
 		Window rw, pw, *wins;
 		unsigned int nw;
@@ -726,9 +721,9 @@ stop_argv:
 			// BUG! can fail on OpenBox menu (async?)
 			if (XGetWindowAttributes(display, wins[nw],&wa) &&
 				wa.screen == wa0.screen &&
-				wa.x<=xret && wa.y<yret && wa.width>=wret && wa.height>hret &&
-				wa.x+wa.width>xret && wa.y+wa.height>yret
-				) XResizeWindow(display, wins[nw], wa.width, yret-wa.y);
+				wa.x<=x && wa.y<y && wa.width>=width && wa.height>height &&
+				wa.x+wa.width>x && wa.y+wa.height>y
+				) XResizeWindow(display, wins[nw], wa.width, y-wa.y);
 		}
 		XFree(wins);
 		// first lock: fork (to realize init-lock safe wait)

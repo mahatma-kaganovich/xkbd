@@ -51,6 +51,7 @@ static int maxkc = 0;
 static int notkc = 0;
 static int ks_per_kc = 0;
 
+
 static Bool
 load_a_single_font(keyboard *kb, char *fontname )
 {
@@ -401,8 +402,6 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 {
   keyboard *kb = NULL;
 
-  int height_tmp = 0;
-
   list *listp;
 
   int max_width = 0; /* required for sizing code */
@@ -657,19 +656,11 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		  _set_color_fg(kb,tmpstr_C,&kb->grey_gc,NULL);
 		else if (!strcmp(tmpstr_A, "kp_col"))
 		  _set_color_fg(kb,tmpstr_C,&kb->kp_gc,NULL);
-		else if (strcmp(tmpstr_A, "width") == 0)
-		  {
-		    /* TODO fix! seg's as kb->vbox does not yet exist
-		     if (!kb->vbox->act_width)
-			kb->vbox->act_width = atoi(tmpstr_C);
-		    */
-		  }
-		else if (strcmp(tmpstr_A, "height") == 0)
-		    /* TODO fix! seg's as kb->vbox does not yet exist
-		     if (!kb->vbox->act_height)
-			kb->vbox->act_height = atoi(tmpstr_C);
-		    */
-                    height_tmp = atoi(tmpstr_C);
+		else if (strcmp(tmpstr_A, "width") == 0) {
+			if (scr_mwidth) kb_width= min(scr_width * atoi(tmpstr_C) / scr_mwidth, kb_width);
+		} else if (strcmp(tmpstr_A, "height") == 0) {
+			if (scr_mheight) kb_height = min(scr_height * atoi(tmpstr_C) / scr_mheight, kb_height);
+		}
 #ifdef SLIDES
 		else if (strcmp(tmpstr_A, "slide_margin") == 0)
 		     kb->slide_margin = atoi(tmpstr_C);
@@ -775,14 +766,13 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
       line_no++;
     }
 
-  fclose(rcfp);
 
   kb->key_delay_repeat1 = kb->key_delay_repeat;
   kb->key_repeat1 = kb->key_repeat;
 
   kb->vbox = kb->kbd_layouts[kb->group = 0];
-  if(height_tmp)
-    kb->vbox->act_height = height_tmp;
+
+
   /* pass 1 - calculate min dimentions  */
 
   listp = kb->vbox->root_kid;
@@ -895,7 +885,6 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 
 void kb_size(keyboard *kb)
 {
-
    /* let the fun begin :) */
    list *listp;
    int cy = 0;
@@ -943,9 +932,10 @@ void kb_size(keyboard *kb)
       tmp_box->y = cy;
       tmp_box->x = 0;
       ip = tmp_box->root_kid;
-      y_pad =  (int)(
-		     ( (float)(tmp_box->min_height)/kb->vbox->min_height )
-		     * kb->vbox->act_height );
+//      y_pad =  (int)(
+//		     ( (float)(tmp_box->min_height)/kb->vbox->min_height )
+//		     * kb->vbox->act_height );
+      y_pad =  (unsigned long)tmp_box->min_height * kb->vbox->act_height / kb->vbox->min_height;
 
 
       while (ip != NULL)
@@ -958,8 +948,9 @@ void kb_size(keyboard *kb)
 
 	  but_total_width = tmp_but->c_width+(2*tmp_but->b_size);
 
-	  tmp_but->x_pad = (int)(((float)but_total_width/tmp_box->min_width)
-	    * kb->vbox->act_width);
+//	  tmp_but->x_pad = (int)(((float)but_total_width/tmp_box->min_width)
+//	    * kb->vbox->act_width);
+	  tmp_but->x_pad = (unsigned long) but_total_width * kb->vbox->act_width / tmp_box->min_width;
 
 	  tmp_but->x_pad -= but_total_width;
 

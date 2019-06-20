@@ -18,7 +18,7 @@ txt_col  black
 # color of key borders ( default black )
 # border_col black
 
-# keyboard dimentions ( overidden by -geometry )
+# max keyboard dimentions, mm ( overidden by -geometry )
 # width  320
 # height 100
 
