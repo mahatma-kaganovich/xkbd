@@ -1094,12 +1094,18 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 	static button *sib[MAX_TOUCH][MAX_SIBLINGS];
 	static short nsib[MAX_TOUCH] = {};
 #endif
+
+#ifdef DO_CNT
+	int cnt=0;
+#define IF_CNT(B) if (!cnt) for (i=P; i!=N; TOUCH_INC(i)) if (but[i] == B && devid[i] == dev) cnt++; if (cnt<2)
+#else
+#define IF_CNT(B)
+#endif
+
 #ifdef MULTITOUCH
 	static unsigned int N=0;
 	static unsigned int P=0;
 	int t=-1;
-	int cnt=0;
-#define IF_CNT(B) if (!cnt) for (i=P; i!=N; TOUCH_INC(i)) if (but[i] == B && devid[i] == dev) cnt++; if (cnt<2)
 
 	// find touch
 	for (i=P; i!=N; TOUCH_INC(i)) {
@@ -1118,7 +1124,6 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 
 #else
 	const int t=0;
-#define IF_CNT(B)
 #endif
 	b = kb_find_button(kb,x,y);
 
@@ -1263,13 +1268,15 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 	}
 	if (b->modifier) but[t] = NULL;
 drop:
+#ifdef DO_CNT
 	if (b!=but[t]) {
 		b=but[t];
-#ifdef MULTITOUCH
 		cnt=0;
-#endif
 	}
 	if (b) {
+#else
+	if (b=but[t]) {
+#endif
 		but[t] = NULL;
 		IF_CNT(b) _release(b);
 #ifdef SLIDES
