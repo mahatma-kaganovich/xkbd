@@ -197,7 +197,7 @@ void usage(void)
 Options:\n\
   -d <display>\n\
   -o <output>\n\
-  -g <geometry> (default +0-0, top +0+0)\n\
+  -g <geometry> (default -0-0, left/top +0+0)\n\
      ( NOTE: The above will overide the configs font )\n\
   -k  <keyboard file> Select the keyboard definition file\n\
                       other than" DEFAULTCONFIG "\n\
@@ -490,9 +490,9 @@ re_crts:
       x += X1;
       y += Y1;
       // if unknown - try relevant temporary size = 500x200mm or 3x1
-      w=width?:height?min(height*3,width):scr_mwidth?500*scr_width/scr_mwidth:scr_width;
+      w=width?:height?min(height*3,scr_width):scr_mwidth?500*scr_width/scr_mwidth:scr_width;
       h=height?:scr_mheight?(200*scr_height/scr_mheight):(min(scr_height,i)/3);
-//      i=width?:scr_width; j=height?:scr_height;
+//      w=width?:scr_width; h=height?:scr_height;
       if (!left) x += scr_width - w;
       if (!top) y += scr_height - h;
 
