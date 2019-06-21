@@ -262,7 +262,7 @@ int main(int argc, char **argv)
    XEvent ev;
    int xkbEventType = 0;
 
-   int i;
+   int i,j;
    char *s;
    char userconffile[256];
    FILE *fp;
@@ -489,14 +489,15 @@ re_crts:
 
       x += X1;
       y += Y1;
-      if (!left) x += scr_width - width;
-      if (!top) y += scr_height - height;
-
       // if unknown - try relevant temporary size = 500x200mm or 3x1
       i=width?:height?min(height*3,width):scr_mwidth?500*scr_width/scr_mwidth:scr_width;
+      j=height?:scr_mheight?(200*scr_height/scr_mheight):(min(scr_height,i)/3);
+//      i=width?:scr_width; j=height?:scr_height;
+      if (!left) x += scr_width - i;
+      if (!top) y += scr_height - j;
+
       win = XCreateSimpleWindow(display, rootWin, x, y,
-	i, height?:scr_mheight?(200*scr_height/scr_mheight):(min(scr_height,i)/3),
-//	width?:scr_width, height?:scr_height,
+	i, j,
 	0, BlackPixel(display, screen), WhitePixel(display, screen));
 
 
@@ -534,16 +535,14 @@ re_crts:
 #endif
       kb = xkbd_realize(display, win, conf_file, font_name, 0, 0,
 			width, height, cmd_xft_selected);
-      if (width != xkbd_get_width(kb) || height != xkbd_get_height(kb)) {
-	if (!left) x += width - xkbd_get_width(kb);
-	if (!top) y += height - xkbd_get_height(kb);
-        XMoveWindow(display,win,x,y);
-        XResizeWindow(display, win, width = xkbd_get_width(kb), height = xkbd_get_height(kb));
+      i=xkbd_get_width(kb);
+      j=xkbd_get_height(kb);
+      if (width != i || height != j) {
+	if (!left) x += width - i;
+	if (!top) y += height - j;
+	XMoveResizeWindow(display,win,x,y,i,j);
       }
 
-
-//      if (x || y)
-//	 XMoveWindow(display,win,x,y);
       size_hints.flags = PPosition | PSize | PMinSize;
       size_hints.x = 0;
       size_hints.y = 0;
