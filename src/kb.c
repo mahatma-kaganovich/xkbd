@@ -395,6 +395,29 @@ void _simple_GC(keyboard *kb, GC *gc, int rev) {
 	XSetBackground(dpy, *gc, rev?b:w);
 }
 
+void fix_kb_size(int *kb_width,int *kb_height,unsigned long mwidth,unsigned long mheight){
+	float d;
+	if (*kb_height && *kb_width) return;
+	mwidth = scr_mwidth?scr_width*mwidth/scr_mwidth:0;
+	mheight = scr_mheight?scr_height*mheight/scr_mheight:0;
+	d=(mwidth && mheight)?(mwidth+0.)/mheight:3;
+	if (!*kb_height && !*kb_width) {
+		*kb_width=scr_width;
+		*kb_height=min(scr_height/d,scr_width/d);
+		if (mwidth && mwidth<*kb_width) *kb_width=mwidth;
+		if (mheight && mheight<*kb_height) *kb_height=mheight;
+	} else if (!*kb_height) {
+		*kb_height=min(scr_height/d,*kb_width/d);
+		if (!mheight){
+		} else if (!mwidth) *kb_height=mheight;
+		else *kb_height=min(*kb_height,mheight*(*kb_width)/mwidth);
+	} else {
+		*kb_width=min(scr_width,*kb_height*d);
+		if (!mwidth){
+		} else if (!mheight) *kb_width=mwidth;
+		else *kb_width=min(*kb_width,mwidth*(*kb_height)/mheight);
+	}
+}
 
 keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		 int kb_width, int kb_height, char *conf_file,
@@ -405,6 +428,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
   list *listp;
 
   int max_width = 0; /* required for sizing code */
+  unsigned long mwidth=0, mheight=0;
   //int cy = 0;        /* ditto                    */
 
   FILE *rcfp;
@@ -536,6 +560,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 			char fname[32] = "";
 			sprintf(fname,FNT,10);
 			_kb_load_font(kb, fname);
+			fix_kb_size(&kb_width,&kb_height,mwidth,mheight);
 			sprintf(fname,FNT,kb_width/_button_get_txt_size(kb,"ABCabc123+"));
 #else
 #define fname "fixed"
@@ -569,6 +594,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		  kb->total_layouts++;
 		  kb->kbd_layouts[kb->total_layouts-1] = box_new();
 		  kb->vbox = kb->kbd_layouts[kb->group = kb->total_layouts-1];
+		  fix_kb_size(&kb_width,&kb_height,mwidth,mheight);
 		  kb->vbox->act_width  = kb_width;
 		  kb->vbox->act_height = kb_height;
 		  kb->vbox->min_height = 0;
@@ -589,6 +615,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		      kb->total_layouts++;
 		      kb->kbd_layouts[kb->total_layouts-1] = box_new();
 		      kb->vbox = kb->kbd_layouts[kb->group = kb->total_layouts-1];
+		      fix_kb_size(&kb_width,&kb_height,mwidth,mheight);
 		      kb->vbox->act_width  = kb_width;
 		      kb->vbox->act_height = kb_height;
 		      kb->vbox->min_height = 0;
@@ -656,11 +683,10 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		  _set_color_fg(kb,tmpstr_C,&kb->grey_gc,NULL);
 		else if (!strcmp(tmpstr_A, "kp_col"))
 		  _set_color_fg(kb,tmpstr_C,&kb->kp_gc,NULL);
-		else if (strcmp(tmpstr_A, "width") == 0) {
-			if (scr_mwidth) kb_width= min(scr_width * atoi(tmpstr_C) / scr_mwidth, kb_width);
-		} else if (strcmp(tmpstr_A, "height") == 0) {
-			if (scr_mheight) kb_height = min(scr_height * atoi(tmpstr_C) / scr_mheight, kb_height);
-		}
+		else if (strcmp(tmpstr_A, "width") == 0)
+			mwidth=atoi(tmpstr_C);
+		else if (strcmp(tmpstr_A, "height") == 0)
+			mheight=atoi(tmpstr_C);
 #ifdef SLIDES
 		else if (strcmp(tmpstr_A, "slide_margin") == 0)
 		     kb->slide_margin = atoi(tmpstr_C);
@@ -766,6 +792,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
       line_no++;
     }
 
+    fix_kb_size(&kb_width,&kb_height,mwidth,mheight);
 
   kb->key_delay_repeat1 = kb->key_delay_repeat;
   kb->key_repeat1 = kb->key_repeat;

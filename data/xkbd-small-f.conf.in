@@ -24,8 +24,8 @@ grey_col 0:31:31
 kp_col 0:31:31
 
 # max keyboard dimentions, mm
-#width  xxx
-#height xxx
+width  270
+height 120
 
 # button style, can be rounded ( default ), square or plain
 # button_style plain

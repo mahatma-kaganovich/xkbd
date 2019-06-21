@@ -480,8 +480,6 @@ re_crts:
 
       scr_width=X2-X1+1;
       scr_height=Y2-Y1+1;
-      width=scr_width;
-      height=scr_height/4;
       if (geometry) {
         // default = +0-0 = xH+0-0 = WxH+0-0 (sometimes +0+0)
 	int flags = XParseGeometry(geometry, &x, &y, &width, &height);
@@ -494,9 +492,12 @@ re_crts:
       if (!left) x += scr_width - width;
       if (!top) y += scr_height - height;
 
-      win = XCreateSimpleWindow(display, rootWin, x, y, width, height, 0,
-				BlackPixel(display, screen),
-				WhitePixel(display, screen));
+      // if unknown - try relevant temporary size = 500x200mm or 3x1
+      i=width?:height?min(height*3,width):scr_mwidth?500*scr_width/scr_mwidth:scr_width;
+      win = XCreateSimpleWindow(display, rootWin, x, y,
+	i, height?:scr_mheight?(200*scr_height/scr_mheight):(min(scr_height,i)/3),
+//	width?:scr_width, height?:scr_height,
+	0, BlackPixel(display, screen), WhitePixel(display, screen));
 
 
 
