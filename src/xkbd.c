@@ -491,7 +491,7 @@ re_crts:
       y += Y1;
       // if unknown - try relevant temporary size = 500x200mm or 3x1
       w=width?:height?min(height*3,scr_width):scr_mwidth?500*scr_width/scr_mwidth:scr_width;
-      h=height?:scr_mheight?(200*scr_height/scr_mheight):(min(scr_height,i)/3);
+      h=height?:scr_mheight?200*scr_height/scr_mheight:(min(scr_height,w)/3);
 //      w=width?:scr_width; h=height?:scr_height;
       if (!left) x += scr_width - w;
       if (!top) y += scr_height - h;
