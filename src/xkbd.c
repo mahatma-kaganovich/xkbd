@@ -262,7 +262,7 @@ int main(int argc, char **argv)
    XEvent ev;
    int xkbEventType = 0;
 
-   int i,j;
+   int i,j,w,h;
    char *s;
    char userconffile[256];
    FILE *fp;
@@ -490,14 +490,13 @@ re_crts:
       x += X1;
       y += Y1;
       // if unknown - try relevant temporary size = 500x200mm or 3x1
-      i=width?:height?min(height*3,width):scr_mwidth?500*scr_width/scr_mwidth:scr_width;
-      j=height?:scr_mheight?(200*scr_height/scr_mheight):(min(scr_height,i)/3);
+      w=width?:height?min(height*3,width):scr_mwidth?500*scr_width/scr_mwidth:scr_width;
+      h=height?:scr_mheight?(200*scr_height/scr_mheight):(min(scr_height,i)/3);
 //      i=width?:scr_width; j=height?:scr_height;
-      if (!left) x += scr_width - i;
-      if (!top) y += scr_height - j;
+      if (!left) x += scr_width - w;
+      if (!top) y += scr_height - h;
 
-      win = XCreateSimpleWindow(display, rootWin, x, y,
-	i, j,
+      win = XCreateSimpleWindow(display, rootWin, x, y, w, h,
 	0, BlackPixel(display, screen), WhitePixel(display, screen));
 
 
@@ -538,8 +537,8 @@ re_crts:
       i=xkbd_get_width(kb);
       j=xkbd_get_height(kb);
       if (width != i || height != j) {
-	if (!left) x += width - i;
-	if (!top) y += height - j;
+	if (!left) x += w - i;
+	if (!top) y += h - j;
 	XMoveResizeWindow(display,win,x,y,i,j);
       }
 
