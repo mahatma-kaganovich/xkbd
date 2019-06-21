@@ -539,7 +539,7 @@ re_crts:
       if (width != i || height != j) {
 	if (!left) x += w - i;
 	if (!top) y += h - j;
-	XMoveResizeWindow(display,win,x,y,i,j);
+	XMoveResizeWindow(display,win,x,y,width=i,height=j);
       }
 
       size_hints.flags = PPosition | PSize | PMinSize;
