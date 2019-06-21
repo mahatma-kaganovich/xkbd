@@ -170,7 +170,7 @@ for conf in /etc/xkbd-config.conf @pkgdatadir@/xkbd-kp-f.conf; do
 	[ -e $conf ] && break
 done
 
-opt="-X -l -D 50 -k $conf -e $0 --nokill"
+opt="-X -l -D 178 -k $conf -e $0 --nokill"
 
 if _deflock lock; then
     [ -v xss ] && case "$xss" in

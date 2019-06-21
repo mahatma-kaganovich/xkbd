@@ -143,7 +143,7 @@ get_current_window_manager_name (void)
 }
 */
 
-void handle_sig(int sig)
+static void handle_sig(int sig)
 {
    XWindowAttributes attr;
    XGetWindowAttributes(display, win, &attr);
@@ -165,8 +165,12 @@ void restart(){
 //	exit(1);
 }
 
+static void _restart(int sig){
+	restart();
+}
+
 static int stopped = 0;
-void _reset(int sig){
+static void _reset(int sig){
 	if (!stopped) {
 		stopped = sig;
 		XkbLockModifiers(display,XkbUseCoreKbd,0xffff,0);
@@ -202,8 +206,8 @@ Options:\n\
   -s  strut\n\
   -D  Dock/options bitmask: 1=dock, 2=strut, 4=_NET_WM_WINDOW_TYPE_DOCK,\n\
       8=_NET_WM_WINDOW_TYPE_TOOLBAR, 16=_NET_WM_STATE_STICKY.\n\
-      32=resize (slock), 64=strut horizontal\n\
-      For OpenBox I use 50 = $[2+16+32].\n\
+      32=resize (slock), 64=strut horizontal, 128=_NET_WM_STATE_SKIP_TASKBAR\n\
+      For OpenBox I use 178 = $[2+16+32+128].\n\
   -X  Xkb state interaction\n\
   -l  disable modifiers lock\n\
   -v  version\n\
@@ -327,7 +331,7 @@ int main(int argc, char **argv)
 		res1->name = ""; // top priority
 		switch (res1->type) {
 		    case 0: 
-			*(char **)res1->ptr = argv[++i];
+			*(char **)res1->ptr = *argv[++i]?argv[i]:NULL;
 			break;
 		    case 1:
 			*(int *)res1->ptr = atoi(argv[++i]);
@@ -341,6 +345,7 @@ int main(int argc, char **argv)
       }
    }
 stop_argv:
+//   signal(SIGHUP, _restart); // only 1
 
    display = XOpenDisplay(display_name);
    if (!display) goto no_dpy;
@@ -353,7 +358,7 @@ stop_argv:
    int X1=wa0.x,Y1=wa0.y,X2=wa0.x+wa0.width-1,Y2=wa0.y+wa0.height-1;
    char *rs;
 
-   if ((rs = XResourceManagerString(display)) && (xrm = XrmGetStringDatabase(s))) {
+   if ((rs = XResourceManagerString(display)) && (xrm = XrmGetStringDatabase(rs))) {
     for (i=0; s=(res1=&resources[i])->name; i++) {
 	char *type = NULL;
 	XrmValue val;
@@ -363,9 +368,9 @@ stop_argv:
 	if (*s && XrmGetResource(xrm,s,NULL,&type,&val) && val.addr) {
 		switch (res1->type) {
 		case 0:
+			*(char **)(res1->ptr) = NULL;
 			n = strlen((char *)val.addr)+1;
-			memcpy(*(char **)(res1->ptr) = malloc(n), val.addr, n);
-			fprintf(stderr,"db=%s",(char*)val.addr);
+			if (n>1) memcpy(*(char **)(res1->ptr) = malloc(n), val.addr, n);
 			break;
 		case 1:
 		case 2:
@@ -568,13 +573,14 @@ re_crts:
 	_propAtom32("_NET_WM_WINDOW_TYPE","_NET_WM_WINDOW_TYPE_DOCK");
       if (dock & 8)
 	_propAtom32("_NET_WM_WINDOW_TYPE","_NET_WM_WINDOW_TYPE_TOOLBAR");
-      if (dock & 16) 
+      if (dock & 16)
 	_propAtom32("_NET_WM_STATE","_NET_WM_STATE_STICKY");
+      if (dock & 128)
+	_propAtom32("_NET_WM_STATE","_NET_WM_STATE_SKIP_TASKBAR");
 //      _propAtom32("_NET_WM_STATE","_NET_WM_STATE_ABOVE");
 //      _propAtom32("_NET_WM_STATE","_NET_WM_STATE_FOCUSED");
 //      Atom version = 4;
 //      _prop(32,"XdndAware",XA_ATOM,&version,1);
-
 
 
       XSelectInput(display, win,
