@@ -96,6 +96,7 @@ static int xerrh(Display *dsp, XErrorEvent *ev) {
 	return 0;
 }
 
+/*
 static unsigned char*
 get_current_window_manager_name (void)
 {
@@ -124,6 +125,7 @@ get_current_window_manager_name (void)
 			       &type, &format, &nitems,
 			       &bytes_after, (unsigned char **)&val);
 
+  XFree(xwindow); // ?
   if (result != Success)
     return NULL;
 
@@ -139,7 +141,7 @@ get_current_window_manager_name (void)
 
   return retval;
 }
-
+*/
 
 void handle_sig(int sig)
 {
@@ -347,10 +349,12 @@ stop_argv:
    scr_mwidth=DisplayWidthMM(display, screen);
    scr_mheight=DisplayHeightMM(display, screen);
    XGetWindowAttributes(display,rootWin,&wa0);
-   int X1=wa0.x,Y1=wa0.y,X2=wa0.x+wa0.width-1,Y2=wa0.y+wa0.height-1;
 
-   if ((s = XResourceManagerString(display)) && (xrm = XrmGetStringDatabase(s)))
-   for (i=0; s=(res1=&resources[i])->name; i++) {
+   int X1=wa0.x,Y1=wa0.y,X2=wa0.x+wa0.width-1,Y2=wa0.y+wa0.height-1;
+   char *rs;
+
+   if ((rs = XResourceManagerString(display)) && (xrm = XrmGetStringDatabase(s))) {
+    for (i=0; s=(res1=&resources[i])->name; i++) {
 	char *type = NULL;
 	XrmValue val;
 	int n;
@@ -361,6 +365,7 @@ stop_argv:
 		case 0:
 			n = strlen((char *)val.addr)+1;
 			memcpy(*(char **)(res1->ptr) = malloc(n), val.addr, n);
+			fprintf(stderr,"db=%s",(char*)val.addr);
 			break;
 		case 1:
 		case 2:
@@ -368,33 +373,58 @@ stop_argv:
 			break;
 		}
 	}
-   }
+    }
+    XrmDestroyDatabase(xrm);
+  }
+  XFree(rs);
 
 #ifdef USE_XR
-	int xrevent, xrerror, xrr, found=0;
+	// find actual output;
+	// if no geometry, try to avoid strut in the middle of overlapped outputs (-> top/left).
+	int xrevent, xrerror, xrr;
 	if ((xrr = XRRQueryExtension(display, &xrevent, &xrerror))) {
+		int found=0, repeat=0;
 		XRRScreenResources *xrrr = XRRGetScreenResources(display,rootWin);
+re_crts:
+		repeat++;
+		crts=0;
 		for (i = 0; i < xrrr->noutput; i++) {
 			XRROutputInfo *oinf = XRRGetOutputInfo(display, xrrr, xrrr->outputs[i]);
 			if (oinf && oinf->crtc && oinf->connection == RR_Connected) {
+				XRRCrtcInfo *cinf = XRRGetCrtcInfo (display, xrrr, oinf->crtc);
+				int x1=cinf->x;
+				int y1=cinf->y;
+				int x2=x1+cinf->width-1;
+				int y2=y1+cinf->height-1;
+				XRRFreeCrtcInfo(cinf);
 				crts++;
-				if(found || (output?
-				    strcmp(oinf->name,output):
-				    !strncasecmp(oinf->name,"HDMI",4))
+				if (found) {
+					if (geometry) continue;
+					if (dock & 2 && y2>Y2 && x2>X1 && x1<=X1) top=1;
+					else if (dock & 64 && x2>X2 && y2>Y1 && y1<=X1) left=1;
+					continue;
+				} else if (repeat==1 && (output?
+				    strcmp(oinf->name,output):(
+					!strncasecmp(oinf->name,"HDMI",4)||
+					!strncasecmp(oinf->name,"DP",2)||
+					!strncasecmp(oinf->name,"DVI",3)
+				    ))
 				    ) continue;
 				found++;
-				XRRCrtcInfo *cinf = XRRGetCrtcInfo (display, xrrr, oinf->crtc);
-				X1=max(X1,cinf->x);
-				Y1=max(Y1,cinf->y);
-				X2=min(X2,cinf->x+cinf->width-1);
-				Y2=min(Y2,cinf->y+cinf->height-1);
+				X1=max(X1,x1);
+				Y1=max(Y1,y1);
+				X2=min(X2,x2);
+				Y2=min(Y2,y2);
 				scr_mwidth=oinf->mm_width;
 				scr_mheight=oinf->mm_height;
-				XRRFreeCrtcInfo(cinf);
+				if (crts>1 && !geometry && dock & (64|2)) goto re_crts;
 			}
 			XRRFreeOutputInfo(oinf);
 		}
-		if (!found) fprintf(stderr,"Output '%s' not found, ignoring\n",output?:"!HDMI");
+		if (!found) {
+			if (output) fprintf(stderr,"Output '%s' not found, ignoring\n",output);
+			if(crts) goto re_crts;
+		}
 		XRRFreeScreenResources(xrrr);
 	}
 #endif
@@ -445,16 +475,10 @@ stop_argv:
 
       scr_width=X2-X1+1;
       scr_height=Y2-Y1+1;
-#ifdef USE_XR
-      if (found && crts>1) {
-		if (dock & 64 && X1==0 && scr_width<wa0.width) left=1;
-		if (dock & 2 && Y1==0 && scr_height<wa0.height) top=1;
-      }
-#endif
       width=scr_width;
       height=scr_height/4;
       if (geometry) {
-        // default = +0-0 = xH+0-0 = WxH+0-0
+        // default = +0-0 = xH+0-0 = WxH+0-0 (sometimes +0+0)
 	int flags = XParseGeometry(geometry, &x, &y, &width, &height);
 	left = !(flags & XNegative);
 	top = !(flags & YNegative);
@@ -573,8 +597,6 @@ stop_argv:
 	XMapWindow(display, win);
       }
       signal(SIGUSR1, handle_sig); /* for extenal mapping / unmapping */
-
-
 
 #ifdef USE_XR
       if (xrr) {
