@@ -225,8 +225,7 @@ int _button_get_txt_size(keyboard *kb, char *txt)
 
 int button_calc_c_width(button *b)
 {
-  if (b->pixmap != NULL || b->c_width )
-    return b->c_width; /* already calculated from image or width_param */
+  if (b->c_width ) return b->c_width; /* already calculated from image or width_param */
 
   b->c_width = max3(
 	_button_get_txt_size(b->kb, DEFAULT_TXT(b)),
@@ -239,8 +238,7 @@ int button_calc_c_width(button *b)
 int button_calc_c_height(button *b)
 {
 
-  if (b->pixmap != NULL || b->c_height )
-    return b->c_height; /*already calculated from image or height param */
+  if (b->c_height) return b->c_height; /*already calculated from image or height param */
 
 #ifdef USE_XFT
   if (b->kb->render_type == xft)

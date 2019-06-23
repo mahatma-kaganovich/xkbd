@@ -153,8 +153,8 @@ typedef struct _keyboard
   box *vbox;  /* container */
   box *vvbox;  /* visible */
 
-  int x;      /* but vbox contains this ? */
-  int y;
+  long width, height; // mm|relative
+
   Window win;
   Display *display;
   Pixmap backing;
@@ -189,6 +189,7 @@ typedef struct _keyboard
 #endif
 
   int def_width;
+  int def_height;
   int kp_width;
 
 } keyboard;
