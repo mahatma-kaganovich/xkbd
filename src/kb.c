@@ -751,6 +751,7 @@ void kb_size(keyboard *kb) {
 	button *b;
 	int i;
 	box *vbox, *bx;
+	int wysiwig;
 
 	// [virtual] kb size based on buttons
 	w=0; h=0;
@@ -776,6 +777,7 @@ void kb_size(keyboard *kb) {
 	}
 	if (!kb->width) kb->width=w;
 	if (!kb->height) kb->height=h;
+	wysiwig = kb->width==w && kb->height==h;
 
 	// actual kb size, based on virtual size & screen size & DPI
 	if (!kb->vbox->act_height || !kb->vbox->act_width) {
@@ -934,13 +936,13 @@ void kb_size(keyboard *kb) {
 				but_total_width = b->c_width+(2*b->b_size);
 				b->x_pad = ldiv((unsigned long) but_total_width * kb->vbox->act_width,bx->min_width).quot;
 				b->x_pad -= but_total_width;
-				b->act_width = b->c_width + b->x_pad + b->b_size*2;
-//				b->act_width = b->c_width?ldiv(b->c_width*w,mw).quot:b->x_pad + b->b_size*2;
+//				b->act_width = b->c_width + b->x_pad + b->b_size*2;
+				b->act_width = wysiwig?ldiv(b->c_width*w,mw).quot:b->x_pad + b->b_size*2;
 				cx += b->act_width;
 				b->y = 0;
 				b->y_pad = y_pad - b->c_height - b->b_size*2;
-				b->act_height = y_pad;
-//				b->act_height = b->c_height?ldiv(b->c_height*h,mh).quot:y_pad;
+//				b->act_height = y_pad;
+				b->act_height = wysiwig?ldiv(b->c_height*h,mh).quot:y_pad;
 				/*  hack for using all screen space */
 				if (listp->next == NULL) b->act_height--;
 			}
