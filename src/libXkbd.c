@@ -37,11 +37,12 @@ xkbd_realize(Display *display,
 void
 xkbd_resize(Xkbd *xkbd, int width, int height)
 {
-   xkbd->kb->vbox->act_width = width;
-   xkbd->kb->vbox->act_height = height;
-   kb_size(xkbd->kb);
-   kb_render(xkbd->kb);
-   kb_paint(xkbd->kb);
+	if (xkbd->kb->vbox->act_width == width && xkbd->kb->vbox->act_height == height) return;
+	xkbd->kb->vbox->act_width = width;
+	xkbd->kb->vbox->act_height = height;
+	kb_size(xkbd->kb);
+	kb_render(xkbd->kb);
+	kb_paint(xkbd->kb);
 }
 
 void
