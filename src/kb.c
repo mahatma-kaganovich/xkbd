@@ -182,9 +182,10 @@ found:
                 }
 	}
 
-	b->c_height = b->kb->def_height;
+	if(!b->height) b->height = b->kb->def_height;
+	if(!b->width) b->width = b->kb->def_width;
 
-	int w = b->kb->def_width;
+	int w = 0;
 	if (b->ks[0]>=0xff80 && b->ks[0]<=0xffb9) {
 		// KP_
 //		for(l=0;l<LEVELS;l++) b->mods[l]&=~(STATE(KBIT_ALT)|STATE(KBIT_MOD));
@@ -193,7 +194,7 @@ found:
 	} else if ( b->bg_gc == b->kb->rev_gc && (b->modifier || !b->ks[0] || !is_sym))
 		b->bg_gc = b->kb->grey_gc;
 	if (w && !(b->flags & STATE(OBIT_WIDTH_SPEC))) {
-		b->c_width = w;
+		b->vwidth = w;
 		b->flags |= STATE(OBIT_WIDTH_SPEC);
 	}
 #if 0
@@ -697,19 +698,23 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		  button_set_slide_ks(tmp_but, tmpstr_C, LEFT);
 		else if (strcmp(tmpstr_A, "slide_right_ks") == 0)
 		  button_set_slide_ks(tmp_but, tmpstr_C, RIGHT);
-		else if (strcmp(tmpstr_A, "width") == 0)
+		else if (strcmp(tmpstr_A, "vwidth") == 0)
 		{
 		    tmp_but->flags |= STATE(OBIT_WIDTH_SPEC);
-		    tmp_but->c_width = atoi(tmpstr_C);
+		    tmp_but->vwidth = atoi(tmpstr_C);
 		}
+		else if (strcmp(tmpstr_A, "width") == 0)
+			tmp_but->width = atoi(tmpstr_C);
 		else if (strcmp(tmpstr_A, "key_span_width") == 0)
 		{
 		   tmp_but->flags |= STATE(OBIT_WIDTH_SPEC);
 		   tmp_but->key_span_width = atoi(tmpstr_C);
 		}
 
+		else if (strcmp(tmpstr_A, "vheight") == 0)
+		  tmp_but->vheight = atoi(tmpstr_C);
 		else if (strcmp(tmpstr_A, "height") == 0)
-		  tmp_but->c_height = atoi(tmpstr_C);
+		  tmp_but->height = atoi(tmpstr_C);
                 else if (strcmp(tmpstr_A, "obey_capslock") == 0)
 		{
 		  if (strcmp(tmpstr_C, "yes") == 0)
@@ -765,10 +770,11 @@ void kb_size(keyboard *kb) {
 			bx->x=0; bx->y=h1;
 			for(ip=bx->root_kid; ip; ip= ip->next) {
 				b = (button *)ip->data;
-				w2+=b->c_width+b->b_size*2;
-				h2=max(h2,b->c_height+b->b_size*2);
+				w2+=b->width+b->b_size*2;
+				h2=max(h2,b->height+b->b_size*2);
 			}
-			bx->act_width=w2; bx->act_height=h2-h1;
+			bx->width=bx->act_width=w2;
+			bx->height=bx->act_height=h2;
 			h1+=h2;
 			w1=max(w1,w2);
 		}
@@ -843,17 +849,17 @@ void kb_size(keyboard *kb) {
 			fixY(bx->act_height);
 			for(ip=((box *)listp->data)->root_kid; ip; ip= ip->next) {
 				b = (button *)ip->data;
-				button_calc_c_width(b);
-				button_calc_c_height(b);
+				button_calc_vwidth(b);
+				button_calc_vheight(b);
 				if (!(b->flags & STATE(OBIT_WIDTH_SPEC))) {
 					if ( ( DEFAULT_TXT(b) == NULL || (strlen(DEFAULT_TXT(b)) == 1))
 						&& (SHIFT_TXT(b) == NULL || (strlen(SHIFT_TXT(b)) == 1))
 						&& (MOD_TXT(b) == NULL || (strlen(MOD_TXT(b)) == 1))
 						&& b->pixmap == NULL) {
-							if (b->c_width > max_single_char_width)
-								max_single_char_width = b->c_width;
-	    						if (b->c_height > max_single_char_height)
-								max_single_char_height = b->c_height;
+							if (b->vwidth > max_single_char_width)
+								max_single_char_width = b->vwidth;
+	    						if (b->vheight > max_single_char_height)
+								max_single_char_height = b->vheight;
 					} 
 				}
 			}
@@ -901,14 +907,14 @@ void kb_size(keyboard *kb) {
 						    && (SHIFT_TXT(b) == NULL || (strlen(SHIFT_TXT(b)) == 1))
 						    && (MOD_TXT(b) == NULL || (strlen(MOD_TXT(b)) == 1))
 						    && b->pixmap == NULL ) {
-							b->c_width = max_single_char_width;
-							b->c_height = max_single_char_height;
-							if (b->key_span_width) b->c_width = b->key_span_width * max_single_char_width;
+							b->vwidth = max_single_char_width;
+							b->vheight = max_single_char_height;
+							if (b->key_span_width) b->vwidth = b->key_span_width * max_single_char_width;
 						}
 					}
 
-					tmp_width += b->c_width + b->b_size*2;
-					tmp_height = b->c_height + b->b_size*2;
+					tmp_width += b->vwidth + b->b_size*2;
+					tmp_height = b->vheight + b->b_size*2;
 					if (tmp_height >= max_height) max_height = tmp_height;
 				}
 				if (tmp_width > max_width) max_width = tmp_width;
@@ -933,16 +939,15 @@ void kb_size(keyboard *kb) {
 				int but_total_width;
 				b = (button *)ip->data;
 				b->x = cx; /*remember relative to holding box ! */
-				but_total_width = b->c_width+(2*b->b_size);
+				but_total_width = b->vwidth+(2*b->b_size);
 				b->x_pad = ldiv((unsigned long) but_total_width * kb->vbox->act_width,bx->min_width).quot;
 				b->x_pad -= but_total_width;
-//				b->act_width = b->c_width + b->x_pad + b->b_size*2;
-				b->act_width = wysiwig?ldiv(b->c_width*w,mw).quot:b->c_width + b->x_pad + b->b_size*2;
+				b->act_width=bx->width?ldiv((unsigned long)b->width*kb->vbox->act_width,bx->width).quot:b->vwidth + b->x_pad + b->b_size*2;
 				cx += b->act_width;
 				b->y = 0;
-				b->y_pad = y_pad - b->c_height - b->b_size*2;
-//				b->act_height = y_pad;
-				b->act_height = wysiwig?ldiv(b->c_height*h,mh).quot:y_pad;
+				b->y_pad = y_pad - b->vheight - b->b_size*2;
+				b->act_height = y_pad;
+//				b->act_height = bx->height?ldiv(b->height*kb->vbox->act_height,bx->height).quot:y_pad;
 				/*  hack for using all screen space */
 				if (listp->next == NULL) b->act_height--;
 			}
@@ -963,8 +968,8 @@ void kb_size(keyboard *kb) {
 			for(ip=bx->root_kid; ip; ip= ip->next) {
 				b->x=x;
 				b->y=y;
-				b->act_width = b->c_width*w/mw;
-				b->act_height = b->c_height*h/mh;
+				b->act_width = b->width*w/mw;
+				b->act_height = b->height*h/mh;
 				x+=b->act_width;
 				fprintf(stderr,"%i ",x);
 			}

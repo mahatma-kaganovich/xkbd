@@ -126,8 +126,8 @@ void button_set_pixmap(button *b, char *filename)
 
   XSetClipMask(b->kb->display, b->mask_gc, *(b->mask));
 
-  b->c_width  = attrib.width;
-  b->c_height = attrib.height;
+  b->vwidth  = attrib.width;
+  b->vheight = attrib.height;
 }
 #endif
 
@@ -223,40 +223,40 @@ int _button_get_txt_size(keyboard *kb, char *txt)
 #endif
 }
 
-int button_calc_c_width(button *b)
+int button_calc_vwidth(button *b)
 {
-  if (b->c_width ) return b->c_width; /* already calculated from image or width_param */
+  if (b->vwidth ) return b->vwidth; /* already calculated from image or width_param */
 
-  b->c_width = max3(
+  b->vwidth = max3(
 	_button_get_txt_size(b->kb, DEFAULT_TXT(b)),
 	_button_get_txt_size(b->kb, SHIFT_TXT(b)),
 	_button_get_txt_size(b->kb, MOD_TXT(b))
 	);
-  return b->c_width;
+  return b->vwidth;
 }
 
-int button_calc_c_height(button *b)
+int button_calc_vheight(button *b)
 {
 
-  if (b->c_height) return b->c_height; /*already calculated from image or height param */
+  if (b->vheight) return b->vheight; /*already calculated from image or height param */
 
 #ifdef USE_XFT
   if (b->kb->render_type == xft)
     {
-      b->c_height =
+      b->vheight =
 	b->kb->xftfont->height;
     } else {
 #endif
-      b->c_height = b->kb->font_info->ascent + b->kb->font_info->descent;
+      b->vheight = b->kb->font_info->ascent + b->kb->font_info->descent;
 #ifdef USE_XFT
     }
 #endif
-  return b->c_height;
+  return b->vheight;
 }
 
-int button_get_c_height(button *b)
+int button_get_vheight(button *b)
 {
-   return b->c_height;
+   return b->vheight;
 }
 
 int button_set_b_size(button *b, int size)
@@ -359,36 +359,36 @@ void button_render(button *b, int mode)
       XSetClipMask(b->kb->display, b->mask_gc,*(b->mask));
 
       gc_vals.clip_x_origin = x+(b->x_pad/2)+b->b_size;
-      gc_vals.clip_y_origin = y+b->c_height+(b->y_pad/2) +
-	                              b->b_size-b->c_height +2;
+      gc_vals.clip_y_origin = y+b->vheight+(b->y_pad/2) +
+	                              b->b_size-b->vheight +2;
       valuemask =  GCClipXOrigin | GCClipYOrigin ;
       XChangeGC(b->kb->display, b->mask_gc, valuemask, &gc_vals);
 
       XCopyArea(b->kb->display, *(b->pixmap), b->kb->backing, b->mask_gc,
-		0, 0, b->c_width,
-		b->c_height, x+(b->x_pad/2)+b->b_size,
-		y +b->c_height+(b->y_pad/2) -b->c_height + b->b_size+2
+		0, 0, b->vwidth,
+		b->vheight, x+(b->x_pad/2)+b->b_size,
+		y +b->vheight+(b->y_pad/2) -b->vheight + b->b_size+2
       );
       return; /* imgs cannot have text aswell ! */
     }
   if (txt != NULL)
     {
        int xspace;
-       //if (b->c_width > _button_get_txt_size(b->kb,txt))
+       //if (b->vwidth > _button_get_txt_size(b->kb,txt))
        xspace = x+((b->act_width - _button_get_txt_size(b->kb,txt))/2);
 	  //else
-	  //xspace = x+((b->c_width)/2);
+	  //xspace = x+((b->vwidth)/2);
 	  //xspace = x+(b->x_pad/2)+b->b_size;
 #ifdef USE_XFT
     if (b->kb->render_type == xft)
       {
-	int y_offset = ((b->c_height + b->y_pad) - b->kb->xftfont->height)/2;
+	int y_offset = ((b->vheight + b->y_pad) - b->kb->xftfont->height)/2;
 	 XftDrawStringUtf8(b->kb->xftdraw, &tmp_col, b->kb->xftfont,
 			/*x+(b->x_pad/2)+b->b_size, */
 			xspace,
-			/* y + b->c_height + b->b_size + (b->y_pad/2) - 4 */
+			/* y + b->vheight + b->b_size + (b->y_pad/2) - 4 */
 			y + y_offset + b->kb->xftfont->ascent ,
-		       /* y+b->c_height+(b->y_pad/2)-b->b_size, */
+		       /* y+b->vheight+(b->y_pad/2)-b->b_size, */
 		       (unsigned char *) txt, strlen(txt));
       }
     else
@@ -398,7 +398,7 @@ void button_render(button *b, int mode)
 		    b->kb->display, b->kb->backing, gc_txt,
 		    /*x+(b->x_pad/2)+b->b_size,*/
 		    xspace,
-		    y+b->c_height+(b->y_pad/2)+b->b_size
+		    y+b->vheight+(b->y_pad/2)+b->b_size
 		    -4,
 		    txt, strlen(txt)
 		    );

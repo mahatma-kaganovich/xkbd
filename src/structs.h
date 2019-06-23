@@ -133,12 +133,14 @@ typedef struct _box
   enum { vbox, hbox } type;
   list *root_kid;
   list *tail_kid;
-  int min_width;        /* ( num_kids*(kid_c_width+(kid_border*2) ) */
+  int min_width;        /* ( num_kids*(kid_vwidth+(kid_border*2) ) */
   int min_height;
   int act_width;        /* actual calculated width */
-  int act_height;       /* ( num_kids*(kid_c_width+padding+(kid_border*2) ) */
+  int act_height;       /* ( num_kids*(kid_vwidth+padding+(kid_border*2) ) */
   int x;                /* relative to parent ? */
   int y;
+  int width;        // relative/mm
+  int height;
 
   struct _box *parent;  /* pointer to parent keyboard */
 
@@ -198,6 +200,7 @@ typedef struct _button
 {
   int x;             /* actual co-ords relative to window */
   int y;
+  int width, height; // relative or mm
 
   KeyCode kc[LEVELS];
   unsigned int mods[LEVELS];
@@ -236,12 +239,12 @@ typedef struct _button
 
   unsigned int flags; /* bit-field of OPT_* */
 
-  int c_width;  /* width  of contents ( min width ) */
-  int c_height; /* height of contents ( min height ) */
+  int vwidth;  /* width  of contents ( min width ) */
+  int vheight; /* height of contents ( min height ) */
   int x_pad;    /* total padding horiz */
   int y_pad;    /* total padding vert  */
   int b_size;   /* size of border in pixels */
-                /* eg. total width = c_width+pad_x+(2*b_size) */
+                /* eg. total width = vwidth+pad_x+(2*b_size) */
 
    int key_span_width; /* width in number of keys spanned */
 
