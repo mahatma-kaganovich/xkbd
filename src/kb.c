@@ -768,7 +768,7 @@ void kb_size(keyboard *kb) {
 				w2+=b->c_width+b->b_size*2;
 				h2=max(h2,b->c_height+b->b_size*2);
 			}
-			bx->act_width=w1; bx->act_height=h2-h1;
+			bx->act_width=w2; bx->act_height=h2-h1;
 			h1+=h2;
 			w1=max(w1,w2);
 		}
