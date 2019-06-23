@@ -934,14 +934,13 @@ void kb_size(keyboard *kb) {
 				but_total_width = b->c_width+(2*b->b_size);
 				b->x_pad = ldiv((unsigned long) but_total_width * kb->vbox->act_width,bx->min_width).quot;
 				b->x_pad -= but_total_width;
-//				b->act_width = b->c_width + b->x_pad + b->b_size*2;
-				b->act_width = b->c_width?ldiv(b->c_width*w,mw).quot:b->x_pad + b->b_size*2;
-//				fprintf(stderr,"%i/%i/%i ",b->c_width,b->act_width,b->c_width*w/mw);
+				b->act_width = b->c_width + b->x_pad + b->b_size*2;
+//				b->act_width = b->c_width?ldiv(b->c_width*w,mw).quot:b->x_pad + b->b_size*2;
 				cx += b->act_width;
 				b->y = 0;
 				b->y_pad = y_pad - b->c_height - b->b_size*2;
-				//b->act_height = y_pad;
-				b->act_height = b->c_height?ldiv(b->c_height*h,mh).quot:y_pad;
+				b->act_height = y_pad;
+//				b->act_height = b->c_height?ldiv(b->c_height*h,mh).quot:y_pad;
 				/*  hack for using all screen space */
 				if (listp->next == NULL) b->act_height--;
 			}
