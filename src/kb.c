@@ -937,7 +937,7 @@ void kb_size(keyboard *kb) {
 				b->x_pad = ldiv((unsigned long) but_total_width * kb->vbox->act_width,bx->min_width).quot;
 				b->x_pad -= but_total_width;
 //				b->act_width = b->c_width + b->x_pad + b->b_size*2;
-				b->act_width = wysiwig?ldiv(b->c_width*w,mw).quot:b->x_pad + b->b_size*2;
+				b->act_width = wysiwig?ldiv(b->c_width*w,mw).quot:b->c_width + b->x_pad + b->b_size*2;
 				cx += b->act_width;
 				b->y = 0;
 				b->y_pad = y_pad - b->c_height - b->b_size*2;
