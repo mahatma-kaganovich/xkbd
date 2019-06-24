@@ -749,7 +749,6 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 static char fname[32] = "";
 
 void kb_size(keyboard *kb) {
-	float d;
 	long w,h,mw,mh;
 	list *listp, *ip;
 	button *b;
@@ -798,24 +797,28 @@ void kb_size(keyboard *kb) {
 
 	// actual kb size, based on virtual size & screen size & DPI
 	if (!kb->vbox->act_height || !kb->vbox->act_width) {
-	    w = scr_mwidth?scr_width*kb->width/scr_mwidth:0;
-	    h = scr_mheight?scr_height*kb->height/scr_mheight:0;
-	    d=(w && h)?(w+0.)/h:3;
+	    w = scr_mwidth?ldiv(scr_width*kb->width,scr_mwidth).quot:0;
+	    h = scr_mheight?ldiv(scr_height*kb->height,scr_mheight).quot:0;
+	    unsigned long d1=w,d2=h;
+	    if (!w || !h) {
+		d1=1;
+		d2=3;
+	    }
 	    if (!kb->vbox->act_height && !kb->vbox->act_width) {
 		kb->vbox->act_width=scr_width;
-		kb->vbox->act_height=min(scr_height/d,scr_width/d);
+		kb->vbox->act_height=ldiv(min(scr_height,scr_width)*d2,d1).quot;
 		if (w && w<kb->vbox->act_width) kb->vbox->act_width=w;
 		if (h && h<kb->vbox->act_height) kb->vbox->act_height=h;
 	    } else if (!kb->vbox->act_height) {
-		kb->vbox->act_height=min(scr_height/d,kb->vbox->act_width/d);
+		kb->vbox->act_height=ldiv(min(scr_height,kb->vbox->act_width*d2),d1).quot;
 		if (!h){
 		} else if (!w) kb->vbox->act_height=h;
-		else kb->vbox->act_height=min(kb->vbox->act_height,h*kb->vbox->act_width/w);
+		else kb->vbox->act_height=min(kb->vbox->act_height,ldiv(h*kb->vbox->act_width,w).quot);
 	    } else if (!kb->vbox->act_width) {
-		kb->vbox->act_width=min(scr_width,kb->vbox->act_height*d);
+		kb->vbox->act_width=min(scr_width,ldiv(kb->vbox->act_height*d1,d2).quot);
 		if (!w){
 		} else if (!h) kb->vbox->act_width=w;
-		else kb->vbox->act_width=min(kb->vbox->act_width,w*kb->vbox->act_height/h);
+		else kb->vbox->act_width=min(kb->vbox->act_width,ldiv(w*kb->vbox->act_height,h).quot);
 	    }
 	}
 
