@@ -1525,6 +1525,7 @@ button * kb_find_button(keyboard *kb, int x, int y)
 
 void kb_destroy(keyboard *kb)
 {
+  if (kb->backing != None) XFreePixmap(kb->display, kb->backing);
   XFreeGC(kb->display, kb->gc);
   /* -- to do -- somwthing like this
   while (listp != NULL)
