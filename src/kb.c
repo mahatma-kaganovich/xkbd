@@ -182,9 +182,6 @@ found:
                 }
 	}
 
-	if(!b->height) b->height = b->kb->def_height;
-	if(!b->width) b->width = b->kb->def_width;
-
 	int w = 0;
 	if (b->ks[0]>=0xff80 && b->ks[0]<=0xffb9) {
 		// KP_
@@ -193,10 +190,10 @@ found:
 		if (b->kb->kp_width) w = b->kb->kp_width;
 	} else if ( b->bg_gc == b->kb->rev_gc && (b->modifier || !b->ks[0] || !is_sym))
 		b->bg_gc = b->kb->grey_gc;
-	if (w && !(b->flags & STATE(OBIT_WIDTH_SPEC))) {
-		b->vwidth = w;
-		b->flags |= STATE(OBIT_WIDTH_SPEC);
-	}
+
+	if(!b->width) b->width = w?:b->kb->def_width;
+	if(!b->height) b->height = b->kb->def_height;
+
 #if 0
 	unsigned int i ,j, p;
 	n = maxkc-minkc+1;
@@ -486,7 +483,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
   kb->total_layouts = 0;
 
 
-  kb->backing = 0;
+  kb->backing = None;
 
   kb_load_keymap(display);
 
@@ -773,8 +770,8 @@ void kb_size(keyboard *kb) {
 				w2+=b->width+b->b_size*2;
 				h2=max(h2,b->height+b->b_size*2);
 			}
-			bx->width=bx->act_width=w2;
-			bx->height=bx->act_height=h2;
+			bx->width = w2;
+			bx->height = h2;
 			h1+=h2;
 			w1=max(w1,w2);
 		}
@@ -812,8 +809,6 @@ void kb_size(keyboard *kb) {
 	h = kb->vbox->act_height;
 	mw = kb->width?:w;
 	mh = kb->height?:h;
-#define fixX(x) x=ldiv(x*w,mw).quot
-#define fixY(y) y=ldiv(y*h,mh).quot
 
 	if (!loaded_font) {
 #ifdef USE_XFT
@@ -843,10 +838,8 @@ void kb_size(keyboard *kb) {
 		kb->vbox = kb->kbd_layouts[i];
 		for (listp = kb->vbox->root_kid; listp; listp = listp->next) {
 			bx=(box *)listp->data;
-			fixX(bx->x);
-			fixX(bx->act_width);
-			fixY(bx->y);
-			fixY(bx->act_height);
+			bx->x=ldiv(bx->x*w,mw).quot;
+			bx->y=ldiv(bx->y*h,mh).quot;
 			for(ip=((box *)listp->data)->root_kid; ip; ip= ip->next) {
 				b = (button *)ip->data;
 				button_calc_vwidth(b);
@@ -858,10 +851,9 @@ void kb_size(keyboard *kb) {
 						&& b->pixmap == NULL) {
 							if (b->vwidth > max_single_char_width)
 								max_single_char_width = b->vwidth;
-	    						if (b->vheight > max_single_char_height)
-								max_single_char_height = b->vheight;
 					} 
 				}
+				if (b->vheight > max_single_char_height) max_single_char_height = b->vheight;
 			}
 		}
 	}
@@ -870,9 +862,8 @@ void kb_size(keyboard *kb) {
 	if (kb->backing != None) XFreePixmap(kb->display, kb->backing);
 
 	kb->backing = XCreatePixmap(kb->display, kb->win,
-			       kb->vbox->act_width, kb->vbox->act_height,
-			       DefaultDepth(kb->display,
-		                            DefaultScreen(kb->display)) );
+		kb->vbox->act_width, kb->vbox->act_height,
+		DefaultDepth(kb->display, DefaultScreen(kb->display)) );
 
 	XFillRectangle(kb->display, kb->backing,
 		  kb->rev_gc, 0, 0,
