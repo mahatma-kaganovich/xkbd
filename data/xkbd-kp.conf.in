@@ -348,8 +348,8 @@ kp_width 6
 	<key>
 		default Super
 		default_ks Super_R
-		default Hyper
-		default_ks Hyper_R
+		shift Hyper
+		shift_ks Hyper_R
 	</key>
 	<key>
 		default Menu
