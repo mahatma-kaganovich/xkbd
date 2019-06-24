@@ -801,16 +801,17 @@ void kb_size(keyboard *kb) {
 	    h = scr_mheight?ldiv(scr_height*kb->height,scr_mheight).quot:0;
 	    unsigned long d1=w,d2=h;
 	    if (!w || !h) {
-		d1=1;
-		d2=3;
+		d1=3;
+		d2=1;
 	    }
+	    float d=(w && h)?(w+0.)/h:3;
 	    if (!kb->vbox->act_height && !kb->vbox->act_width) {
 		kb->vbox->act_width=scr_width;
 		kb->vbox->act_height=ldiv(min(scr_height,scr_width)*d2,d1).quot;
 		if (w && w<kb->vbox->act_width) kb->vbox->act_width=w;
 		if (h && h<kb->vbox->act_height) kb->vbox->act_height=h;
 	    } else if (!kb->vbox->act_height) {
-		kb->vbox->act_height=ldiv(min(scr_height,kb->vbox->act_width*d2),d1).quot;
+		kb->vbox->act_height=ldiv(min(scr_height,kb->vbox->act_width)*d2,d1).quot;
 		if (!h){
 		} else if (!w) kb->vbox->act_height=h;
 		else kb->vbox->act_height=min(kb->vbox->act_height,ldiv(h*kb->vbox->act_width,w).quot);
