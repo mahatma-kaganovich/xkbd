@@ -193,6 +193,8 @@ found:
 
 	if(!b->width) b->width = w?:b->kb->def_width;
 	if(!b->height) b->height = b->kb->def_height;
+	if(b->width==-1) b->width = 0;
+	if(b->height==-1) b->height = 0;
 
 #if 0
 	unsigned int i ,j, p;
@@ -753,22 +755,22 @@ void kb_size(keyboard *kb) {
 	button *b;
 	int i;
 	box *vbox, *bx;
-	int wysiwig;
 
 	// [virtual] kb size based on buttons
 	w=0; h=0;
 	for(i=0;i<kb->total_layouts;i++) {
-		vbox = kb->kbd_layouts[i];
 		int w1=0, h1=0;
-		for (listp = vbox->root_kid; listp; listp = listp->next) {
+		for (listp = kb->kbd_layouts[i]->root_kid; listp; listp = listp->next) {
 			int h2=0;
 			int w2=0;
 			bx=(box *)listp->data;
 			bx->x=0; bx->y=h1;
+			bx->undef=0;
 			for(ip=bx->root_kid; ip; ip= ip->next) {
 				b = (button *)ip->data;
 				w2+=b->width+b->b_size*2;
 				h2=max(h2,b->height+b->b_size*2);
+				if (!b->width) bx->undef++;
 			}
 			bx->width = w2;
 			bx->height = h2;
@@ -780,7 +782,19 @@ void kb_size(keyboard *kb) {
 	}
 	if (!kb->width) kb->width=w;
 	if (!kb->height) kb->height=h;
-	wysiwig = kb->width==w && kb->height==h;
+
+	// recalc undef width
+	for(i=0;i<kb->total_layouts;i++) {
+		for (listp = kb->kbd_layouts[i]->root_kid; listp; listp = listp->next) {
+			bx=(box *)listp->data;
+			if (bx->undef) {
+				if (w>bx->width) {
+					bx->undef = (w-bx->width)/bx->undef;
+					bx->width = w;
+				} else bx->undef = 0;
+			}
+		}
+	}
 
 	// actual kb size, based on virtual size & screen size & DPI
 	if (!kb->vbox->act_height || !kb->vbox->act_width) {
@@ -842,6 +856,7 @@ void kb_size(keyboard *kb) {
 			bx->y=ldiv(bx->y*h,mh).quot;
 			for(ip=((box *)listp->data)->root_kid; ip; ip= ip->next) {
 				b = (button *)ip->data;
+				if (!b->width) b->width = bx->undef;
 				button_calc_vwidth(b);
 				button_calc_vheight(b);
 				if (!(b->flags & STATE(OBIT_WIDTH_SPEC))) {
