@@ -166,7 +166,7 @@ for i in "${@}"; do
 done
 
 [ -v conf ] ||
-for conf in {~/.config,/etc}/xkbd-config.conf @pkgdatadir@/xkbd-std-15x6.conf; do
+for conf in {~/.config,/etc}/xkbd{,-config}.conf @pkgdatadir@/xkbd-std-15x6.conf; do
 	[ -e $conf ] && break
 done
 
