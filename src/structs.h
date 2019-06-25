@@ -215,7 +215,7 @@ typedef struct _button
   KeySym ks[LEVELS];
 
 #define GET_TXT(b,i)	(b->txt[i])
-#define GET_TXT_SIZE(b,i)	(b->txt[i])
+#define GET_TXT_SIZE(b,i)	(b->txt_size[i])
 #define GET_KS(b,i)	(b->ks[i])
 #define SET_KS(b,i,k)	{ b->ks[i] = k; }
 
