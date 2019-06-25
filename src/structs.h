@@ -211,13 +211,16 @@ typedef struct _button
 #endif
 
   char *txt[STD_LEVELS];
+  int txt_size[STD_LEVELS];
   KeySym ks[LEVELS];
 
 #define GET_TXT(b,i)	(b->txt[i])
+#define GET_TXT_SIZE(b,i)	(b->txt[i])
 #define GET_KS(b,i)	(b->ks[i])
 #define SET_KS(b,i,k)	{ b->ks[i] = k; }
 
 #define DEFAULT_TXT(b) GET_TXT(b,0)
+#define DEFAULT_TXT_SIZE(b) GET_TXT_SIZE(b,0)
 #define SHIFT_TXT(b) GET_TXT(b,1)
 #define MOD_TXT(b) GET_TXT(b,2)
 #define SHIFT_MOD_TXT(b) GET_TXT(b,3)
@@ -271,7 +274,7 @@ typedef struct _button
   GC mask_gc;
 
 }
-//    __attribute__ ((__packed__)) 
+//    __attribute__ ((__packed__))
     button;
 
 

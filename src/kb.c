@@ -363,6 +363,7 @@ box *clone_box(Display *dpy, box *vbox, int group){
 		for (ip = ((box *)listp->data)->root_kid; ip; ip = ip->next) {
 			memcpy(b=malloc(sizeof(button)),ip->data,sizeof(button));
 			box_add_button(bx1,b);
+			memset(&b->txt_size,0,sizeof(b->txt_size));
 			// new layout
 			// in first look same code must be used to reconfigure 1 layout,
 			// but no way to verify levels still equal in other definition.
@@ -749,7 +750,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 static char fname[32] = "";
 
 void kb_size(keyboard *kb) {
-	long w,h,mw,mh;
+	long w,h,mw,mh,w1,w2,h1,h2;
 	list *listp, *ip;
 	button *b;
 	int i;
@@ -758,10 +759,9 @@ void kb_size(keyboard *kb) {
 	// [virtual] kb size based on buttons
 	w=0; h=0;
 	for(i=0;i<kb->total_layouts;i++) {
-		int w1=0, h1=0;
+		h1=0;
 		for (listp = kb->kbd_layouts[i]->root_kid; listp; listp = listp->next) {
-			int h2=0;
-			int w2=0;
+			w2=0; h2=0;
 			bx=(box *)listp->data;
 			bx->x=0; bx->y=h1;
 			bx->undef=0;
@@ -774,59 +774,45 @@ void kb_size(keyboard *kb) {
 			bx->width = w2;
 			bx->height = h2;
 			h1+=h2;
-			w1=max(w1,w2);
+			w=max(w,w2);
 		}
-		w=max(w,w1);
 		h=max(h,h1);
 	}
 	if (!kb->width) kb->width=w;
 	if (!kb->height) kb->height=h;
 
-	// recalc undef width
-	for(i=0;i<kb->total_layouts;i++) {
-		for (listp = kb->kbd_layouts[i]->root_kid; listp; listp = listp->next) {
-			bx=(box *)listp->data;
-			if (bx->undef) {
-				if (w>bx->width) {
-					bx->undef = (w-bx->width)/bx->undef;
-					bx->width = w;
-				} else bx->undef = 0;
-			}
-		}
-	}
-
 	// actual kb size, based on virtual size & screen size & DPI
 	if (!kb->vbox->act_height || !kb->vbox->act_width) {
-	    w = scr_mwidth?ldiv(scr_width*kb->width,scr_mwidth).quot:0;
-	    h = scr_mheight?ldiv(scr_height*kb->height,scr_mheight).quot:0;
-	    unsigned long d1=w,d2=h;
-	    if (!w || !h) {
+	    w2 = scr_mwidth?ldiv(scr_width*kb->width,scr_mwidth).quot:0;
+	    h2 = scr_mheight?ldiv(scr_height*kb->height,scr_mheight).quot:0;
+	    unsigned long d1=w2,d2=h2;
+	    if (!w2 || !h2) {
 		d1=3;
 		d2=1;
 	    }
-	    float d=(w && h)?(w+0.)/h:3;
+	    float d=(w2 && h2)?(w2+0.)/h2:3;
 	    if (!kb->vbox->act_height && !kb->vbox->act_width) {
 		kb->vbox->act_width=scr_width;
 		kb->vbox->act_height=ldiv(min(scr_height,scr_width)*d2,d1).quot;
-		if (w && w<kb->vbox->act_width) kb->vbox->act_width=w;
-		if (h && h<kb->vbox->act_height) kb->vbox->act_height=h;
+		if (w2 && w2<kb->vbox->act_width) kb->vbox->act_width=w2;
+		if (h2 && h2<kb->vbox->act_height) kb->vbox->act_height=h2;
 	    } else if (!kb->vbox->act_height) {
 		kb->vbox->act_height=ldiv(min(scr_height,kb->vbox->act_width)*d2,d1).quot;
-		if (!h){
-		} else if (!w) kb->vbox->act_height=h;
-		else kb->vbox->act_height=min(kb->vbox->act_height,ldiv(h*kb->vbox->act_width,w).quot);
+		if (!h2){
+		} else if (!w2) kb->vbox->act_height=h2;
+		else kb->vbox->act_height=min(kb->vbox->act_height,ldiv(h2*kb->vbox->act_width,w2).quot);
 	    } else if (!kb->vbox->act_width) {
 		kb->vbox->act_width=min(scr_width,ldiv(kb->vbox->act_height*d1,d2).quot);
-		if (!w){
-		} else if (!h) kb->vbox->act_width=w;
-		else kb->vbox->act_width=min(kb->vbox->act_width,ldiv(w*kb->vbox->act_height,h).quot);
+		if (!w2){
+		} else if (!h2) kb->vbox->act_width=w2;
+		else kb->vbox->act_width=min(kb->vbox->act_width,ldiv(w2*kb->vbox->act_height,h2).quot);
 	    }
 	}
 
-	w = kb->vbox->act_width;
-	h = kb->vbox->act_height;
-	mw = kb->width?:w;
-	mh = kb->height?:h;
+	w1 = kb->vbox->act_width;
+	h1 = kb->vbox->act_height;
+	mw = kb->width?:w1;
+	mh = kb->height?:h1;
 
 	if (!loaded_font) {
 #ifdef USE_XFT
@@ -834,7 +820,7 @@ void kb_size(keyboard *kb) {
 		sprintf(fname,FNT,10);
 		_kb_load_font(kb, fname);
 		if (i!=10) {
-			sprintf(fname,FNT,div(w,_button_get_txt_size(kb,"ABCabc123+")).quot);
+			sprintf(fname,FNT,div(w1,_button_get_txt_size(kb,"ABCabc123+")).quot);
 			free(loaded_font);
 			loaded_font = NULL;
 			_kb_load_font(kb, fname);
@@ -856,11 +842,11 @@ void kb_size(keyboard *kb) {
 		kb->vbox = kb->kbd_layouts[i];
 		for (listp = kb->vbox->root_kid; listp; listp = listp->next) {
 			bx=(box *)listp->data;
-			bx->x=ldiv(bx->x*w,mw).quot;
-			bx->y=ldiv(bx->y*h,mh).quot;
+			bx->x=ldiv(bx->x*w1,mw).quot;
+			bx->y=ldiv(bx->y*h1,mh).quot;
 			for(ip=((box *)listp->data)->root_kid; ip; ip= ip->next) {
 				b = (button *)ip->data;
-				if (!b->width) b->width = bx->undef;
+				if (!b->width && bx->undef) bx->width += (b->width = div(w - bx->width, bx->undef--).quot);
 				button_calc_vwidth(b);
 				button_calc_vheight(b);
 				if (!(b->flags & STATE(OBIT_WIDTH_SPEC))) {
@@ -978,8 +964,8 @@ void kb_size(keyboard *kb) {
 			for(ip=bx->root_kid; ip; ip= ip->next) {
 				b->x=x;
 				b->y=y;
-				b->act_width = b->width*w/mw;
-				b->act_height = b->height*h/mh;
+				b->act_width = b->width*w1/mw;
+				b->act_height = b->height*h1/mh;
 				x+=b->act_width;
 				fprintf(stderr,"%i ",x);
 			}

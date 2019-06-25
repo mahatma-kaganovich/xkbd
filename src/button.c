@@ -223,15 +223,29 @@ int _button_get_txt_size(keyboard *kb, char *txt)
 #endif
 }
 
+int _but_size(button *b, int l){
+	int i,j,s;
+	if (!b->txt_size[l]) for (i=0; i<STD_LEVELS; i++) {
+		// set size=1 to empty as checked
+		b->txt_size[i]=s=_button_get_txt_size(b->kb, b->txt[i])?:1;
+		for (j=i+1; j<STD_LEVELS; j++) if (b->txt[i]==b->txt[j]) b->txt_size[j]=s;
+	}
+	return b->txt_size[l];
+}
+
 int button_calc_vwidth(button *b)
 {
   if (b->vwidth ) return b->vwidth; /* already calculated from image or width_param */
 
-  b->vwidth = max3(
-	_button_get_txt_size(b->kb, DEFAULT_TXT(b)),
-	_button_get_txt_size(b->kb, SHIFT_TXT(b)),
-	_button_get_txt_size(b->kb, MOD_TXT(b))
-	);
+//  b->vwidth = max3(
+//	_button_get_txt_size(b->kb, DEFAULT_TXT(b)),
+//	_button_get_txt_size(b->kb, SHIFT_TXT(b)),
+//	_button_get_txt_size(b->kb, MOD_TXT(b))
+//    );
+
+  int i, sz = 0;
+  for (i=0; i<STD_LEVELS; i++) if (b->txt) sz = max(sz,_but_size(b,i));
+  b->vwidth = sz;
   return b->vwidth;
 }
 
@@ -278,8 +292,9 @@ void button_render(button *b, int mode)
   XftColor tmp_col;
 #endif
 
-  int x,y;
+  int x,y,l;
   char *txt = NULL;
+  int size = 0;
 
   x = button_get_abs_x(b) - b->kb->vbox->x;
   y = button_get_abs_y(b) - b->kb->vbox->y;
@@ -321,7 +336,6 @@ void button_render(button *b, int mode)
   /* figure out what text to display
      via keyboard state              */
 
-  txt = GET_TXT(b,KBLEVEL(b))?:DEFAULT_TXT(b);
 
   if (!(DEFAULT_KS(b) || SHIFT_KS(b) || MOD_KS(b)) &&
       ( DEFAULT_TXT(b) == NULL && SHIFT_TXT(b) == NULL && MOD_TXT(b) == NULL)
@@ -371,11 +385,25 @@ void button_render(button *b, int mode)
       );
       return; /* imgs cannot have text aswell ! */
     }
+
+//  txt = GET_TXT(b,KBLEVEL(b))?:DEFAULT_TXT(b);
+  l = KBLEVEL(b);
+  txt = GET_TXT(b,l);
+  if (!txt) {
+	l = 0;
+	txt = DEFAULT_TXT(b);
+  }
+ 
   if (txt != NULL)
     {
        int xspace;
        //if (b->vwidth > _button_get_txt_size(b->kb,txt))
-       xspace = x+((b->act_width - _button_get_txt_size(b->kb,txt))/2);
+//       xspace = x+((b->act_width - _button_get_txt_size(b->kb,txt))/2);
+      size=_but_size(b,l);
+//      size=_button_get_txt_size(b->kb,txt);
+       xspace = x+((b->act_width - size)>>1);
+    
+//       xspace = x+((b->act_width - b->vwidth)/2);
 	  //else
 	  //xspace = x+((b->vwidth)/2);
 	  //xspace = x+(b->x_pad/2)+b->b_size;
