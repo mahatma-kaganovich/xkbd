@@ -844,8 +844,9 @@ void kb_size(keyboard *kb) {
 #define FNT "Monospace-%i"
 		sprintf(fname,FNT,10);
 		_kb_load_font(kb, fname);
+		i = ldiv(w1,_button_get_txt_size(kb,"ABCabc123+")).quot;
 		if (i!=10) {
-			sprintf(fname,FNT,div(w1,_button_get_txt_size(kb,"ABCabc123+")).quot);
+			sprintf(fname,FNT,i);
 			free(loaded_font);
 			loaded_font = NULL;
 			_kb_load_font(kb, fname);
