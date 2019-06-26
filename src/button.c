@@ -200,7 +200,7 @@ int _button_get_txt_size(keyboard *kb, char *txt)
   if (kb->render_type == xft)
     {
       XGlyphInfo       extents;
-      XftTextExtentsUtf8(kb->display, kb->xftfont,
+      XftTextExtentsUtf8(kb->display, strlen1utf8(txt)?kb->xftfont1:kb->xftfont,
 			 (unsigned char *) txt, strlen(txt),
 			 &extents);
       return extents.width;
@@ -446,7 +446,7 @@ void button_render(button *b, int mode)
     if (kb->render_type == xft)
       {
 	int y_offset = ((b->vheight + b->y_pad) - kb->xftfont->height)/2;
-	 XftDrawStringUtf8(kb->xftdraw, &tmp_col, kb->xftfont,
+	 XftDrawStringUtf8(kb->xftdraw, &tmp_col, strlen1utf8(txt)?kb->xftfont1:kb->xftfont,
 			/*x+(b->x_pad/2)+b->b_size, */
 			xspace,
 			/* y + b->vheight + b->b_size + (b->y_pad/2) - 4 */

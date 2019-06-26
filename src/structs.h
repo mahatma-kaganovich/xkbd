@@ -192,6 +192,7 @@ typedef struct _keyboard
 #ifdef USE_XFT
   XftDraw *xftdraw;   /* xft aa bits */
   XftFont *xftfont;
+  XftFont *xftfont1;
   XftColor color;
   XftColor color_rev;
 #endif
@@ -303,6 +304,11 @@ extern int cache_pix;
 static inline long min(long x,long y){ return x<y?x:y; }
 static inline long max(long x,long y){ return x>y?x:y; }
 
+static inline int strlen1utf8(char *s) {
+	int cnt=0;
+	while (*s && cnt<2) cnt += (*s++ & 0xC0) != 0x80;
+	return cnt==1;
+}
 
 #endif
 

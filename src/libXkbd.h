@@ -29,11 +29,11 @@ Xkbd* xkbd_realize(Display *display,
 		   Drawable dest,
 		   char *conf_file,
 		   char *font_name,
+		   char *font_name1,
 		   int x,
 		   int y,
 		   int width,
-		   int height,
-		   int flags);
+		   int height);
 void xkbd_resize(Xkbd *xkbd, int width, int height);
 void xkbd_move(Xkbd *kb, int x, int y);
 void xkbd_repaint(Xkbd *xkbd);

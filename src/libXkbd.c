@@ -5,18 +5,18 @@ xkbd_realize(Display *display,
 	     Drawable dest,
 	     char *conf_file,
 	     char *font_name,
+	     char *font_name1,
 	     int x,
 	     int y,
 	     int width,
-	     int height,
-	     int flags)
+	     int height)
 {
    XkbStateRec Xkb_state;
    Xkbd *xkbd = malloc(sizeof(Xkbd));
 
    xkbd->kb = kb_new(dest, display, x, y,
 		     width, height, conf_file,
-		     font_name, flags  );
+		     font_name, font_name1);
    xkbd->active_but = NULL;
 
     /* we can read current state or reset (& pass to event)

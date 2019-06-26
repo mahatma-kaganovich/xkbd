@@ -227,7 +227,7 @@ int main(int argc, char **argv)
    int crts=0;
    static char *conf_file = NULL;
    static char *font_name = NULL;
-   int cmd_xft_selected = 0; /* ugly ! */
+   static char *font_name1 = NULL;
    int embed = 0;
    static unsigned int dock = 0;
    XrmDatabase xrm;
@@ -252,6 +252,7 @@ int main(int argc, char **argv)
 	{ 'g', "xkbd.geometry", 0, &geometry, "(default -0-0, left/top +0+0)\n\
      ( NOTE: The above will overide the configs font )" },
 	{ 'f', "xkbd.font_name", 0, &font_name, "font" },
+	{ '1', "xkbd.font_name1", 0, &font_name1, "font for 1-char" },
 	{ 'k', "xkbd.conf_file", 0, &conf_file, "keyboard definition file\n\
                       other than" DEFAULTCONFIG },
 	{ 'D', "xkbd.dock", 1, &dock, "Dock/options bitmask: 1=dock, 2=strut, 4=_NET_WM_WINDOW_TYPE_DOCK,\n\
@@ -526,11 +527,8 @@ re_crts:
       _reset(0);
       signal(SIGTERM, _reset);
 
-#ifdef USE_XFT
-      cmd_xft_selected = font_name!=NULL;
-#endif
-      kb = xkbd_realize(display, win, conf_file, font_name, 0, 0,
-			width, height, cmd_xft_selected);
+      kb = xkbd_realize(display, win, conf_file, font_name, font_name1, 0, 0,
+			width, height);
       i=xkbd_get_width(kb);
       j=xkbd_get_height(kb);
       if (width != i || height != j) {

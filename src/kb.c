@@ -57,6 +57,7 @@ load_a_single_font(keyboard *kb, char *fontname )
 {
 #ifdef USE_XFT
   if (kb->xftfont) XftFontClose(kb->display, kb->xftfont);
+
   if ((kb->xftfont = XftFontOpenName(kb->display,
 				     DefaultScreen(kb->display),
 				     fontname)) != NULL)
@@ -78,6 +79,8 @@ void _kb_load_font(keyboard *kb, char *font)
 {
   const char delim[] = "|";
   char *token;
+
+
 
   if (loaded_font && strcmp(loaded_font,font)) return;
   loaded_font = strdup(font);
@@ -400,7 +403,7 @@ void _simple_GC(keyboard *kb, GC *gc, int rev) {
 
 keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		 int kb_width, int kb_height, char *conf_file,
-		 char *font_name, int font_is_xft)
+		 char *font_name, char *font_name1)
 {
   keyboard *kb = NULL;
 
@@ -449,10 +452,13 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 #else
   kb->render_type = oldskool;
 #endif
-  if (font_name != NULL) {
-	if (font_is_xft) kb->render_type = xft;
-	_kb_load_font(kb, font_name);
+  if (font_name1) {
+	_kb_load_font(kb, font_name1);
+	kb->xftfont1 = kb->xftfont;
+	kb->xftfont = NULL;
+	loaded_font = NULL;
   }
+  if (font_name) _kb_load_font(kb, font_name);
 
 #ifdef USE_XFT
 
@@ -858,6 +864,7 @@ void kb_size(keyboard *kb) {
 		free(loaded_font);
 		loaded_font = NULL;
 	}
+	if (!kb->xftfont1) kb->xftfont1 = kb->xftfont;
 
 	int cy = 0;
 	int max_single_char_width = 0;
@@ -876,9 +883,9 @@ void kb_size(keyboard *kb) {
 				button_calc_vwidth(b);
 				button_calc_vheight(b);
 				if (!(b->flags & STATE(OBIT_WIDTH_SPEC))) {
-					if ( ( DEFAULT_TXT(b) == NULL || (strlen(DEFAULT_TXT(b)) == 1))
-						&& (SHIFT_TXT(b) == NULL || (strlen(SHIFT_TXT(b)) == 1))
-						&& (MOD_TXT(b) == NULL || (strlen(MOD_TXT(b)) == 1))
+					if ( ( DEFAULT_TXT(b) == NULL || strlen1utf8(DEFAULT_TXT(b)))
+						&& (SHIFT_TXT(b) == NULL || strlen1utf8(SHIFT_TXT(b)))
+						&& (MOD_TXT(b) == NULL || strlen1utf8(MOD_TXT(b)))
 						&& b->pixmap == NULL) {
 							if (b->vwidth > max_single_char_width)
 								max_single_char_width = b->vwidth;
