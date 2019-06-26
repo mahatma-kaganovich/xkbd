@@ -86,6 +86,11 @@ inline unsigned int MODS(unsigned int l){
 
 // features
 
+// cache pixmaps increase render speed 5x and RAM +2.5k per layout
+// disabling cache runtime enough
+#define CACHE_SIZES
+#define CACHE_PIX
+
 #ifndef MINIMAL
 //#define SLIDES
 #define SIBLINGS
@@ -211,8 +216,13 @@ typedef struct _button
 #endif
 
   char *txt[STD_LEVELS];
-  int txt_size[STD_LEVELS];
   KeySym ks[LEVELS];
+#ifdef CACHE_SIZES
+  int txt_size[STD_LEVELS];
+#endif
+#ifdef CACHE_PIX
+  Pixmap pix[STD_LEVELS];
+#endif
 
 #define GET_TXT(b,i)	(b->txt[i])
 #define GET_TXT_SIZE(b,i)	(b->txt_size[i])
@@ -285,6 +295,9 @@ extern unsigned long int scr_width;
 extern unsigned long int scr_height;
 extern unsigned long scr_mwidth;
 extern unsigned long scr_mheight;
+#ifdef CACHE_PIX
+extern int cache_pix;
+#endif
 
 inline long min(long x,long y){ return x<y?x:y; }
 inline long max(long x,long y){ return x>y?x:y; }

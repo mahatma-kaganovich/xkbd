@@ -224,28 +224,35 @@ int _button_get_txt_size(keyboard *kb, char *txt)
 }
 
 int _but_size(button *b, int l){
+#ifdef CACHE_SIZES
 	int i,j,s;
-	if (!b->txt_size[l]) for (i=0; i<STD_LEVELS; i++) {
+	if (!b->txt_size[0]) for (i=0; i<STD_LEVELS; i++) {
 		// set size=1 to empty as checked
 		b->txt_size[i]=s=_button_get_txt_size(b->kb, b->txt[i])?:1;
 		for (j=i+1; j<STD_LEVELS; j++) if (b->txt[i]==b->txt[j]) b->txt_size[j]=s;
 	}
 	return b->txt_size[l];
+#else
+	return _button_get_txt_size(b->kb, b->txt[l]);
+#endif
 }
 
 int button_calc_vwidth(button *b)
 {
   if (b->vwidth ) return b->vwidth; /* already calculated from image or width_param */
 
-//  b->vwidth = max3(
-//	_button_get_txt_size(b->kb, DEFAULT_TXT(b)),
-//	_button_get_txt_size(b->kb, SHIFT_TXT(b)),
-//	_button_get_txt_size(b->kb, MOD_TXT(b))
-//    );
-
+#ifdef CACHE_SIZES
   int i, sz = 0;
   for (i=0; i<STD_LEVELS; i++) if (b->txt) sz = max(sz,_but_size(b,i));
   b->vwidth = sz;
+#else
+  b->vwidth = max(
+	_button_get_txt_size(b->kb, DEFAULT_TXT(b)),
+    max(_button_get_txt_size(b->kb, SHIFT_TXT(b)),
+	_button_get_txt_size(b->kb, MOD_TXT(b))
+    ));
+#endif
+
   return b->vwidth;
 }
 
@@ -295,21 +302,47 @@ void button_render(button *b, int mode)
   int x,y,l;
   char *txt = NULL;
   int size = 0;
+  keyboard *kb = b->kb;
 
-  x = button_get_abs_x(b) - b->kb->vbox->x;
-  y = button_get_abs_y(b) - b->kb->vbox->y;
+  if (!(DEFAULT_KS(b) || SHIFT_KS(b) || MOD_KS(b)) &&
+      ( DEFAULT_TXT(b) == NULL && SHIFT_TXT(b) == NULL && MOD_TXT(b) == NULL)
+      )
+    return;  /* its a 'blank' button - just a spacer */
+
+  x = button_get_abs_x(b) - kb->vbox->x;
+  y = button_get_abs_y(b) - kb->vbox->y;
+
+#ifdef CACHE_PIX
+  int ci;
+  Pixmap pix;
+  if (cache_pix) {
+    ci = (KBLEVEL(b)<<2)|BIT_MV(mode,OBIT_PRESSED,1)|BIT_MV(mode,OBIT_LOCKED,2);
+    pix = b->pix[ci];
+    if (pix) {
+	XCopyArea(kb->display, pix, kb->backing, kb->gc,
+		0, 0, b->act_width, b->act_height,
+		x, y);
+	return;
+    }
+    b->pix[ci] = pix = XCreatePixmap(kb->display,
+//	kb->win,
+	kb->backing,
+	b->act_width, b->act_height,
+	DefaultDepth(kb->display, DefaultScreen(kb->display)) );
+  }
+#endif
 
 //  b->flags = (b->flags & ~(STATE(OBIT_PRESSED)|STATE(OBIT_LOCKED)|BUTTON_RELEASED))|mode;
   if (mode & STATE(OBIT_PRESSED))
     {
       gc_solid = b->fg_gc;
       if (no_lock) {
-	gc_txt   = b->kb->txt_rev_gc;
+	gc_txt   = kb->txt_rev_gc;
 #ifdef USE_XFT
 	tmp_col  = b->col_rev;
 #endif
      } else {
-	gc_txt   = b->kb->txt_gc;
+	gc_txt   = kb->txt_gc;
 #ifdef USE_XFT
 	tmp_col = b->col;
 #endif
@@ -318,7 +351,7 @@ void button_render(button *b, int mode)
   else if(mode & STATE(OBIT_LOCKED))
     {
       gc_solid = b->fg_gc;
-      gc_txt   = b->kb->txt_rev_gc;
+      gc_txt   = kb->txt_rev_gc;
 #ifdef USE_XFT
       tmp_col  = b->col_rev;
 #endif
@@ -326,40 +359,37 @@ void button_render(button *b, int mode)
   else  /* BUTTON_RELEASED */
     {
       gc_solid = b->bg_gc;
-      gc_txt   = b->kb->txt_gc;
+      gc_txt   = kb->txt_gc;
 #ifdef USE_XFT
       tmp_col = b->col;
 #endif
     }
 
 
+
   /* figure out what text to display
      via keyboard state              */
 
 
-  if (!(DEFAULT_KS(b) || SHIFT_KS(b) || MOD_KS(b)) &&
-      ( DEFAULT_TXT(b) == NULL && SHIFT_TXT(b) == NULL && MOD_TXT(b) == NULL)
-      )
-    return;  /* its a 'blank' button - just a spacer */
 
   /* -- but color  gc1*/
-  XFillRectangle( b->kb->display, b->kb->backing, gc_solid,
+  XFillRectangle( kb->display, kb->backing, gc_solid,
 		  x, y, b->act_width, b->act_height );
 
   /* -- kb gc */
-  if (b->kb->theme != plain)
-    XDrawRectangle( b->kb->display, b->kb->backing, b->kb->bdr_gc,
+  if (kb->theme != plain)
+    XDrawRectangle( kb->display, kb->backing, kb->bdr_gc,
 		    x, y, b->act_width, b->act_height );
 
-  if (b->kb->theme == rounded)
+  if (kb->theme == rounded)
     {
-      XDrawPoint( b->kb->display, b->kb->backing, b->kb->bdr_gc, x+1, y+1);
-      XDrawPoint( b->kb->display, b->kb->backing,
-		  b->kb->bdr_gc, x+b->act_width-1, y+1);
-      XDrawPoint( b->kb->display, b->kb->backing,
-		  b->kb->bdr_gc, x+1, y+b->act_height-1);
-      XDrawPoint( b->kb->display, b->kb->backing,
-		  b->kb->bdr_gc, x+b->act_width-1,
+      XDrawPoint( kb->display, kb->backing, kb->bdr_gc, x+1, y+1);
+      XDrawPoint( kb->display, kb->backing,
+		  kb->bdr_gc, x+b->act_width-1, y+1);
+      XDrawPoint( kb->display, kb->backing,
+		  kb->bdr_gc, x+1, y+b->act_height-1);
+      XDrawPoint( kb->display, kb->backing,
+		  kb->bdr_gc, x+b->act_width-1,
 		  y+b->act_height-1);
     }
 
@@ -370,20 +400,24 @@ void button_render(button *b, int mode)
       unsigned long valuemask = 0;
 
 
-      XSetClipMask(b->kb->display, b->mask_gc,*(b->mask));
+      XSetClipMask(kb->display, b->mask_gc,*(b->mask));
 
       gc_vals.clip_x_origin = x+(b->x_pad/2)+b->b_size;
       gc_vals.clip_y_origin = y+b->vheight+(b->y_pad/2) +
 	                              b->b_size-b->vheight +2;
       valuemask =  GCClipXOrigin | GCClipYOrigin ;
-      XChangeGC(b->kb->display, b->mask_gc, valuemask, &gc_vals);
+      XChangeGC(kb->display, b->mask_gc, valuemask, &gc_vals);
 
-      XCopyArea(b->kb->display, *(b->pixmap), b->kb->backing, b->mask_gc,
+      XCopyArea(kb->display, *(b->pixmap), kb->backing, b->mask_gc,
 		0, 0, b->vwidth,
 		b->vheight, x+(b->x_pad/2)+b->b_size,
 		y +b->vheight+(b->y_pad/2) -b->vheight + b->b_size+2
       );
+#ifdef CACHE_PIX
       return; /* imgs cannot have text aswell ! */
+#else
+      goto pixmap;
+#endif
     }
 
 //  txt = GET_TXT(b,KBLEVEL(b))?:DEFAULT_TXT(b);
@@ -397,10 +431,10 @@ void button_render(button *b, int mode)
   if (txt != NULL)
     {
        int xspace;
-       //if (b->vwidth > _button_get_txt_size(b->kb,txt))
-//       xspace = x+((b->act_width - _button_get_txt_size(b->kb,txt))/2);
+       //if (b->vwidth > _button_get_txt_size(kb,txt))
+//       xspace = x+((b->act_width - _button_get_txt_size(kb,txt))/2);
       size=_but_size(b,l);
-//      size=_button_get_txt_size(b->kb,txt);
+//      size=_button_get_txt_size(kb,txt);
        xspace = x+((b->act_width - size)>>1);
     
 //       xspace = x+((b->act_width - b->vwidth)/2);
@@ -408,14 +442,14 @@ void button_render(button *b, int mode)
 	  //xspace = x+((b->vwidth)/2);
 	  //xspace = x+(b->x_pad/2)+b->b_size;
 #ifdef USE_XFT
-    if (b->kb->render_type == xft)
+    if (kb->render_type == xft)
       {
-	int y_offset = ((b->vheight + b->y_pad) - b->kb->xftfont->height)/2;
-	 XftDrawStringUtf8(b->kb->xftdraw, &tmp_col, b->kb->xftfont,
+	int y_offset = ((b->vheight + b->y_pad) - kb->xftfont->height)/2;
+	 XftDrawStringUtf8(kb->xftdraw, &tmp_col, kb->xftfont,
 			/*x+(b->x_pad/2)+b->b_size, */
 			xspace,
 			/* y + b->vheight + b->b_size + (b->y_pad/2) - 4 */
-			y + y_offset + b->kb->xftfont->ascent ,
+			y + y_offset + kb->xftfont->ascent ,
 		       /* y+b->vheight+(b->y_pad/2)-b->b_size, */
 		       (unsigned char *) txt, strlen(txt));
       }
@@ -423,7 +457,7 @@ void button_render(button *b, int mode)
 #endif
       {
 	XDrawString(
-		    b->kb->display, b->kb->backing, gc_txt,
+		    kb->display, kb->backing, gc_txt,
 		    /*x+(b->x_pad/2)+b->b_size,*/
 		    xspace,
 		    y+b->vheight+(b->y_pad/2)+b->b_size
@@ -432,6 +466,13 @@ void button_render(button *b, int mode)
 		    );
       }
     }
+#ifdef CACHE_PIX
+pixmap:
+  if (cache_pix)
+	XCopyArea(kb->display, kb->backing, pix, kb->gc,
+		x, y, b->act_width, b->act_height,
+		0, 0);
+#endif
 }
 
 void button_paint(button *b)

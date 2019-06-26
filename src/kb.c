@@ -363,7 +363,12 @@ box *clone_box(Display *dpy, box *vbox, int group){
 		for (ip = ((box *)listp->data)->root_kid; ip; ip = ip->next) {
 			memcpy(b=malloc(sizeof(button)),ip->data,sizeof(button));
 			box_add_button(bx1,b);
-			memset(&b->txt_size,0,sizeof(b->txt_size));
+#ifdef CACHE_SIZES
+			b->txt_size[0] = 0;
+#endif
+#ifdef CACHE_PIX
+			memset(&b->pix,0,sizeof(b->pix));
+#endif
 			// new layout
 			// in first look same code must be used to reconfigure 1 layout,
 			// but no way to verify levels still equal in other definition.
@@ -962,6 +967,7 @@ void kb_size(keyboard *kb) {
 			x=0;
 			bx = (box *)listp->data;
 			for(ip=bx->root_kid; ip; ip= ip->next) {
+				b = (button *)ip->data;
 				b->x=x;
 				b->y=y;
 				b->act_width = b->width*w1/mw;
@@ -978,6 +984,23 @@ void kb_size(keyboard *kb) {
 
 #ifdef SIBLINGS
     kb_update(kb);
+#endif
+
+#if 0
+    int N;
+    for (N=0; N<1024; N++)
+    for(i=0;i<kb->total_layouts;i++) {
+	for (listp = kb->vbox->root_kid; listp; listp = listp->next) {
+		bx = (box *)listp->data;
+		for(ip=bx->root_kid; ip; ip= ip->next) {
+			b = (button *)ip->data;
+			button_render(b,0);
+			button_render(b,STATE(OBIT_PRESSED));
+			button_render(b,STATE(OBIT_LOCKED));
+		}
+	}
+    }
+    exit(1);
 #endif
 }
 

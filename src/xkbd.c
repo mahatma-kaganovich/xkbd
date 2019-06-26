@@ -65,6 +65,9 @@ char **exec_cmd;
 
 int Xkb_sync = 0;
 int no_lock = 0;
+#ifdef CACHE_PIX
+int cache_pix = 1;
+#endif
 
 // dpi
 unsigned long scr_width;
@@ -203,6 +206,7 @@ Options:\n\
                       other than" DEFAULTCONFIG "\n\
   -xid used for gtk embedding\n\
   -c  dock\n\
+  -C  disable pixmap cache\n\
   -s  strut\n\
   -D  Dock/options bitmask: 1=dock, 2=strut, 4=_NET_WM_WINDOW_TYPE_DOCK,\n\
       8=_NET_WM_WINDOW_TYPE_TOOLBAR, 16=_NET_WM_STATE_STICKY.\n\
@@ -292,6 +296,9 @@ int main(int argc, char **argv)
 #endif
 	{ 'l', "xkbd.no_lock", 2, &no_lock },
 	{ 'o', "xkbd.output", 0, &output },
+#ifdef CACHE_PIX
+	{ 'C', "xkbd.cache", 1, &cache_pix },
+#endif
 	{ 0, NULL }
    };
    struct resource *res1;
