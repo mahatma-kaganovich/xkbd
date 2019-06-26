@@ -864,7 +864,9 @@ void kb_size(keyboard *kb) {
 		free(loaded_font);
 		loaded_font = NULL;
 	}
+#ifdef USE_XFT
 	if (!kb->xftfont1) kb->xftfont1 = kb->xftfont;
+#endif
 
 	int cy = 0;
 	int max_single_char_width = 0;
