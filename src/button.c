@@ -27,16 +27,6 @@
 #include "button.h"
 
 
-
-int max3( int a, int b, int c )
-{
-  int rval;
-  rval = a;
-  if( b>rval ) rval=b;
-  if( c>rval ) rval=c;
-  return( rval );
-}
-
 GC _createGC(Display *display, Window win)
 {
   GC gc;
@@ -299,13 +289,12 @@ void button_render(button *b, int mode)
   XftColor tmp_col;
 #endif
 
-  int x,y,l;
-  char *txt = NULL;
-  int size = 0;
+  int x,y,l=KBLEVEL(b);
+  char *txt;
   keyboard *kb = b->kb;
 
   if (!(DEFAULT_KS(b) || SHIFT_KS(b) || MOD_KS(b)) &&
-      ( DEFAULT_TXT(b) == NULL && SHIFT_TXT(b) == NULL && MOD_TXT(b) == NULL)
+      DEFAULT_TXT(b) == NULL && SHIFT_TXT(b) == NULL && MOD_TXT(b) == NULL
       )
     return;  /* its a 'blank' button - just a spacer */
 
@@ -313,22 +302,26 @@ void button_render(button *b, int mode)
   y = button_get_abs_y(b) - kb->vbox->y;
 
 #ifdef CACHE_PIX
-  int ci;
   Pixmap pix;
   if (cache_pix) {
-    ci = (KBLEVEL(b)<<2)|BIT_MV(mode,OBIT_PRESSED,0)|BIT_MV(mode,OBIT_LOCKED,1);
-    pix = b->pix[ci];
+#if OBIT_PRESSED == 2 && OBIT_LOCKED == 3
+    int i = (l<<2)|((mode>>2)&3);
+#else
+    int i = (l<<2)|BIT_MV(mode,OBIT_PRESSED,0)|BIT_MV(mode,OBIT_LOCKED,1);
+#endif
+    pix = b->pix[i];
     if (pix) {
 	XCopyArea(kb->display, pix, kb->backing, kb->gc,
 		0, 0, b->act_width, b->act_height,
 		x, y);
 	return;
     }
-    b->pix[ci] = pix = XCreatePixmap(kb->display,
+    b->pix[i] = pix = XCreatePixmap(kb->display,
 //	kb->win,
 	kb->backing,
 	b->act_width, b->act_height,
 	DefaultDepth(kb->display, DefaultScreen(kb->display)) );
+    if (i&1) b->pix[i^2]=pix;
   }
 #endif
 
@@ -365,13 +358,6 @@ void button_render(button *b, int mode)
 #endif
     }
 
-
-
-  /* figure out what text to display
-     via keyboard state              */
-
-
-
   /* -- but color  gc1*/
   XFillRectangle( kb->display, kb->backing, gc_solid,
 		  x, y, b->act_width, b->act_height );
@@ -393,7 +379,7 @@ void button_render(button *b, int mode)
 		  y+b->act_height-1);
     }
 
-  if (b->pixmap != NULL)
+  if (b->pixmap)
     {
       /* TODO: improve alignment of images, kinda hacked at the mo ! */
       XGCValues gc_vals;
@@ -421,21 +407,18 @@ void button_render(button *b, int mode)
     }
 
 //  txt = GET_TXT(b,KBLEVEL(b))?:DEFAULT_TXT(b);
-  l = KBLEVEL(b);
   txt = GET_TXT(b,l);
   if (!txt) {
 	l = 0;
 	txt = DEFAULT_TXT(b);
   }
  
-  if (txt != NULL)
+  if (txt)
     {
        int xspace;
        //if (b->vwidth > _button_get_txt_size(kb,txt))
 //       xspace = x+((b->act_width - _button_get_txt_size(kb,txt))/2);
-      size=_but_size(b,l);
-//      size=_button_get_txt_size(kb,txt);
-       xspace = x+((b->act_width - size)>>1);
+       xspace = x+((b->act_width - _but_size(b,l))>>1);
     
 //       xspace = x+((b->act_width - b->vwidth)/2);
 	  //else
