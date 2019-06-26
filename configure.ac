@@ -1,6 +1,6 @@
 # Process this file with autoconf to produce a configure script.
 
-AC_INIT([xkbd], [0.8.18])
+AC_INIT([xkbd], [0.8.99])
 AM_INIT_AUTOMAKE()
 AM_CONFIG_HEADER(config.h)
 AC_CONFIG_MACRO_DIRS([m4])

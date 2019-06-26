@@ -194,36 +194,6 @@ void version()
 #endif
 }
 
-void usage(void)
-{
-   printf("Usage: %s <options>\n\
-Options:\n\
-  -d <display>\n\
-  -o <output>\n\
-  -g <geometry> (default -0-0, left/top +0+0)\n\
-     ( NOTE: The above will overide the configs font )\n\
-  -k  <keyboard file> Select the keyboard definition file\n\
-                      other than" DEFAULTCONFIG "\n\
-  -xid used for gtk embedding\n\
-  -c  dock\n\
-  -C  disable pixmap cache\n\
-  -s  strut\n\
-  -D  Dock/options bitmask: 1=dock, 2=strut, 4=_NET_WM_WINDOW_TYPE_DOCK,\n\
-      8=_NET_WM_WINDOW_TYPE_TOOLBAR, 16=_NET_WM_STATE_STICKY.\n\
-      32=resize (slock), 64=strut horizontal, 128=_NET_WM_STATE_SKIP_TASKBAR\n\
-      For OpenBox I use 178 = $[2+16+32+128].\n\
-  -X  Xkb state interaction\n\
-  -l  disable modifiers lock\n\
-  -v  version\n\
-  -e {<...>}   exec on restart (to end of line)\n\
-  -h  this help\n", IAM);
-#ifdef USE_XFT
-   printf("  -font <font name>  Select the xft AA font\n");
-#else
-   printf("  -font <font name>  Select the X11 font\n");
-#endif
-}
-
 void _prop(int i, char *prop, Atom type, void *data, int n){
 	XChangeProperty(display,win,prop?XInternAtom(display,prop,False):mwm_atom,type,i,PropModeReplace,(unsigned char *)data,n); 
 }
@@ -272,32 +242,35 @@ int main(int argc, char **argv)
    FILE *fp;
    KeySym mode_switch_ksym;
 
-//   static struct resource {
-//	char param;
-//	char *name;
-//	int type;
-//	void *ptr;
-  // } __attribute__ ((__packed__)) resources[] = {
-
    static struct resource {
 	char param;
 	char *name;
 	int type;
 	void *ptr;
+	char *help;
    } __attribute__ ((__packed__)) resources[] = {
-	{ 'g', "xkbd.geometry", 0, &geometry },
-	{ 'f', "xkbd.font_name", 0, &font_name },
-	{ 'k', "xkbd.conf_file", 0, &conf_file },
-	{ 'D', "xkbd.dock", 1, &dock },
+	{ 'g', "xkbd.geometry", 0, &geometry, "(default -0-0, left/top +0+0)\n\
+     ( NOTE: The above will overide the configs font )" },
+	{ 'f', "xkbd.font_name", 0, &font_name, "font" },
+	{ 'k', "xkbd.conf_file", 0, &conf_file, "keyboard definition file\n\
+                      other than" DEFAULTCONFIG },
+	{ 'D', "xkbd.dock", 1, &dock, "Dock/options bitmask: 1=dock, 2=strut, 4=_NET_WM_WINDOW_TYPE_DOCK,\n\
+      8=_NET_WM_WINDOW_TYPE_TOOLBAR, 16=_NET_WM_STATE_STICKY.\n\
+      32=resize (slock), 64=strut horizontal, 128=_NET_WM_STATE_SKIP_TASKBAR\n\
+      For OpenBox I use 178 = $[2+16+32+128]." },
 #ifndef MINIMAL
-	{ 'X', "xkbd.sync", 2, &Xkb_sync },
+	{ 'X', "xkbd.sync", 2, &Xkb_sync, "Xkb state interaction" },
 #else
 	{ 'X' },
 #endif
-	{ 'l', "xkbd.no_lock", 2, &no_lock },
-	{ 'o', "xkbd.output", 0, &output },
+	{ 'l', "xkbd.no_lock", 2, &no_lock, "disable modifiers lock" },
+#ifdef USE_XR
+	{ 'o', "xkbd.output", 0, &output, "xrandr output name" },
+#else
+	{ 'o' },
+#endif
 #ifdef CACHE_PIX
-	{ 'C', "xkbd.cache", 1, &cache_pix },
+	{ 'C', "xkbd.cache", 1, &cache_pix, "pixmap cache 0=disable, 1=enable/default, 2=preload" },
 #endif
 	{ 0, NULL }
    };
@@ -331,7 +304,24 @@ int main(int argc, char **argv)
 	    default:
 		for (res=0; (res1=&resources[res])->param!=s[1]; res++) {
 			if (!res1->param) {
-				usage();
+   printf("Usage: %s <options>\n\
+Options:\n\
+  -d  <display>\n\
+  -x  used for gtk embedding\n\
+  -c  dock\n\
+  -s  strut\n\
+  -v  version\n\
+  -e {<...>}   exec on restart (to end of line)\n\
+  -h  this help\n", IAM);
+				for (res=0; (res1=&resources[res])->param; res++) {
+					char *t,*h=res1->help?:"";
+					switch (res1->type) {
+					case 0:t="string";break;
+					case 1:t="int";break;
+					case 2:printf("  -%c [<%s: 1>]  %s\n",res1->param, res1->name, h);continue;
+					}
+					printf("  -%c <%s>  (%s) %s\n",res1->param, res1->name, t, h);
+				}
 				exit(0);
 			}
 		};

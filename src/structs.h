@@ -86,7 +86,7 @@ inline unsigned int MODS(unsigned int l){
 
 // features
 
-// cache pixmaps increase render speed 5x and RAM +2.5k per layout
+// cache pixmaps increase render speed 5x and RAM 0.3-2.5k per layout
 // disabling cache runtime enough
 #define CACHE_SIZES
 #define CACHE_PIX
@@ -221,7 +221,7 @@ typedef struct _button
   int txt_size[STD_LEVELS];
 #endif
 #ifdef CACHE_PIX
-  Pixmap pix[STD_LEVELS];
+  Pixmap pix[STD_LEVELS<<2];
 #endif
 
 #define GET_TXT(b,i)	(b->txt[i])

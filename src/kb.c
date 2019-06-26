@@ -752,6 +752,26 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 
 }
 
+void cache_preload(keyboard *kb,int layout){
+	int i,m;
+	list *listp, *ip;
+	button *b;
+	unsigned int st = kb->state;
+
+	for (listp = kb->kbd_layouts[layout]->root_kid; listp; listp = listp->next) {
+		for(ip=((box *)listp->data)->root_kid; ip; ip= ip->next) {
+			b = (button *)ip->data;
+			for (i=0; i<STD_LEVELS; i++) {
+				kb->state = (i&1)|((i&3)?STATE(KBIT_ALT):0)|((i&3)?STATE(KBIT_CTRL):0);
+				button_render(b,0);
+				button_render(b,STATE(OBIT_PRESSED));
+				button_render(b,STATE(OBIT_LOCKED));
+			}
+		}
+	}
+	kb->state = st;
+}
+
 static char fname[32] = "";
 
 void kb_size(keyboard *kb) {
@@ -989,18 +1009,9 @@ void kb_size(keyboard *kb) {
 #if 0
     int N;
     for (N=0; N<1024; N++)
-    for(i=0;i<kb->total_layouts;i++) {
-	for (listp = kb->vbox->root_kid; listp; listp = listp->next) {
-		bx = (box *)listp->data;
-		for(ip=bx->root_kid; ip; ip= ip->next) {
-			b = (button *)ip->data;
-			button_render(b,0);
-			button_render(b,STATE(OBIT_PRESSED));
-			button_render(b,STATE(OBIT_LOCKED));
-		}
-	}
-    }
-    exit(1);
+#endif
+#ifdef CACHE_PIX
+    if (cache_pix>1) for(i=0;i<kb->total_layouts;i++) cache_preload(kb,i);
 #endif
 }
 
@@ -1013,16 +1024,18 @@ kb_switch_layout(keyboard *kb, int kbd_layout_num, int shift)
   int mw = b->min_width;
   int mh = b->min_height;
 
-  for(; kbd_layout_num >= kb->total_layouts; kb->total_layouts++)
-    kb->kbd_layouts[kb->total_layouts] = clone_box(kb->display,kb->kbd_layouts[0],kb->total_layouts);
+  for(; kbd_layout_num >= kb->total_layouts; kb->total_layouts++) {
+	kb->kbd_layouts[kb->total_layouts] = b = clone_box(kb->display,kb->kbd_layouts[0],kb->total_layouts);
+	b->act_width = w;
+	b->act_height = h;
+	b->min_width = mw;
+	b->min_height = mh;
+#ifdef CACHE_PIX
+	if (cache_pix>1) cache_preload(kb,kb->total_layouts);
+#endif
+  }
 
   b = kb->kbd_layouts[kb->group = kbd_layout_num];
-
-  b->act_width = w;
-  b->act_height = h;
-  b->min_width = mw;
-  b->min_height = mh;
-
   kb->vbox = b;
   if (!shift) kb->vvbox = b;
 

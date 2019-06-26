@@ -303,12 +303,15 @@ void button_render(button *b, int mode)
 
 #ifdef CACHE_PIX
   Pixmap pix;
+  int i, m, j;
+
   if (cache_pix) {
 #if OBIT_PRESSED == 2 && OBIT_LOCKED == 3
-    int i = (l<<2)|((mode>>2)&3);
+    m = ((mode>>2)&3);
 #else
-    int i = (l<<2)|BIT_MV(mode,OBIT_PRESSED,0)|BIT_MV(mode,OBIT_LOCKED,1);
+    m = BIT_MV(mode,OBIT_PRESSED,0)|BIT_MV(mode,OBIT_LOCKED,1);
 #endif
+    i = (l<<2)|m;
     pix = b->pix[i];
     if (pix) {
 	XCopyArea(kb->display, pix, kb->backing, kb->gc,
@@ -321,7 +324,18 @@ void button_render(button *b, int mode)
 	kb->backing,
 	b->act_width, b->act_height,
 	DefaultDepth(kb->display, DefaultScreen(kb->display)) );
-    if (i&1) b->pix[i^2]=pix;
+  }
+    // pixmap must pass too as txt[]=0
+  txt = GET_TXT(b,l);
+  if (!txt) {
+	l=0;
+	txt = DEFAULT_TXT(b);
+  }
+  if (cache_pix) {
+    for (j=0; j<=(m&1); j++) {
+	for (i=0; i<STD_LEVELS; i++) if (b->txt[i]==txt || (!l && !b->txt[i])) b->pix[(i<<2)|m]=pix;
+	m^=2;
+    }
   }
 #endif
 
@@ -406,12 +420,14 @@ void button_render(button *b, int mode)
 #endif
     }
 
+#ifndef CACHE_PIX
 //  txt = GET_TXT(b,KBLEVEL(b))?:DEFAULT_TXT(b);
   txt = GET_TXT(b,l);
   if (!txt) {
-	l = 0;
+	l=0;
 	txt = DEFAULT_TXT(b);
   }
+#endif
  
   if (txt)
     {
