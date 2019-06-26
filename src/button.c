@@ -414,9 +414,9 @@ void button_render(button *b, int mode)
 		y +b->vheight+(b->y_pad/2) -b->vheight + b->b_size+2
       );
 #ifdef CACHE_PIX
-      return; /* imgs cannot have text aswell ! */
-#else
       goto pixmap;
+#else
+      return; /* imgs cannot have text aswell ! */
 #endif
     }
 
