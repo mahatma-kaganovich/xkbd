@@ -1062,7 +1062,7 @@ void kb_paint(keyboard *kb)
 	    kb->vbox->x, kb->vbox->y);
 }
 
-inline void bdraw(button *b, int flags){
+static inline void bdraw(button *b, int flags){
 	keyboard *kb=b->kb;
 	if (kb->vbox!=kb->vvbox){
 		if (b->layout_switch==-1) return;

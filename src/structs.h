@@ -51,7 +51,7 @@
 #define STATE(b)	(1U<<b)
 #define BIT_MV(m,b,b2)	(((m) & STATE(b))>>(b-b2))
 #define BIT_MVL(m,b,b2)	(((m) & STATE(b))<<(b2-b))
-inline unsigned int LEVEL(unsigned int m, unsigned int o){
+static inline unsigned int LEVEL(unsigned int m, unsigned int o){
 //	return ((BIT_MV(m,KBIT_SHIFT,0)^(BIT_MV(m,KBIT_CAPS,0)&BIT_MV(o,OBIT_OBEYCAPS,0) ))|(BIT_MV(m,KBIT_MOD,1)^BIT_MV(m,KBIT_ALT,1)))
 	return ((BIT_MV(m,KBIT_SHIFT,0)^(BIT_MV(m,KBIT_CAPS,0)&BIT_MV(o,OBIT_OBEYCAPS,0) ))|BIT_MV(m,KBIT_MOD,1))
 #if LEVEL_BITS == 3
@@ -59,7 +59,7 @@ inline unsigned int LEVEL(unsigned int m, unsigned int o){
 #endif
 	;
 }
-inline unsigned int MODS(unsigned int l){
+static inline unsigned int MODS(unsigned int l){
 //	const unsigned int alt=BIT_MVL(l,1,KBIT_ALT);
 	const unsigned int alt=BIT_MVL(l,1,KBIT_MOD);
 #if LEVEL_BITS == 3
@@ -299,8 +299,8 @@ extern unsigned long scr_mheight;
 extern int cache_pix;
 #endif
 
-inline long min(long x,long y){ return x<y?x:y; }
-inline long max(long x,long y){ return x>y?x:y; }
+static inline long min(long x,long y){ return x<y?x:y; }
+static inline long max(long x,long y){ return x>y?x:y; }
 
 
 #endif
