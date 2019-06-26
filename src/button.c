@@ -298,8 +298,10 @@ void button_render(button *b, int mode)
       )
     return;  /* its a 'blank' button - just a spacer */
 
-  x = button_get_abs_x(b) - kb->vbox->x;
-  y = button_get_abs_y(b) - kb->vbox->y;
+//  x = button_get_abs_x(b) - kb->vbox->x;
+//  y = button_get_abs_y(b) - kb->vbox->y;
+  x = b->vx;
+  y = b->vy;
 
 #ifdef CACHE_PIX
   Pixmap pix;
@@ -477,10 +479,12 @@ pixmap:
 void button_paint(button *b)
 {
   /* use the vbox offsets for the location within the window */
-  int x = button_get_abs_x(b) - b->kb->vbox->x;
-  int y = button_get_abs_y(b) - b->kb->vbox->y;
+//  int x = button_get_abs_x(b) - b->kb->vbox->x;
+//  int y = button_get_abs_y(b) - b->kb->vbox->y;
+	int  x = b->vx;
+	int  y = b->vy;
 
-  XCopyArea(b->kb->display, b->kb->backing, b->kb->win, b->kb->gc,
+	XCopyArea(b->kb->display, b->kb->backing, b->kb->win, b->kb->gc,
 	    x, y, b->act_width, b->act_height,
 	    x+b->kb->vbox->x, y+b->kb->vbox->y);
 }

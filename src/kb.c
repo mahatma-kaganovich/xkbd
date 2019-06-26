@@ -971,6 +971,9 @@ void kb_size(keyboard *kb) {
 //				b->act_height = bx->height?ldiv(b->height*kb->vbox->act_height,bx->height).quot:y_pad;
 				/*  hack for using all screen space */
 				if (listp->next == NULL) b->act_height--;
+				b->vx = button_get_abs_x(b) - kb->vbox->x;
+				b->vy = button_get_abs_y(b) - kb->vbox->y;
+
 			}
 			/*  another hack for using up all space */
 			b->x_pad += (kb->vbox->act_width-cx) -1 ;

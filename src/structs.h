@@ -207,6 +207,7 @@ typedef struct _button
   int x;             /* actual co-ords relative to window */
   int y;
   int width, height; // relative or mm
+  int vx,vy;
 
   KeyCode kc[LEVELS];
   unsigned int mods[LEVELS];
