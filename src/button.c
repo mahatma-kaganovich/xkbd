@@ -316,7 +316,7 @@ void button_render(button *b, int mode)
   int ci;
   Pixmap pix;
   if (cache_pix) {
-    ci = (KBLEVEL(b)<<2)|BIT_MV(mode,OBIT_PRESSED,1)|BIT_MV(mode,OBIT_LOCKED,2);
+    ci = (KBLEVEL(b)<<2)|BIT_MV(mode,OBIT_PRESSED,0)|BIT_MV(mode,OBIT_LOCKED,1);
     pix = b->pix[ci];
     if (pix) {
 	XCopyArea(kb->display, pix, kb->backing, kb->gc,
