@@ -497,8 +497,6 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
   kb->total_layouts = 0;
 
 
-  kb->backing = None;
-
   kb_load_keymap(display);
 
   if (!strcmp(conf_file,"-")) {
@@ -899,15 +897,24 @@ void kb_size(keyboard *kb) {
 	}
 	kb->vbox = kb->kbd_layouts[kb->group = 0];
 
-	if (kb->backing != None) XFreePixmap(kb->display, kb->backing);
+#ifndef DIRECT_RENDERING
+#ifdef CACHE_PIX
+	if (cache_pix) {
+#endif
+	    if (kb->backing) XFreePixmap(kb->display, kb->backing);
 
-	kb->backing = XCreatePixmap(kb->display, kb->win,
+	    kb->backing = XCreatePixmap(kb->display, kb->win,
 		kb->vbox->act_width, kb->vbox->act_height,
 		DefaultDepth(kb->display, DefaultScreen(kb->display)) );
 
-	XFillRectangle(kb->display, kb->backing,
+	    XFillRectangle(kb->display, kb->backing,
 		  kb->rev_gc, 0, 0,
 		  kb->vbox->act_width, kb->vbox->act_height);
+	// runtime disabling cache -> direct rendering
+#ifdef CACHE_PIX
+	} else kb->backing = kb->win;
+#endif
+#endif
 
 #ifdef USE_XFT
 	if (kb->xftdraw != NULL) XftDrawDestroy(kb->xftdraw);
@@ -981,9 +988,13 @@ void kb_size(keyboard *kb) {
 //				b->act_height = bx->height?ldiv(b->height*kb->vbox->act_height,bx->height).quot:y_pad;
 				/*  hack for using all screen space */
 				if (listp->next == NULL) b->act_height--;
+#ifdef DIRECT_RENDERING
+				b->vx = button_get_abs_x(b);
+				b->vy = button_get_abs_y(b);
+#else
 				b->vx = button_get_abs_x(b) - kb->vbox->x;
 				b->vy = button_get_abs_y(b) - kb->vbox->y;
-
+#endif
 			}
 			/*  another hack for using up all space */
 			b->x_pad += (kb->vbox->act_width-cx) -1 ;
@@ -1070,9 +1081,14 @@ void kb_render(keyboard *kb)
 
 void kb_paint(keyboard *kb)
 {
+#ifndef DIRECT_RENDERING
+#ifdef CACHE_PIX
+  if (cache_pix)
+#endif
   XCopyArea(kb->display, kb->backing, kb->win, kb->gc,
 	    0, 0, kb->vbox->act_width, kb->vbox->act_height,
 	    kb->vbox->x, kb->vbox->y);
+#endif
 }
 
 static inline void bdraw(button *b, int flags){
@@ -1579,7 +1595,6 @@ button * kb_find_button(keyboard *kb, int x, int y)
 
 void kb_destroy(keyboard *kb)
 {
-  if (kb->backing != None) XFreePixmap(kb->display, kb->backing);
   XFreeGC(kb->display, kb->gc);
   /* -- to do -- somwthing like this
   while (listp != NULL)

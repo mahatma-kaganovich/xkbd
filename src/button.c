@@ -293,13 +293,16 @@ int button_render(button *b, int mode)
   char *txt;
   keyboard *kb = b->kb;
 
+#ifndef DIRECT_RENDERING
   if (!(DEFAULT_KS(b) || SHIFT_KS(b) || MOD_KS(b)) &&
+#ifdef CACHE_PIX
+      cache_pix &&
+#endif
       DEFAULT_TXT(b) == NULL && SHIFT_TXT(b) == NULL && MOD_TXT(b) == NULL
       )
     return 1;  /* its a 'blank' button - just a spacer */
+#endif
 
-//  x = button_get_abs_x(b) - kb->vbox->x;
-//  y = button_get_abs_y(b) - kb->vbox->y;
   x = b->vx;
   y = b->vy;
 
@@ -319,7 +322,7 @@ int button_render(button *b, int mode)
 	if (mode & STATE(OBIT_DIRECT)) {
 		XCopyArea(kb->display, pix, kb->win, kb->gc,
 		0, 0, b->act_width, b->act_height,
-		x+b->kb->vbox->x, y+b->kb->vbox->y);
+		x+kb->vbox->x, y+kb->vbox->y);
 		return 1;
 	} else {
 		XCopyArea(kb->display, pix, kb->backing, kb->gc,
@@ -341,7 +344,7 @@ int button_render(button *b, int mode)
 	txt = DEFAULT_TXT(b);
   }
   if (cache_pix) {
-    for (j=0; j<=(m&1); j++) {
+    for (j=m&1; j>=0; j--) {
 	for (i=0; i<STD_LEVELS; i++) if (b->txt[i]==txt || (!l && !b->txt[i])) b->pix[(i<<2)|m]=pix;
 	m^=2;
     }
@@ -480,21 +483,22 @@ pixmap:
 	XCopyArea(kb->display, kb->backing, pix, kb->gc,
 		x, y, b->act_width, b->act_height,
 		0, 0);
+  else return 1;
 #endif
    return 0;
 }
 
 void button_paint(button *b)
 {
+#ifndef DIRECT_RENDERING
   /* use the vbox offsets for the location within the window */
-//  int x = button_get_abs_x(b) - b->kb->vbox->x;
-//  int y = button_get_abs_y(b) - b->kb->vbox->y;
 	int  x = b->vx;
 	int  y = b->vy;
 
 	XCopyArea(b->kb->display, b->kb->backing, b->kb->win, b->kb->gc,
 	    x, y, b->act_width, b->act_height,
 	    x+b->kb->vbox->x, y+b->kb->vbox->y);
+#endif
 }
 
 int button_get_abs_x(button *b)

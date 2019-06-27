@@ -92,7 +92,9 @@ static inline unsigned int MODS(unsigned int l){
 #define CACHE_SIZES
 #define CACHE_PIX
 
-#ifndef MINIMAL
+#ifdef MINIMAL
+#define DIRECT_RENDERING
+#else
 //#define SLIDES
 #define SIBLINGS
 #endif
@@ -101,6 +103,11 @@ static inline unsigned int MODS(unsigned int l){
 #define MULTITOUCH
 #else
 #undef MULTITOUCH
+#endif
+
+#ifdef DIRECT_RENDERING
+#define backing win
+#undef CACHE_PIX
 #endif
 
 #ifdef MULTITOUCH
@@ -166,7 +173,9 @@ typedef struct _keyboard
 
   Window win;
   Display *display;
+#ifndef DIRECT_RENDERING
   Pixmap backing;
+#endif
 
   GC gc;
   GC rev_gc;   /* inverse gc of above */
