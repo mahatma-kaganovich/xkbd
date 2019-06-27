@@ -366,8 +366,12 @@ box *clone_box(Display *dpy, box *vbox, int group){
 		for (ip = ((box *)listp->data)->root_kid; ip; ip = ip->next) {
 			memcpy(b=malloc(sizeof(button)),ip->data,sizeof(button));
 			box_add_button(bx1,b);
-			button_calc_vwidth(b);
-			button_calc_vheight(b);
+#ifdef CACHE_SIZES
+			b->txt_size[0] = 0;
+#endif
+#ifdef CACHE_PIX
+			memset(&b->pix,0,sizeof(b->pix));
+#endif
 			// new layout
 			// in first look same code must be used to reconfigure 1 layout,
 			// but no way to verify levels still equal in other definition.
@@ -778,7 +782,7 @@ void kb_size(keyboard *kb) {
 	long w,h,mw,mh,w1,w2,h1,h2;
 	list *listp, *ip;
 	button *b;
-	int i;
+	int i,j,k;
 	box *vbox, *bx;
 
 	// [virtual] kb size based on buttons
@@ -876,6 +880,18 @@ void kb_size(keyboard *kb) {
 			for(ip=((box *)listp->data)->root_kid; ip; ip= ip->next) {
 				b = (button *)ip->data;
 				if (!b->width && bx->undef) bx->width += (b->width = div(w - bx->width, bx->undef--).quot);
+#ifdef CACHE_SIZES
+				b->txt_size[0] = 0;
+#endif
+#ifdef CACHE_PIX
+				for (k=0; k<(STD_LEVELS<<2); k++) {
+					Pixmap pix=b->pix[k];
+					if (pix) {
+						for (j=k; j<(STD_LEVELS<<2); j++) if (b->pix[j] == pix) b->pix[j]=NULL;
+						XFreePixmap(b->kb->display, pix);
+					}
+				}
+#endif
 				button_calc_vwidth(b);
 				button_calc_vheight(b);
 				if (!(b->flags & STATE(OBIT_WIDTH_SPEC))) {
