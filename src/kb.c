@@ -897,10 +897,7 @@ void kb_size(keyboard *kb) {
 	}
 	kb->vbox = kb->kbd_layouts[kb->group = 0];
 
-#ifndef DIRECT_RENDERING
-#ifdef CACHE_PIX
 	if (cache_pix) {
-#endif
 	    if (kb->backing) XFreePixmap(kb->display, kb->backing);
 
 	    kb->backing = XCreatePixmap(kb->display, kb->win,
@@ -911,10 +908,7 @@ void kb_size(keyboard *kb) {
 		  kb->rev_gc, 0, 0,
 		  kb->vbox->act_width, kb->vbox->act_height);
 	// runtime disabling cache -> direct rendering
-#ifdef CACHE_PIX
 	} else kb->backing = kb->win;
-#endif
-#endif
 
 #ifdef USE_XFT
 	if (kb->xftdraw != NULL) XftDrawDestroy(kb->xftdraw);
@@ -988,13 +982,12 @@ void kb_size(keyboard *kb) {
 //				b->act_height = bx->height?ldiv(b->height*kb->vbox->act_height,bx->height).quot:y_pad;
 				/*  hack for using all screen space */
 				if (listp->next == NULL) b->act_height--;
-#ifdef DIRECT_RENDERING
 				b->vx = button_get_abs_x(b);
 				b->vy = button_get_abs_y(b);
-#else
-				b->vx = button_get_abs_x(b) - kb->vbox->x;
-				b->vy = button_get_abs_y(b) - kb->vbox->y;
-#endif
+				if (cache_pix) {
+					b->vx -= kb->vbox->x;
+					b->vy -= kb->vbox->y;
+				}
 			}
 			/*  another hack for using up all space */
 			b->x_pad += (kb->vbox->act_width-cx) -1 ;
@@ -1034,9 +1027,7 @@ void kb_size(keyboard *kb) {
     int N;
     for (N=0; N<1024; N++)
 #endif
-#ifdef CACHE_PIX
     if (cache_pix>1) for(i=0;i<kb->total_layouts;i++) cache_preload(kb,i);
-#endif
 }
 
 void
@@ -1054,9 +1045,7 @@ kb_switch_layout(keyboard *kb, int kbd_layout_num, int shift)
 	b->act_height = h;
 	b->min_width = mw;
 	b->min_height = mh;
-#ifdef CACHE_PIX
 	if (cache_pix>1) cache_preload(kb,kb->total_layouts);
-#endif
   }
 
   b = kb->kbd_layouts[kb->group = kbd_layout_num];
@@ -1081,14 +1070,10 @@ void kb_render(keyboard *kb)
 
 void kb_paint(keyboard *kb)
 {
-#ifndef DIRECT_RENDERING
-#ifdef CACHE_PIX
   if (cache_pix)
-#endif
   XCopyArea(kb->display, kb->backing, kb->win, kb->gc,
 	    0, 0, kb->vbox->act_width, kb->vbox->act_height,
 	    kb->vbox->x, kb->vbox->y);
-#endif
 }
 
 static inline void bdraw(button *b, int flags){

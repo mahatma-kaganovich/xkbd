@@ -88,13 +88,10 @@ static inline unsigned int MODS(unsigned int l){
 // features
 
 // cache pixmaps increase render speed 5x and RAM 0.3-2.5k per layout
-// disabling cache runtime enough
 #define CACHE_SIZES
 #define CACHE_PIX
 
-#ifdef MINIMAL
-#define DIRECT_RENDERING
-#else
+#ifndef MINIMAL
 //#define SLIDES
 #define SIBLINGS
 #endif
@@ -103,11 +100,6 @@ static inline unsigned int MODS(unsigned int l){
 #define MULTITOUCH
 #else
 #undef MULTITOUCH
-#endif
-
-#ifdef DIRECT_RENDERING
-#define backing win
-#undef CACHE_PIX
 #endif
 
 #ifdef MULTITOUCH
@@ -129,7 +121,6 @@ static inline unsigned int MODS(unsigned int l){
 #define LEVELS 8
 #else
 #define LEVELS STD_LEVELS
-
 #endif
 
 typedef struct _list
@@ -173,8 +164,10 @@ typedef struct _keyboard
 
   Window win;
   Display *display;
-#ifndef DIRECT_RENDERING
+#ifdef CACHE_PIX
   Pixmap backing;
+#else
+#define backing win
 #endif
 
   GC gc;
@@ -309,6 +302,8 @@ extern unsigned long scr_mwidth;
 extern unsigned long scr_mheight;
 #ifdef CACHE_PIX
 extern int cache_pix;
+#else
+#define cache_pix 0
 #endif
 
 static inline long min(long x,long y){ return x<y?x:y; }

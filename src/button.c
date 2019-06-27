@@ -293,16 +293,6 @@ int button_render(button *b, int mode)
   char *txt;
   keyboard *kb = b->kb;
 
-#ifndef DIRECT_RENDERING
-  if (!(DEFAULT_KS(b) || SHIFT_KS(b) || MOD_KS(b)) &&
-#ifdef CACHE_PIX
-      cache_pix &&
-#endif
-      DEFAULT_TXT(b) == NULL && SHIFT_TXT(b) == NULL && MOD_TXT(b) == NULL
-      )
-    return 1;  /* its a 'blank' button - just a spacer */
-#endif
-
   x = b->vx;
   y = b->vy;
 
@@ -311,6 +301,10 @@ int button_render(button *b, int mode)
   int i, m, j;
 
   if (cache_pix) {
+	if (!(DEFAULT_KS(b) || SHIFT_KS(b) || MOD_KS(b)) &&
+		DEFAULT_TXT(b) == NULL && SHIFT_TXT(b) == NULL && MOD_TXT(b) == NULL
+    	    ) return 1;  /* its a 'blank' button - just a spacer */
+
 #if OBIT_PRESSED == 2 && OBIT_LOCKED == 3
     m = ((mode>>2)&3);
 #else
@@ -425,11 +419,7 @@ int button_render(button *b, int mode)
 		b->vheight, x+(b->x_pad/2)+b->b_size,
 		y +b->vheight+(b->y_pad/2) -b->vheight + b->b_size+2
       );
-#ifdef CACHE_PIX
-      goto pixmap;
-#else
-      return 0; /* imgs cannot have text aswell ! */
-#endif
+      goto pixmap; /* imgs cannot have text aswell ! */
     }
 
 #ifndef CACHE_PIX
@@ -477,20 +467,19 @@ int button_render(button *b, int mode)
 		    );
       }
     }
-#ifdef CACHE_PIX
 pixmap:
+#ifdef CACHE_PIX
   if (cache_pix)
 	XCopyArea(kb->display, kb->backing, pix, kb->gc,
 		x, y, b->act_width, b->act_height,
 		0, 0);
-  else return 1;
 #endif
-   return 0;
+   return !cache_pix;
 }
 
 void button_paint(button *b)
 {
-#ifndef DIRECT_RENDERING
+#ifdef CACHE_PIX
   /* use the vbox offsets for the location within the window */
 	int  x = b->vx;
 	int  y = b->vy;
