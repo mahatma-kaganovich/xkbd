@@ -41,7 +41,7 @@ int button_get_vheight(button *b);
 
 int button_set_b_size(button *b, int size);
 
-void button_render(button *b, int mode);
+int button_render(button *b, int mode);
 void button_paint(button *b);
 
 int button_get_abs_x(button *b);

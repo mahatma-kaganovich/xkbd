@@ -276,7 +276,7 @@ int button_set_b_size(button *b, int size)
    return size;
 }
 
-void button_render(button *b, int mode)
+int button_render(button *b, int mode)
 {
   /*
     set up a default gc to point to whatevers gc is not NULL
@@ -296,7 +296,7 @@ void button_render(button *b, int mode)
   if (!(DEFAULT_KS(b) || SHIFT_KS(b) || MOD_KS(b)) &&
       DEFAULT_TXT(b) == NULL && SHIFT_TXT(b) == NULL && MOD_TXT(b) == NULL
       )
-    return;  /* its a 'blank' button - just a spacer */
+    return 1;  /* its a 'blank' button - just a spacer */
 
 //  x = button_get_abs_x(b) - kb->vbox->x;
 //  y = button_get_abs_y(b) - kb->vbox->y;
@@ -316,14 +316,21 @@ void button_render(button *b, int mode)
     i = (l<<2)|m;
     pix = b->pix[i];
     if (pix) {
-	XCopyArea(kb->display, pix, kb->backing, kb->gc,
+	if (mode & STATE(OBIT_DIRECT)) {
+		XCopyArea(kb->display, pix, kb->win, kb->gc,
+		0, 0, b->act_width, b->act_height,
+		x+b->kb->vbox->x, y+b->kb->vbox->y);
+		return 1;
+	} else {
+		XCopyArea(kb->display, pix, kb->backing, kb->gc,
 		0, 0, b->act_width, b->act_height,
 		x, y);
-	return;
+		return 0;
+	}
     }
     b->pix[i] = pix = XCreatePixmap(kb->display,
-//	kb->win,
-	kb->backing,
+	kb->win,
+//	kb->backing,
 	b->act_width, b->act_height,
 	DefaultDepth(kb->display, DefaultScreen(kb->display)) );
   }
@@ -418,7 +425,7 @@ void button_render(button *b, int mode)
 #ifdef CACHE_PIX
       goto pixmap;
 #else
-      return; /* imgs cannot have text aswell ! */
+      return 0; /* imgs cannot have text aswell ! */
 #endif
     }
 
@@ -474,6 +481,7 @@ pixmap:
 		x, y, b->act_width, b->act_height,
 		0, 0);
 #endif
+   return 0;
 }
 
 void button_paint(button *b)

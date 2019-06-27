@@ -39,6 +39,7 @@
 #define OBIT_LOCKED	3
 #define OBIT_UGLY	4
 #define OBIT_LOCK	5
+#define OBIT_DIRECT	5
 
 #define KBIT_SHIFT	0
 #define KBIT_CAPS	1

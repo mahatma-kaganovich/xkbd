@@ -769,9 +769,9 @@ void cache_preload(keyboard *kb,int layout){
 			b = (button *)ip->data;
 			for (i=0; i<STD_LEVELS; i++) {
 				kb->state = (i&1)|((i&3)?STATE(KBIT_ALT):0)|((i&3)?STATE(KBIT_CTRL):0);
-				button_render(b,0);
 				button_render(b,STATE(OBIT_PRESSED));
 				button_render(b,STATE(OBIT_LOCKED));
+				button_render(b,0);
 			}
 		}
 	}
@@ -1081,7 +1081,7 @@ static inline void bdraw(button *b, int flags){
 		if (b->layout_switch==-1) return;
 		flags|=STATE(OBIT_PRESSED);
 	}
-	button_render(b, flags);
+	if (!button_render(b, flags|STATE(OBIT_DIRECT)))
 	button_paint(b);
 }
 
