@@ -366,12 +366,8 @@ box *clone_box(Display *dpy, box *vbox, int group){
 		for (ip = ((box *)listp->data)->root_kid; ip; ip = ip->next) {
 			memcpy(b=malloc(sizeof(button)),ip->data,sizeof(button));
 			box_add_button(bx1,b);
-#ifdef CACHE_SIZES
-			b->txt_size[0] = 0;
-#endif
-#ifdef CACHE_PIX
-			memset(&b->pix,0,sizeof(b->pix));
-#endif
+			button_calc_vwidth(b);
+			button_calc_vheight(b);
 			// new layout
 			// in first look same code must be used to reconfigure 1 layout,
 			// but no way to verify levels still equal in other definition.

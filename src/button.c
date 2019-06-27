@@ -229,10 +229,24 @@ int _but_size(button *b, int l){
 
 int button_calc_vwidth(button *b)
 {
+  int i;
+#ifdef CACHE_SIZES
+  b->txt_size[0] = 0;
+#endif
+#ifdef CACHE_PIX
+  for (i=0; i<(STD_LEVELS<<2); i++) {
+	Pixmap pix=b->pix[i];
+	if (pix) {
+		int j;
+		for (j=i; j<(STD_LEVELS<<2); j++) if (b->pix[j] == pix) b->pix[j]=NULL;
+		XFreePixmap(b->kb->display, pix);
+	}
+  }
+#endif
   if (b->vwidth ) return b->vwidth; /* already calculated from image or width_param */
 
 #ifdef CACHE_SIZES
-  int i, sz = 0;
+  int sz = 0;
   for (i=0; i<STD_LEVELS; i++) if (b->txt) sz = max(sz,_but_size(b,i));
   b->vwidth = sz;
 #else
