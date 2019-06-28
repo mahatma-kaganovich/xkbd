@@ -383,7 +383,7 @@ box *clone_box(Display *dpy, box *vbox, int group){
 						b->txt_size[l]=0;
 #endif
 #ifdef CACHE_PIX
-						for (i=0; i<4; i++) b->pix[(l<<2)|i]=0;
+						if (cache_pix) for (i=0; i<4; i++) b->pix[(l<<2)|i]=0;
 #endif
 					}
 				}
@@ -888,7 +888,7 @@ void kb_size(keyboard *kb) {
 				    memset(&b->txt_size,0,sizeof(b->txt_size));
 #endif
 #ifdef CACHE_PIX
-				    for (k=0; k<(STD_LEVELS<<2); k++) {
+				    if (cache_pix) for (k=0; k<(STD_LEVELS<<2); k++) {
 					Pixmap pix=b->pix[k];
 					if (pix) {
 						for (j=k; j<(STD_LEVELS<<2); j++) if (b->pix[j] == pix) b->pix[j]=0;
