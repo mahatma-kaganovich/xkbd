@@ -215,13 +215,13 @@ int _button_get_txt_size(keyboard *kb, char *txt)
 
 int _but_size(button *b, int l){
 #ifdef CACHE_SIZES
-	int i,j,s;
-	if (!b->txt_size[0]) for (i=0; i<STD_LEVELS; i++) {
+	int i,s;
+	if (!(s=b->txt_size[l])) {
 		// set size=1 to empty as checked
-		b->txt_size[i]=s=_button_get_txt_size(b->kb, b->txt[i])?:1;
-		for (j=i+1; j<STD_LEVELS; j++) if (b->txt[i]==b->txt[j]) b->txt_size[j]=s;
+		s=_button_get_txt_size(b->kb, b->txt[i])?:1;
+		for (i=0; i<STD_LEVELS; i++) if (b->txt[i]==b->txt[l]) b->txt_size[i]=s;
 	}
-	return b->txt_size[l];
+	return s;
 #else
 	return _button_get_txt_size(b->kb, b->txt[l]);
 #endif

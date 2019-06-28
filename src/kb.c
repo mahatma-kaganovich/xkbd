@@ -355,7 +355,7 @@ box *_clone_box(box *vbox){
 box *clone_box(Display *dpy, box *vbox, int group){
 	box *bx = _clone_box(vbox), *bx1;
 	list *listp, *ip;
-	button *b;
+	button *b,*b0;
 	int l,i;
 	KeySym ks,ks1;
 	KeyCode kc;
@@ -364,14 +364,9 @@ box *clone_box(Display *dpy, box *vbox, int group){
 	for(listp = vbox->root_kid; listp; listp = listp->next) {
 		box_add_box(bx, bx1=_clone_box((box *)listp->data));
 		for (ip = ((box *)listp->data)->root_kid; ip; ip = ip->next) {
-			memcpy(b=malloc(sizeof(button)),ip->data,sizeof(button));
+			b0 = (button *)ip->data;
+			memcpy(b=malloc(sizeof(button)),b0,sizeof(button));
 			box_add_button(bx1,b);
-#ifdef CACHE_SIZES
-			b->txt_size[0] = 0;
-#endif
-#ifdef CACHE_PIX
-			memset(&b->pix,0,sizeof(b->pix));
-#endif
 			// new layout
 			// in first look same code must be used to reconfigure 1 layout,
 			// but no way to verify levels still equal in other definition.
@@ -383,7 +378,14 @@ box *clone_box(Display *dpy, box *vbox, int group){
 				    for (i=0; i<100 && (ks1=XkbKeycodeToKeysym(dpy, kc, 0, i)) && ks1 != ks; i++) {}
 				if (ks1 && ks1 == ks && (ks1=XkbKeycodeToKeysym(dpy, kc, group, i)) && ks1!=ks) {
 					b->txt[l]=NULL;
-					ksText_(b->ks[l]=ks1,&b->txt[l],&is_sym);
+					if (ksText_(b->ks[l]=ks1,&b->txt[l],&is_sym) || b0->txt[l]!=b->txt[l]) {
+#ifdef CACHE_SIZES
+						b->txt_size[l]=0;
+#endif
+#ifdef CACHE_PIX
+						for (i=0; i<4; i++) b->pix[(l<<2)|i]=0;
+#endif
+					}
 				}
 			}
 		}
@@ -784,6 +786,7 @@ void kb_size(keyboard *kb) {
 	button *b;
 	int i,j,k;
 	box *vbox, *bx;
+	static unsigned long long init_cnt = 0;
 
 	// [virtual] kb size based on buttons
 	w=0; h=0;
@@ -880,18 +883,20 @@ void kb_size(keyboard *kb) {
 			for(ip=((box *)listp->data)->root_kid; ip; ip= ip->next) {
 				b = (button *)ip->data;
 				if (!b->width && bx->undef) bx->width += (b->width = div(w - bx->width, bx->undef--).quot);
+				if (init_cnt) {
 #ifdef CACHE_SIZES
-				b->txt_size[0] = 0;
+				    memset(&b->txt_size,0,sizeof(b->txt_size));
 #endif
 #ifdef CACHE_PIX
-				for (k=0; k<(STD_LEVELS<<2); k++) {
+				    for (k=0; k<(STD_LEVELS<<2); k++) {
 					Pixmap pix=b->pix[k];
 					if (pix) {
-						for (j=k; j<(STD_LEVELS<<2); j++) if (b->pix[j] == pix) b->pix[j]=NULL;
+						for (j=k; j<(STD_LEVELS<<2); j++) if (b->pix[j] == pix) b->pix[j]=0;
 						XFreePixmap(b->kb->display, pix);
 					}
-				}
+				    }
 #endif
+				}
 				button_calc_vwidth(b);
 				button_calc_vheight(b);
 				if (!(b->flags & STATE(OBIT_WIDTH_SPEC))) {
@@ -1040,6 +1045,7 @@ void kb_size(keyboard *kb) {
     for (N=0; N<1024; N++)
 #endif
     if (cache_pix>1) for(i=0;i<kb->total_layouts;i++) cache_preload(kb,i);
+    init_cnt++;
 }
 
 void
