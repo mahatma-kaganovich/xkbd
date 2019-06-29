@@ -936,10 +936,15 @@ void kb_size(keyboard *kb) {
 
 
 	/* Set all single char widths to the max one, figure out minimum sizes */
-	if (1 || max_single_char_width || max_single_char_height) {
+//	if (1 || max_single_char_width || max_single_char_height) {
 		max_single_char_height += 2;
 		for(i=0;i<kb->total_layouts;i++) {
 			box *vbox = kb->kbd_layouts[i];
+			kb->vbox = vbox;
+			if (!cache_pix) {
+				vbox->vx = vbox->x;
+				vbox->vy = vbox->y;
+			}
 			for (listp = vbox->root_kid; listp; listp = listp->next) {
 				int tmp_width = 0;
 				int tmp_height = 0;
@@ -971,44 +976,42 @@ void kb_size(keyboard *kb) {
 			if ((i > 0) && vbox->min_height > kb->kbd_layouts[0]->min_height)
 				kb->kbd_layouts[0]->min_height = vbox->min_height;
 			vbox->min_width = max_width;
-		}
-		for (listp = kb->vbox->root_kid; listp; listp = listp->next) {
+
+		    for (listp = vbox->root_kid; listp; listp = listp->next) {
 			int cx = 0;
 			//int total = 0;
 			int y_pad = 0;
 			bx = (box *)listp->data;
 			bx->y = cy;
 			bx->x = 0;
-			y_pad =  ldiv((unsigned long)bx->min_height * kb->vbox->act_height,kb->vbox->min_height).quot;
+			y_pad =  ldiv((unsigned long)bx->min_height * vbox->act_height,vbox->min_height).quot;
 			for(ip=bx->root_kid; ip; ip= ip->next) {
 				int but_total_width;
 				b = (button *)ip->data;
 				b->x = cx; /*remember relative to holding box ! */
 				but_total_width = b->vwidth+(2*b->b_size);
-				b->x_pad = ldiv((unsigned long) but_total_width * kb->vbox->act_width,bx->min_width).quot;
+				b->x_pad = ldiv((unsigned long) but_total_width * vbox->act_width,bx->min_width).quot;
 				b->x_pad -= but_total_width;
-				b->act_width=bx->width?ldiv((unsigned long)b->width*kb->vbox->act_width,bx->width).quot:b->vwidth + b->x_pad + b->b_size*2;
+				b->act_width=bx->width?ldiv((unsigned long)b->width*vbox->act_width,bx->width).quot:b->vwidth + b->x_pad + b->b_size*2;
 				cx += b->act_width;
 				b->y = 0;
 				b->y_pad = y_pad - b->vheight - b->b_size*2;
 				b->act_height = y_pad;
-//				b->act_height = bx->height?ldiv(b->height*kb->vbox->act_height,bx->height).quot:y_pad;
+//				b->act_height = bx->height?ldiv(b->height*vbox->act_height,bx->height).quot:y_pad;
 				/*  hack for using all screen space */
 				if (listp->next == NULL) b->act_height--;
-				b->vx = button_get_abs_x(b);
-				b->vy = button_get_abs_y(b);
-				if (cache_pix) {
-					b->vx -= kb->vbox->x;
-					b->vy -= kb->vbox->y;
-				}
+				b->vx = button_get_abs_x(b) - vbox->x + vbox->vx;
+				b->vy = button_get_abs_y(b) - vbox->y + vbox->vy;
 			}
 			/*  another hack for using up all space */
-			b->x_pad += (kb->vbox->act_width-cx) -1 ;
-			b->act_width += (kb->vbox->act_width-cx) -1;
+			b->x_pad += (vbox->act_width-cx) -1 ;
+			b->act_width += (vbox->act_width-cx) -1;
 			cy += y_pad ; //+ 1;
 			bx->act_height = y_pad;
-			bx->act_width = kb->vbox->act_width;
+			bx->act_width = vbox->act_width;
+		    }
 		}
+/*
 	} else {
 		// new code?
 		int x,y;
@@ -1028,6 +1031,8 @@ void kb_size(keyboard *kb) {
 			y+=bx->act_height;
 		}
 	}
+*/
+	kb->vbox = kb->kbd_layouts[kb->group = 0];
 
 	/* TODO: copy all temp vboxs  */
 
@@ -1075,7 +1080,7 @@ void kb_render(keyboard *kb)
 {
 	list *listp, *ip;
 	XFillRectangle(kb->display, kb->backing,
-		kb->rev_gc, cache_pix?0:kb->vvbox->x, cache_pix?0:kb->vvbox->y,
+		kb->rev_gc, kb->vvbox->vx, kb->vvbox->vy,
 		kb->vvbox->act_width, kb->vvbox->act_height);
 	for (listp = kb->vvbox->root_kid; listp; listp = listp->next) {
 		for(ip=((box *)listp->data)->root_kid; ip; ip= ip->next) {

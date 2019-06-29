@@ -146,6 +146,8 @@ typedef struct _box
   int width;        // relative/mm
   int height;
   int undef;
+  int vx;
+  int vy;
 
   struct _box *parent;  /* pointer to parent keyboard */
 
