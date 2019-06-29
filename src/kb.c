@@ -1053,17 +1053,9 @@ void
 kb_switch_layout(keyboard *kb, int kbd_layout_num, int shift)
 {
   box *b = kb->vbox;
-  int w = b->act_width;
-  int h = b->act_height;
-  int mw = b->min_width;
-  int mh = b->min_height;
 
   for(; kbd_layout_num >= kb->total_layouts; kb->total_layouts++) {
 	kb->kbd_layouts[kb->total_layouts] = b = clone_box(kb->display,kb->kbd_layouts[0],kb->total_layouts);
-	b->act_width = w;
-	b->act_height = h;
-	b->min_width = mw;
-	b->min_height = mh;
 	if (cache_pix>1) cache_preload(kb,kb->total_layouts);
   }
 
