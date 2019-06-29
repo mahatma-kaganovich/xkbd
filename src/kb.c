@@ -940,7 +940,6 @@ void kb_size(keyboard *kb) {
 		max_single_char_height += 2;
 		for(i=0;i<kb->total_layouts;i++) {
 			box *vbox = kb->kbd_layouts[i];
-			kb->vbox = vbox;
 			if (!cache_pix) {
 				vbox->vx = vbox->x;
 				vbox->vy = vbox->y;
@@ -976,7 +975,10 @@ void kb_size(keyboard *kb) {
 			if ((i > 0) && vbox->min_height > kb->kbd_layouts[0]->min_height)
 				kb->kbd_layouts[0]->min_height = vbox->min_height;
 			vbox->min_width = max_width;
-
+		}
+		for(i=0;i<kb->total_layouts;i++) {
+		    box *vbox = kb->kbd_layouts[i];
+		    kb->vbox = vbox;
 		    for (listp = vbox->root_kid; listp; listp = listp->next) {
 			int cx = 0;
 			//int total = 0;
