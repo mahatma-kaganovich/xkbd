@@ -920,10 +920,6 @@ void kb_size(keyboard *kb) {
 	    kb->backing = XCreatePixmap(kb->display, kb->win,
 		kb->vbox->act_width, kb->vbox->act_height,
 		DefaultDepth(kb->display, DefaultScreen(kb->display)) );
-
-	    XFillRectangle(kb->display, kb->backing,
-		  kb->rev_gc, 0, 0,
-		  kb->vbox->act_width, kb->vbox->act_height);
 	// runtime disabling cache -> direct rendering
 	} else kb->backing = kb->win;
 
@@ -1078,6 +1074,9 @@ kb_switch_layout(keyboard *kb, int kbd_layout_num, int shift)
 void kb_render(keyboard *kb)
 {
 	list *listp, *ip;
+	XFillRectangle(kb->display, kb->backing,
+		kb->rev_gc, cache_pix?0:kb->vvbox->x, cache_pix?0:kb->vvbox->y,
+		kb->vvbox->act_width, kb->vvbox->act_height);
 	for (listp = kb->vvbox->root_kid; listp; listp = listp->next) {
 		for(ip=((box *)listp->data)->root_kid; ip; ip= ip->next) {
 			button *b = (button *)ip->data;

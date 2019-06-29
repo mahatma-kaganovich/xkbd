@@ -242,6 +242,10 @@ int button_calc_vwidth(button *b)
 	_button_get_txt_size(b->kb, MOD_TXT(b))
     ));
 #endif
+  if (b->vwidth < 2
+//	&& !(DEFAULT_KS(b) || SHIFT_KS(b) || MOD_KS(b)) &&
+//	DEFAULT_TXT(b) == NULL && SHIFT_TXT(b) == NULL && MOD_TXT(b) == NULL
+  ) b->flags|=STATE(OBIT_DIRECT); // reuse bit as blank/spacer
 
   return b->vwidth;
 }
@@ -289,21 +293,20 @@ int button_render(button *b, int mode)
   XftColor tmp_col;
 #endif
 
-  int x,y,l=KBLEVEL(b);
+  int l=KBLEVEL(b);
+  int x = b->vx;
+  int y = b->vy;
   char *txt;
   keyboard *kb = b->kb;
 
-  x = b->vx;
-  y = b->vy;
 
 #ifdef CACHE_PIX
   Pixmap pix;
   int i, m, j;
 
+   // reuse bit as blank/spacer
+  if (b->flags & STATE(OBIT_DIRECT)) return 1;
   if (cache_pix) {
-	if (!(DEFAULT_KS(b) || SHIFT_KS(b) || MOD_KS(b)) &&
-		DEFAULT_TXT(b) == NULL && SHIFT_TXT(b) == NULL && MOD_TXT(b) == NULL
-    	    ) return 1;  /* its a 'blank' button - just a spacer */
 
 #if OBIT_PRESSED == 2 && OBIT_LOCKED == 3
     m = ((mode>>2)&3);
@@ -379,7 +382,8 @@ int button_render(button *b, int mode)
     }
 
   /* -- but color  gc1*/
-  XFillRectangle( kb->display, kb->backing, gc_solid,
+  if (mode & STATE(OBIT_DIRECT) || gc_solid!=kb->rev_gc)
+	XFillRectangle( kb->display, kb->backing, gc_solid,
 		  x, y, b->act_width, b->act_height );
 
   /* -- kb gc */
