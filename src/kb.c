@@ -496,8 +496,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
   kb->key_delay_repeat = 50;
   kb->key_repeat       = -1;
 
-  kb->total_layouts = 0;
-
+  kb->line_width = 1;
 
   kb_load_keymap(display);
 
@@ -634,6 +633,10 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		  _set_color_fg(kb,tmpstr_C,&kb->grey_gc,NULL);
 		else if (!strcmp(tmpstr_A, "kp_col"))
 		  _set_color_fg(kb,tmpstr_C,&kb->kp_gc,NULL);
+		else if (strcmp(tmpstr_A, "border_width") == 0)
+			kb->line_width=atoi(tmpstr_C);
+		else if (strcmp(tmpstr_A, "button_padding") == 0)
+			kb->pad=atoi(tmpstr_C);
 		else if (strcmp(tmpstr_A, "width") == 0)
 			kb->width=atoi(tmpstr_C);
 		else if (strcmp(tmpstr_A, "height") == 0)
@@ -749,7 +752,10 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
       line_no++;
     }
 
-  if (kb->theme==square) XSetLineAttributes(display, kb->bdr_gc, 1, LineSolid, CapButt, JoinMiter);
+    switch  (kb->theme) {
+	case square: XSetLineAttributes(display, kb->bdr_gc, kb->line_width, LineSolid, CapButt, JoinMiter); break;
+	case rounded: XSetLineAttributes(display, kb->bdr_gc, kb->line_width, LineSolid, CapRound, JoinRound); break;
+    }
 
   kb->key_delay_repeat1 = kb->key_delay_repeat;
   kb->key_repeat1 = kb->key_repeat;

@@ -164,6 +164,9 @@ typedef struct _keyboard
 
   long width, height; // mm|relative
 
+  int line_width;
+  int pad;
+
   Window win;
   Display *display;
 #ifdef CACHE_PIX
