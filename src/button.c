@@ -306,11 +306,10 @@ int button_render(button *b, int mode)
   p <<= 1;
   int aw = b->act_width - p;
   int ah = b->act_height - p;
-  int i;
 
 #ifdef CACHE_PIX
   Pixmap pix;
-  int m, j;
+  int i, m, j;
 
    // reuse bit as blank/spacer
   if (b->flags & STATE(OBIT_DIRECT)) return 1;

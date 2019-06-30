@@ -755,6 +755,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
     switch  (kb->theme) {
 	case square: XSetLineAttributes(display, kb->bdr_gc, kb->line_width, LineSolid, CapButt, JoinMiter); break;
 	case rounded: XSetLineAttributes(display, kb->bdr_gc, kb->line_width, LineSolid, CapRound, JoinRound); break;
+	case plain: kb->line_width = 0; break;
     }
 
   kb->key_delay_repeat1 = kb->key_delay_repeat;
