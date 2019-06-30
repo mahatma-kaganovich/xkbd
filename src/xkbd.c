@@ -316,7 +316,7 @@ Options:\n\
   -h  this help\n", IAM);
 				for (res=0; (res1=&resources[res])->param; res++) {
 					char *t,*h=res1->help?:"";
-					if (res1->ptr)
+					if (!res1->ptr) continue;
 					switch (res1->type) {
 					case 0:t="string";break;
 					case 1:t="int";break;
@@ -328,9 +328,9 @@ Options:\n\
 			}
 		};
 		res1->name = ""; // top priority
-		if (res1->ptr)
 		switch (res1->type) {
 		    case 0: 
+			if (res1->ptr)
 			*(char **)res1->ptr = *argv[++i]?argv[i]:NULL;
 			break;
 		    case 1:
