@@ -239,18 +239,18 @@ void kb_find_button_siblings(button *b) {
 	box *bx1 = (box*)b->parent;
 	box *vbox = bx1->parent, *bx;
 	list *listp, *ip;
-	int bord = 1;
 	int x1 = b->x + bx1->x;
 	int y1 = b->y + bx1->y;
 	int x2 = x1 + b->act_width;
 	int y2 = y1 + b->act_height;
 	int i;
 	int n=0;
+	button *buf[MAX_SIBLINGS];
+	int bord = 1;
 	x1 -= bord;
 	y1 -= bord;
 	x2 += bord;
 	y2 += bord;
-	button *buf[MAX_SIBLINGS];
 
 	for (listp = vbox->root_kid; listp; listp = listp->next) {
 		bx = (box *)listp->data;
@@ -619,10 +619,13 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		     _kb_load_font(kb,tmpstr_C );
 		else if (strcmp(tmpstr_A, "button_style") == 0)
 		  {
-		    if (strcmp(tmpstr_C, "square") == 0)
+		    if (strcmp(tmpstr_C, "square") == 0) {
 		      kb->theme = square;
-		    else if (strcmp(tmpstr_C, "plain") == 0)
+		    } else if (strcmp(tmpstr_C, "plain") == 0)
 		      kb->theme = plain;
+		    if (kb->theme != rounded)
+			XSetLineAttributes(display, kb->bdr_gc, 1, LineSolid, CapButt, JoinMiter);
+
 		  }
 		else if (strcmp(tmpstr_A, "col") == 0)
 		  _set_color_fg(kb,tmpstr_C,&kb->rev_gc,NULL);
@@ -1577,12 +1580,12 @@ button * kb_find_button(keyboard *kb, int x, int y)
 		bx = (box *)listp->data;
 		i = bx->y;
 		if (y < i) break;
-		if (y > i+bx->act_height) continue;
+		if (y >= i+bx->act_height) continue;
 		for(ip=bx->root_kid; ip; ip=ip->next) {
 			tmp_but = (button *)ip->data;
 			i = tmp_but->x+bx->x;
 			if (x<i) break;
-			if (x>i+tmp_but->act_width) continue;
+			if (x>=i+tmp_but->act_width) continue;
 //			i = tmp_but->y+bx->y
 //			if (y<i) break;
 //			if (y>i+tmp_but->act_height) continue;

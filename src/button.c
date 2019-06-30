@@ -387,16 +387,13 @@ int button_render(button *b, int mode)
 #endif
     }
 
-  /* -- but color  gc1*/
-//  if (gc_solid!=kb->filled)
   if (!kb->filled || (gc_solid!=kb->filled && getGCFill(kb,kb->filled)!=getGCFill(kb,gc_solid)))
 	XFillRectangle( kb->display, kb->backing, gc_solid,
-		  x, y, b->act_width, b->act_height );
+		x, y, b->act_width, b->act_height );
 
-  /* -- kb gc */
-  if (kb->theme != plain)
-    XDrawRectangle( kb->display, kb->backing, kb->bdr_gc,
-		    x, y, b->act_width, b->act_height );
+  if (kb->theme == rounded || (kb->theme == square && !(mode & STATE(OBIT_DIRECT))))
+	XDrawRectangle( kb->display, kb->backing, kb->bdr_gc,
+		x, y, b->act_width, b->act_height);
 
   if (kb->theme == rounded)
     {
