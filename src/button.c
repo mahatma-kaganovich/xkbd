@@ -387,25 +387,34 @@ int button_render(button *b, int mode)
 #endif
     }
 
+  int x1=x, y1=y, x2=b->act_width, y2=b->act_height;
+  switch (kb->theme) {
+    case rounded:
+    case square:
+	x1++;
+	y1++;
+	x2-=2;
+	y2-=2;
+  }
+
   if (!kb->filled || (gc_solid!=kb->filled && getGCFill(kb,kb->filled)!=getGCFill(kb,gc_solid)))
-	XFillRectangle( kb->display, kb->backing, gc_solid,
-		x, y, b->act_width, b->act_height );
+	XFillRectangle(kb->display, kb->backing, gc_solid, x1, y1, x2, y2);
 
-  if (kb->theme == rounded || (kb->theme == square && !(mode & STATE(OBIT_DIRECT))))
-	XDrawRectangle( kb->display, kb->backing, kb->bdr_gc,
-		x, y, b->act_width, b->act_height);
-
-  if (kb->theme == rounded)
-    {
-      XDrawPoint( kb->display, kb->backing, kb->bdr_gc, x+1, y+1);
-      XDrawPoint( kb->display, kb->backing,
-		  kb->bdr_gc, x+b->act_width-1, y+1);
-      XDrawPoint( kb->display, kb->backing,
-		  kb->bdr_gc, x+1, y+b->act_height-1);
-      XDrawPoint( kb->display, kb->backing,
-		  kb->bdr_gc, x+b->act_width-1,
-		  y+b->act_height-1);
-    }
+  switch (kb->theme) {
+    case rounded:
+	XDrawRectangle( kb->display, kb->backing, kb->bdr_gc, x, y, b->act_width, b->act_height);
+	x2+=x;
+	y2+=y;
+	XDrawPoint(kb->display, kb->backing, kb->bdr_gc, x1, y1);
+	XDrawPoint(kb->display, kb->backing, kb->bdr_gc, x2, y1);
+	XDrawPoint(kb->display, kb->backing, kb->bdr_gc, x1, y2);
+	XDrawPoint(kb->display, kb->backing, kb->bdr_gc, x2, y2);
+	break;
+    case square:
+	if (!(mode & STATE(OBIT_DIRECT)))
+	    XDrawRectangle( kb->display, kb->backing, kb->bdr_gc, x, y, b->act_width, b->act_height);
+	break;
+  }
 
   if (b->pixmap)
     {

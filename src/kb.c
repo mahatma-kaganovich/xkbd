@@ -619,13 +619,10 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		     _kb_load_font(kb,tmpstr_C );
 		else if (strcmp(tmpstr_A, "button_style") == 0)
 		  {
-		    if (strcmp(tmpstr_C, "square") == 0) {
-		      kb->theme = square;
-		    } else if (strcmp(tmpstr_C, "plain") == 0)
+		    if (strcmp(tmpstr_C, "square") == 0)
+		        kb->theme = square;
+		    else if (strcmp(tmpstr_C, "plain") == 0)
 		      kb->theme = plain;
-		    if (kb->theme != rounded)
-			XSetLineAttributes(display, kb->bdr_gc, 1, LineSolid, CapButt, JoinMiter);
-
 		  }
 		else if (strcmp(tmpstr_A, "col") == 0)
 		  _set_color_fg(kb,tmpstr_C,&kb->rev_gc,NULL);
@@ -751,6 +748,8 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 	}
       line_no++;
     }
+
+  if (kb->theme==square) XSetLineAttributes(display, kb->bdr_gc, 1, LineSolid, CapButt, JoinMiter);
 
   kb->key_delay_repeat1 = kb->key_delay_repeat;
   kb->key_repeat1 = kb->key_repeat;
