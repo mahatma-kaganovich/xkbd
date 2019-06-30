@@ -280,6 +280,12 @@ int button_set_b_size(button *b, int size)
    return size;
 }
 
+unsigned long getGCFill(keyboard *kb, GC gc){
+	XGCValues v;
+	XGetGCValues(kb->display,gc,GCForeground,&v);
+	return v.foreground;
+}
+
 int button_render(button *b, int mode)
 {
   /*
@@ -319,7 +325,7 @@ int button_render(button *b, int mode)
 	if (mode & STATE(OBIT_DIRECT)) {
 		XCopyArea(kb->display, pix, kb->win, kb->gc,
 		0, 0, b->act_width, b->act_height,
-		x+kb->vbox->x, y+kb->vbox->y);
+		x+kb->vvbox->x, y+kb->vvbox->y);
 		return 1;
 	} else {
 		XCopyArea(kb->display, pix, kb->backing, kb->gc,
@@ -382,7 +388,8 @@ int button_render(button *b, int mode)
     }
 
   /* -- but color  gc1*/
-  if (mode & STATE(OBIT_DIRECT) || gc_solid!=kb->rev_gc)
+//  if (gc_solid!=kb->filled)
+  if (!kb->filled || (gc_solid!=kb->filled && getGCFill(kb,kb->filled)!=getGCFill(kb,gc_solid)))
 	XFillRectangle( kb->display, kb->backing, gc_solid,
 		  x, y, b->act_width, b->act_height );
 
@@ -490,7 +497,7 @@ void button_paint(button *b)
 
 	XCopyArea(b->kb->display, b->kb->backing, b->kb->win, b->kb->gc,
 	    x, y, b->act_width, b->act_height,
-	    x+b->kb->vbox->x, y+b->kb->vbox->y);
+	    x+b->kb->vvbox->x, y+b->kb->vvbox->y);
 #endif
 }
 
@@ -503,7 +510,7 @@ int button_get_abs_x(button *b)
       total += tmp_box->x;
       tmp_box = tmp_box->parent;
     }
-  /* total = total - b->kb->vbox->x;  HACK ! */
+  /* total = total - b->kb->vvbox->x;  HACK ! */
 
   return total;
 }

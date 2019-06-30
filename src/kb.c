@@ -1054,16 +1054,18 @@ void kb_size(keyboard *kb) {
 void
 kb_switch_layout(keyboard *kb, int kbd_layout_num, int shift)
 {
-  box *b = kb->vbox;
+  box *b;
+  box *b0 = kb->vvbox;
 
   for(; kbd_layout_num >= kb->total_layouts; kb->total_layouts++) {
-	kb->kbd_layouts[kb->total_layouts] = b = clone_box(kb->display,kb->kbd_layouts[0],kb->total_layouts);
+	kb->kbd_layouts[kb->total_layouts] = clone_box(kb->display,kb->kbd_layouts[0],kb->total_layouts);
 	if (cache_pix>1) cache_preload(kb,kb->total_layouts);
   }
 
   b = kb->kbd_layouts[kb->group = kbd_layout_num];
   kb->vbox = b;
   if (!shift) kb->vvbox = b;
+  if (b0 == kb->vvbox) return;
 
 //  kb_size(kb);
   kb_render(kb);
@@ -1074,7 +1076,7 @@ void kb_render(keyboard *kb)
 {
 	list *listp, *ip;
 	XFillRectangle(kb->display, kb->backing,
-		kb->rev_gc, kb->vvbox->vx, kb->vvbox->vy,
+		kb->filled=kb->rev_gc, kb->vvbox->vx, kb->vvbox->vy,
 		kb->vvbox->act_width, kb->vvbox->act_height);
 	for (listp = kb->vvbox->root_kid; listp; listp = listp->next) {
 		for(ip=((box *)listp->data)->root_kid; ip; ip= ip->next) {
@@ -1082,6 +1084,7 @@ void kb_render(keyboard *kb)
 			button_render(b, (b->modifier & kb->state_locked)?STATE(OBIT_LOCKED):(b->modifier & kb->state)?STATE(OBIT_PRESSED):0);
 		}
 	}
+	kb->filled=NULL;
 }
 
 void kb_paint(keyboard *kb)

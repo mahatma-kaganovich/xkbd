@@ -181,6 +181,8 @@ typedef struct _keyboard
   GC grey_gc;
   GC kp_gc;
 
+  GC filled;
+
   XFontStruct* font_info;
   unsigned int state;  /* shifted | caps | modded | normal */
   unsigned int state_locked;  /* shifted | modded | normal */
