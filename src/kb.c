@@ -1536,16 +1536,18 @@ void kb_send_keypress(button *b, unsigned int next_state, unsigned int flags) {
 #else
 	unsigned int l = KBLEVEL(b);
 #endif
-	unsigned int mods = b->mods[l];
+	unsigned int mods, mods0;
 	Display *dpy = b->kb->display;
-	unsigned int mods0 = b->kb->state_locked & KB_STATE_KNOWN;
 
 #ifndef MINIMAL
-	if (!Xkb_sync) 
+	if (Xkb_sync) {
+		mods = b->mods[l];
+		mods0 = b->kb->state_locked & KB_STATE_KNOWN;
+	} else
 #endif
 	{
 		mods0 = saved_mods;
-		saved_mods = next_state = mods;
+		saved_mods = next_state = mods = b->kb->state|b->kb->state_locked;
 	}
 
 	if (b->kc[l]<minkc || b->kc[l]>maxkc) return;
@@ -1557,12 +1559,12 @@ void kb_send_keypress(button *b, unsigned int next_state, unsigned int flags) {
 		_xsync(True);
 	} else mods = b->kb->state;
 	if (!(b->flags & STATE(OBIT_PRESSED))) {
-		XTestFakeKeyEvent(b->kb->display, b->kc[l], True, 0);
+		XTestFakeKeyEvent(dpy, b->kc[l], True, 0);
 		_xsync(True);
 		b->flags |= STATE(OBIT_PRESSED);
 	}
 	if (!(flags & STATE(OBIT_PRESSED))) {
-		XTestFakeKeyEvent(b->kb->display, b->kc[l], False, 0);
+		XTestFakeKeyEvent(dpy, b->kc[l], False, 0);
 		_xsync(True);
 		b->flags &= ~STATE(OBIT_PRESSED);
 	}

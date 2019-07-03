@@ -237,7 +237,7 @@ int main(int argc, char **argv)
    int xkbEventType = 0;
 
    int i,j,w,h;
-   char *s;
+   char *s,*r;
    char userconffile[256];
    FILE *fp;
    KeySym mode_switch_ksym;
@@ -333,10 +333,14 @@ Options:\n\
 			*(char **)res1->ptr = *argv[++i]?argv[i]:NULL;
 			break;
 		    case 1:
-			*(int *)res1->ptr = atoi(argv[++i]);
-			break;
 		    case 2:
-			*(int *)res1->ptr = 1;
+			j = strtol(argv[++i],&r,10);
+			if (!*r && r!=argv[i]) {
+				*(int *)res1->ptr = j;
+			} else if (res1->type == 1){
+				fprintf(stderr,"%s: invalid option value: %s %s\n",IAM,s,argv[i]);
+//				exit(1);
+			} else i--;
 			break;
 		}
 		res1->ptr = NULL;
@@ -374,7 +378,13 @@ stop_argv:
 			break;
 		case 1:
 		case 2:
-			*(int *)res1->ptr=atoi((char *)val.addr);
+			j = strtol((char *)val.addr,&r,10);
+			if (!*r && r!=(char *)val.addr) {
+				*(int *)res1->ptr = j;
+			} else if (res1->type == 1){
+				fprintf(stderr,"%s: invalid xrdb value: %s %s\n",IAM,s,(char *)val.addr);
+//				exit(1);
+			};
 			break;
 		}
 	}
@@ -613,9 +623,8 @@ re_crts:
 		if (Xkb_sync) {
 			XkbSelectEvents(display,XkbUseCoreKbd,XkbAllEventsMask,XkbNewKeyboardNotifyMask|XkbStateNotifyMask);
 			XkbSelectEventDetails(display,XkbUseCoreKbd,XkbStateNotifyMask,XkbAllStateComponentsMask,XkbModifierStateMask|XkbModifierLatchMask|XkbModifierLockMask|XkbModifierBaseMask);
-		} else {
+		} else
 			XkbSelectEvents(display,XkbUseCoreKbd,XkbAllEventsMask,XkbNewKeyboardNotifyMask);
-		}
 	} else xkbEventType = 0;
 #endif
 
