@@ -1486,7 +1486,7 @@ void kb_process_keypress(button *b, int repeat, unsigned int flags)
     }
     if (state != kb->state || lock != kb->state_locked) {
 #ifndef MINIMAL
-	if (Xkb_sync==1) {
+	if (Xkb_sync) {
 		XSync(dpy,False); // serialize
 		if (st != kb->state & KB_STATE_KNOWN) XkbLatchModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,st);
 		if (st != kb->state_locked & KB_STATE_KNOWN) XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,st);
@@ -1501,10 +1501,10 @@ void kb_process_keypress(button *b, int repeat, unsigned int flags)
 	kb_paint(kb);
    }
 
-   if (layout!=-1) {
+   if (layout) {
     if (layout>-1) {
 #ifndef MINIMAL
-	if (Xkb_sync==1) {
+	if (Xkb_sync) {
 		XSync(dpy,False);
 		XkbLockGroup(dpy, XkbUseCoreKbd, b->layout_switch);
 		XSync(dpy,True);

@@ -225,6 +225,12 @@ int main(int argc, char **argv)
    int x=0, y=0, width=0, height=0;
    int top=0, left=0;
    int crts=0;
+   static int touch_button =
+#ifdef XI
+	0;
+#else
+	1;
+#endif
    static char *conf_file = NULL;
    static char *font_name = NULL;
    static char *font_name1 = NULL;
@@ -235,6 +241,7 @@ int main(int argc, char **argv)
 
    XEvent ev;
    int xkbEventType = 0;
+   long evmask = ExposureMask|StructureNotifyMask|VisibilityChangeMask|ButtonPressMask;
 
    int i,j,w,h;
    char *s,*r;
@@ -259,6 +266,7 @@ int main(int argc, char **argv)
       8=_NET_WM_WINDOW_TYPE_TOOLBAR, 16=_NET_WM_STATE_STICKY.\n\
       32=resize (slock), 64=strut horizontal, 128=_NET_WM_STATE_SKIP_TASKBAR\n\
       For OpenBox I use 178 = $[2+16+32+128]." },
+	{ 't', "xkbd.touch_emulation", 0, 0, &touch_button, "touch over button events" },
 #ifndef MINIMAL
 	{ 'X', "xkbd.sync", 2, 0, &Xkb_sync, "Xkb state interaction: 0=none, 1=sync, 2-semi-sync" },
 #else
@@ -589,18 +597,6 @@ re_crts:
 //      _prop(32,"XdndAware",XA_ATOM,&version,1);
 
 
-      XSelectInput(display, win,
-		   ExposureMask |
-//#ifndef USE_XI
-		   ButtonPressMask |
-		   ButtonReleaseMask |
-		    // may be lost "release" on libinput
-		    // probably need all motions or nothing
-//		   Button1MotionMask |
-		   ButtonMotionMask |
-//#endif
-		   StructureNotifyMask |
-		   VisibilityChangeMask);
 
       if (embed) {
 	 fprintf(stdout, "%li\n", win);
@@ -640,7 +636,6 @@ re_crts:
 	// keep "button" events in standard events while
 //	XISetMask(mask.mask, XI_ButtonPress);
 //	XISetMask(mask.mask, XI_ButtonRelease);
-
 //	XISetMask(mask.mask, XI_Motion);
 
 	XISetMask(mask.mask, XI_TouchBegin);
@@ -650,6 +645,13 @@ re_crts:
 	xi = 1;
       }
 #endif
+	// may be lost "release" on libinput
+	// probably need all motions or nothing
+	// button events required for mouse only or if XI not used
+//	Button1MotionMask |
+      if (touch_button) evmask|=ButtonMotionMask|ButtonReleaseMask;
+      XSelectInput(display, win, evmask);
+
       XSetErrorHandler(xerrh);
       XSync(display, False);
 
@@ -657,6 +659,7 @@ re_crts:
       {
 	    int type = 0;
 	    XNextEvent(display, &ev);
+//	    if (ev.type<35) fprintf(stderr,"+%i ",ev.type);
 	    switch (ev.type) {
 #ifdef USE_XI
 		case GenericEvent: if (xi && ev.xcookie.extension == xiopcode
@@ -682,6 +685,11 @@ re_crts:
 	    case ButtonRelease: type++;
 	    case MotionNotify: type++;
 	    case ButtonPress:
+		// motions concurrent with updates and flooding,
+		// but required to avoid release loss.
+		// separate button from touch & motion from update:
+		// button press -> release for mouse
+		if (!touch_button) type=2; 
 		xkbd_process(kb, type, ev.xmotion.x, ev.xmotion.y, 0, 0, ev.xmotion.time);
 		break;
 	    case ClientMessage:

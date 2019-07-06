@@ -30,8 +30,8 @@
 GC _createGC(Display *display, Window win)
 {
   GC gc;
-  unsigned long valuemask = 0;
-  XGCValues values;
+  unsigned long valuemask = GCGraphicsExposures;
+  XGCValues values = {};
 
   gc = XCreateGC(display, win, valuemask, &values);
   XSetForeground(display, gc,
