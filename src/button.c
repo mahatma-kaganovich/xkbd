@@ -200,7 +200,7 @@ int _button_get_txt_size(keyboard *kb, char *txt)
 
 int _but_size(button *b, int l){
 #ifdef CACHE_SIZES
-	int i,s;
+	int i,s=0;
 	if (!(s=b->txt_size[l])) {
 		// set size=1 to empty as checked
 		s=_button_get_txt_size(b->kb, b->txt[i])?:1;
@@ -241,16 +241,10 @@ int button_calc_vheight(button *b)
   if (b->vheight) return b->vheight; /*already calculated from image or height param */
 
 #ifdef USE_XFT
-  if (b->kb->render_type == xft)
-    {
-      b->vheight =
-	b->kb->xftfont->height;
-    } else {
+  if (b->kb->render_type == xft) b->vheight = b->kb->xftfont->height;
+  else
 #endif
       b->vheight = b->kb->font_info->ascent + b->kb->font_info->descent;
-#ifdef USE_XFT
-    }
-#endif
   return b->vheight;
 }
 
@@ -410,26 +404,20 @@ int button_render(button *b, int mode)
 	break;
   }
 
+  int yy = y+((h - b->vheight)>>1);
+
   if (b->pixmap)
     {
       /* TODO: improve alignment of images, kinda hacked at the mo ! */
       XGCValues gc_vals;
-      unsigned long valuemask = 0;
+      int xx = x+((w-b->vwidth)>>1);
 
-
-      XSetClipMask(kb->display, b->mask_gc,*(b->mask));
-
-      gc_vals.clip_x_origin = x+(b->x_pad/2)+b->b_size;
-      gc_vals.clip_y_origin = y+b->vheight+(b->y_pad/2) +
-	                              b->b_size-b->vheight +2;
-      valuemask =  GCClipXOrigin | GCClipYOrigin ;
-      XChangeGC(kb->display, b->mask_gc, valuemask, &gc_vals);
+      gc_vals.clip_x_origin = xx;
+      gc_vals.clip_y_origin = yy;
+      XChangeGC(kb->display, b->mask_gc, GCClipXOrigin|GCClipYOrigin, &gc_vals);
 
       XCopyArea(kb->display, *(b->pixmap), kb->backing, b->mask_gc,
-		0, 0, b->vwidth,
-		b->vheight, x+(b->x_pad/2)+b->b_size,
-		y +b->vheight+(b->y_pad/2) -b->vheight + b->b_size+2
-      );
+		0, 0, b->vwidth, b->vheight, xx, yy);
       goto pixmap; /* imgs cannot have text aswell ! */
     }
 
@@ -444,39 +432,17 @@ int button_render(button *b, int mode)
  
   if (txt)
     {
-       int xspace;
-       //if (b->vwidth > _button_get_txt_size(kb,txt))
-//       xspace = x+((b->act_width - _button_get_txt_size(kb,txt))/2);
-       xspace = x+((w - _but_size(b,l))>>1);
-    
-//       xspace = x+((b->act_width - b->vwidth)/2);
-	  //else
-	  //xspace = x+((b->vwidth)/2);
-	  //xspace = x+(b->x_pad/2)+b->b_size;
+    int xx = x+((w - _but_size(b,l))>>1);
 #ifdef USE_XFT
     if (kb->render_type == xft)
-      {
-	int y_offset = ((b->vheight + b->y_pad) - kb->xftfont->height)/2;
 	 XftDrawStringUtf8(kb->xftdraw, &tmp_col, strlen1utf8(txt)?kb->xftfont1:kb->xftfont,
-			/*x+(b->x_pad/2)+b->b_size, */
-			xspace,
-			/* y + b->vheight + b->b_size + (b->y_pad/2) - 4 */
-			y + y_offset + kb->xftfont->ascent ,
-		       /* y+b->vheight+(b->y_pad/2)-b->b_size, */
+			xx, yy + kb->xftfont->ascent,
 		       (unsigned char *) txt, strlen(txt));
-      }
     else
 #endif
-      {
-	XDrawString(
-		    kb->display, kb->backing, gc_txt,
-		    /*x+(b->x_pad/2)+b->b_size,*/
-		    xspace,
-		    y+b->vheight+(b->y_pad/2)+b->b_size
-		    -4,
-		    txt, strlen(txt)
-		    );
-      }
+	XDrawString(kb->display, kb->backing, gc_txt,
+		    xx, yy + kb->font_info->ascent,
+		    txt, strlen(txt));
     }
 pixmap:
 #ifdef CACHE_PIX
