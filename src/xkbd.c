@@ -659,7 +659,7 @@ re_crts:
       {
 	    int type = 0;
 	    XNextEvent(display, &ev);
-//	    if (ev.type<35) fprintf(stderr,"+%i ",ev.type);
+//	    if (ev.type<36) fprintf(stderr,"+%i ",ev.type);
 	    switch (ev.type) {
 #ifdef USE_XI
 		case GenericEvent: if (xi && ev.xcookie.extension == xiopcode

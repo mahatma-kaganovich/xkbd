@@ -235,24 +235,6 @@ int button_calc_vwidth(button *b)
   return b->vwidth;
 }
 
-int button_calc_vheight(button *b)
-{
-
-  if (b->vheight) return b->vheight; /*already calculated from image or height param */
-
-#ifdef USE_XFT
-  if (b->kb->render_type == xft) b->vheight = b->kb->xftfont->height;
-  else
-#endif
-      b->vheight = b->kb->font_info->ascent + b->kb->font_info->descent;
-  return b->vheight;
-}
-
-int button_get_vheight(button *b)
-{
-   return b->vheight;
-}
-
 int button_set_b_size(button *b, int size)
 {
    b->b_size = size;
@@ -404,13 +386,13 @@ int button_render(button *b, int mode)
 	break;
   }
 
-  int yy = y+((h - b->vheight)>>1);
 
   if (b->pixmap)
     {
       /* TODO: improve alignment of images, kinda hacked at the mo ! */
       XGCValues gc_vals;
       int xx = x+((w-b->vwidth)>>1);
+      int yy = y+((h - b->vheight)>>1);
 
       gc_vals.clip_x_origin = xx;
       gc_vals.clip_y_origin = yy;
@@ -433,6 +415,7 @@ int button_render(button *b, int mode)
   if (txt)
     {
     int xx = x+((w - _but_size(b,l))>>1);
+    int yy = y+((h - (b->vheight?:strlen1utf8(txt)?kb->vheight1:kb->vheight))>>1);
 #ifdef USE_XFT
     if (kb->render_type == xft)
 	 XftDrawStringUtf8(kb->xftdraw, &tmp_col, strlen1utf8(txt)?kb->xftfont1:kb->xftfont,

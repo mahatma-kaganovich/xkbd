@@ -870,9 +870,18 @@ void kb_size(keyboard *kb) {
 	if (!kb->xftfont1) kb->xftfont1 = kb->xftfont;
 #endif
 
+#ifdef USE_XFT
+	if (b->kb->render_type == xft) {
+		kb->vheight = max(kb->xftfont->height,kb->xftfont->ascent+kb->xftfont->descent);
+		kb->vheight1 = max(kb->xftfont1->height,kb->xftfont1->ascent+kb->xftfont1->descent);
+	} else
+#endif
+		kb->vheight = kb->vheight1 = b->kb->font_info->ascent + b->kb->font_info->descent;
+
+
 	int cy = 0;
 	int max_single_char_width = 0;
-	int max_single_char_height = 0;
+	int max_single_char_height = kb->vheight1;
 	int max_width = 0; /* required for sizing code */
 
 	for(i=0;i<kb->total_layouts;i++) {
@@ -899,7 +908,6 @@ void kb_size(keyboard *kb) {
 #endif
 				}
 				button_calc_vwidth(b);
-				button_calc_vheight(b);
 				if (!(b->flags & STATE(OBIT_WIDTH_SPEC))) {
 					if ( ( DEFAULT_TXT(b) == NULL || strlen1utf8(DEFAULT_TXT(b)))
 						&& (SHIFT_TXT(b) == NULL || strlen1utf8(SHIFT_TXT(b)))
@@ -938,7 +946,7 @@ void kb_size(keyboard *kb) {
 
 	/* Set all single char widths to the max one, figure out minimum sizes */
 //	if (1 || max_single_char_width || max_single_char_height) {
-		max_single_char_height += 2;
+//		max_single_char_height += 2;
 		for(i=0;i<kb->total_layouts;i++) {
 			box *vbox = kb->kbd_layouts[i];
 			if (!cache_pix) {

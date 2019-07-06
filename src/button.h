@@ -35,10 +35,6 @@ void button_set_slide_ks(button *b, char *txt, int dir);
 int _button_get_txt_size(keyboard *kb, char *txt);
 int button_calc_vwidth(button *b);
 
-int button_calc_vheight(button *b);
-
-int button_get_vheight(button *b);
-
 int button_set_b_size(button *b, int size);
 
 int button_render(button *b, int mode);

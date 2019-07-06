@@ -164,6 +164,9 @@ typedef struct _keyboard
 
   long width, height; // mm|relative
 
+  int vheight;
+  int vheight1;
+
   int line_width;
   int pad;
 
