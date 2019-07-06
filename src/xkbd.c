@@ -266,7 +266,7 @@ int main(int argc, char **argv)
       8=_NET_WM_WINDOW_TYPE_TOOLBAR, 16=_NET_WM_STATE_STICKY.\n\
       32=resize (slock), 64=strut horizontal, 128=_NET_WM_STATE_SKIP_TASKBAR\n\
       For OpenBox I use 178 = $[2+16+32+128]." },
-	{ 't', "xkbd.touch_emulation", 0, 0, &touch_button, "touch over button events" },
+	{ 't', "xkbd.touch_emulation", 2, 0, &touch_button, "touch over button events" },
 #ifndef MINIMAL
 	{ 'X', "xkbd.sync", 2, 0, &Xkb_sync, "Xkb state interaction: 0=none, 1=sync, 2-semi-sync" },
 #else
@@ -685,12 +685,14 @@ re_crts:
 	    case ButtonRelease: type++;
 	    case MotionNotify: type++;
 	    case ButtonPress:
+		xkbd_process(kb, type, ev.xmotion.x, ev.xmotion.y, 0, 0, ev.xmotion.time);
 		// motions concurrent with updates and flooding,
 		// but required to avoid release loss.
 		// separate button from touch & motion from update:
 		// button press -> release for mouse
-		if (!touch_button) type=2; 
-		xkbd_process(kb, type, ev.xmotion.x, ev.xmotion.y, 0, 0, ev.xmotion.time);
+		// ugly mouse workaround, wantfix for oneshot
+		if (!touch_button)
+			xkbd_process(kb, 2, ev.xmotion.x, ev.xmotion.y, 0, 0, ev.xmotion.time);
 		break;
 	    case ClientMessage:
 		if ((ev.xclient.message_type == wm_protocols[1])
