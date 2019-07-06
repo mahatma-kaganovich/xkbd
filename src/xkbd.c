@@ -226,7 +226,7 @@ int main(int argc, char **argv)
    int top=0, left=0;
    int crts=0;
    static int touch_button =
-#ifdef XI
+#ifdef USE_XI
 	0;
 #else
 	1;

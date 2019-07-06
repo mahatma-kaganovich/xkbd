@@ -27,23 +27,21 @@
 #include "button.h"
 
 
-GC _createGC(Display *display, Window win)
+GC _createGC(keyboard *kb, int rev)
 {
-  GC gc;
-  unsigned long valuemask = GCGraphicsExposures;
-  XGCValues values = {};
+	Display *dpy = kb->display;
+	unsigned long b = BlackPixel(dpy, DefaultScreen(dpy));
+	unsigned long w = WhitePixel(dpy, DefaultScreen(dpy));
 
-  gc = XCreateGC(display, win, valuemask, &values);
-  XSetForeground(display, gc,
-		 BlackPixel(display, DefaultScreen(display) ));
-  XSetBackground(display, gc,
-		 WhitePixel(display, DefaultScreen(display) ));
+	XGCValues values = {
+		.foreground=rev?w:b,
+		.background=rev?b:w,
+		.fill_style=FillSolid,
+		.graphics_exposures=0,
+	};
 
-  XSetFillStyle(display, gc, FillSolid);
-
-  return gc;
+	return XCreateGC(dpy, kb->win, GCGraphicsExposures|GCBackground|GCForeground|GCFillStyle, &values);
 }
-
 
 int _XColorFromStr(Display *display, XColor *col, const char *defstr)
 {
@@ -95,17 +93,12 @@ void button_set_pixmap(button *b, char *filename)
     }
 
   /* we'll also be needing a gc for transparency */
-  b->mask_gc = _createGC(b->kb->display,b->kb->win);
+  b->mask_gc = _createGC(b->kb,1);
   /*
   gc_vals.clip_mask = *(b->mask);
   valuemask = GCClipMask;
   XChangeGC(b->kb->display, b->mask_gc, valuemask, &gc_vals);
   */
-  XSetForeground(b->kb->display, b->mask_gc,
-		 WhitePixel(b->kb->display, DefaultScreen(b->kb->display) ));
-  XSetBackground(b->kb->display, b->mask_gc,
-		 BlackPixel(b->kb->display, DefaultScreen(b->kb->display) ));
-
   XSetClipMask(b->kb->display, b->mask_gc, *(b->mask));
 
   b->vwidth  = attrib.width;

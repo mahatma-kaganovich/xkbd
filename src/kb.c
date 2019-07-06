@@ -341,7 +341,7 @@ void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
 	//else
 #endif
 	{
-		if (gc && !*gc) *gc = _createGC(dpy, kb->win);
+		if (gc && !*gc) *gc = _createGC(kb,0);
 		XSetForeground(dpy, *gc, col.pixel );
 	}
 }
@@ -395,16 +395,6 @@ box *clone_box(Display *dpy, box *vbox, int group){
 	return bx;
 }
 
-void _simple_GC(keyboard *kb, GC *gc, int rev) {
-	Display *dpy = kb->display;
-	unsigned long b = BlackPixel(dpy, DefaultScreen(dpy));
-	unsigned long w = WhitePixel(dpy, DefaultScreen(dpy));
-
-	*gc = _createGC(dpy, kb->win);
-	XSetForeground(dpy, *gc, rev?w:b);
-	XSetBackground(dpy, *gc, rev?b:w);
-}
-
 keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		 int kb_width, int kb_height, char *conf_file,
 		 char *font_name, char *font_name1)
@@ -442,14 +432,14 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
   cmp = DefaultColormap(display, DefaultScreen(display));
 
   /* create lots and lots of gc's */
-  _simple_GC(kb,&kb->gc,0);
-  _simple_GC(kb,&kb->rev_gc,1);
-  _simple_GC(kb,&kb->txt_gc,0);
-  _simple_GC(kb,&kb->txt_rev_gc,1);
-  _simple_GC(kb,&kb->bdr_gc,0);
+  kb->gc=_createGC(kb,0);
+  kb->rev_gc=_createGC(kb,1);
+  kb->txt_gc=_createGC(kb,0);
+  kb->txt_rev_gc=_createGC(kb,1);
+  kb->bdr_gc=_createGC(kb,0);
 
-  _simple_GC(kb,&kb->grey_gc,1);
-  _simple_GC(kb,&kb->kp_gc,1);
+  kb->grey_gc=_createGC(kb,1);
+  kb->kp_gc=_createGC(kb,1);
 
 #ifdef USE_XFT
   kb->render_type = xft;

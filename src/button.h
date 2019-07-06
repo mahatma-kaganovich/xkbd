@@ -22,7 +22,7 @@ button* button_new(keyboard *k);
 
 int _max3( int a, int b, int c );
 
-GC _createGC(Display *display, Window win);
+GC _createGC(keyboard *kb, int rev);
 
 int _XColorFromStr(Display *display, XColor *col, const char *defstr);
 
