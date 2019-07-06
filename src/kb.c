@@ -37,6 +37,7 @@
 #include "ks2unicode.h"
 #else
 #define __ksText(ks) ""
+#define ksText_(ks,x,y) ""
 #endif
 
 #ifdef DEBUG
@@ -378,7 +379,8 @@ box *clone_box(Display *dpy, box *vbox, int group){
 				    for (i=0; i<100 && (ks1=XkbKeycodeToKeysym(dpy, kc, 0, i)) && ks1 != ks; i++) {}
 				if (ks1 && ks1 == ks && (ks1=XkbKeycodeToKeysym(dpy, kc, group, i)) && ks1!=ks) {
 					b->txt[l]=NULL;
-					if (ksText_(b->ks[l]=ks1,&b->txt[l],&is_sym) || b0->txt[l]!=b->txt[l]) {
+					b->ks[l]=ks1;
+					if (ksText_(ks1,&b->txt[l],&is_sym) || b0->txt[l]!=b->txt[l]) {
 #ifdef CACHE_SIZES
 						b->txt_size[l]=0;
 #endif
@@ -1428,9 +1430,7 @@ void kb_process_keypress(button *b, int repeat, unsigned int flags)
     int layout = b->layout_switch;
     int keypress = 1;
     unsigned int st,st0;
-#ifndef MINIMAL
     Display *dpy = kb->display;
-#endif
 
     DBG("got release state %i %i %i %i \n", state, STATE(KBIT_SHIFT), STATE(KBIT_MOD), STATE(KBIT_CTRL) );
 
@@ -1486,7 +1486,7 @@ void kb_process_keypress(button *b, int repeat, unsigned int flags)
     }
     if (state != kb->state || lock != kb->state_locked) {
 #ifndef MINIMAL
-	if (Xkb_sync) {
+	if (Xkb_sync==1) {
 		XSync(dpy,False); // serialize
 		if (st != kb->state & KB_STATE_KNOWN) XkbLatchModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,st);
 		if (st != kb->state_locked & KB_STATE_KNOWN) XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,st);
@@ -1504,7 +1504,7 @@ void kb_process_keypress(button *b, int repeat, unsigned int flags)
    if (layout!=-1) {
     if (layout>-1) {
 #ifndef MINIMAL
-	if (Xkb_sync) {
+	if (Xkb_sync==1) {
 		XSync(dpy,False);
 		XkbLockGroup(dpy, XkbUseCoreKbd, b->layout_switch);
 		XSync(dpy,True);
@@ -1524,12 +1524,12 @@ void kb_process_keypress(button *b, int repeat, unsigned int flags)
 }
 
 #ifndef MINIMAL
-#define _xsync(x) if (Xkb_sync) XSync(dpy,x)
+#define _xsync(x) if (Xkb_sync==1) XSync(dpy,x)
 #else
 #define _xsync(x)
 #endif
 
-static int saved_mods = 0;
+static unsigned int saved_mods = 0;
 void kb_send_keypress(button *b, unsigned int next_state, unsigned int flags) {
 #ifdef SLIDES
 	unsigned int l = b->slide?:KBLEVEL(b);
@@ -1547,7 +1547,8 @@ void kb_send_keypress(button *b, unsigned int next_state, unsigned int flags) {
 #endif
 	{
 		mods0 = saved_mods;
-		saved_mods = next_state = mods = b->kb->state|b->kb->state_locked;
+		mods = b->kb->state|b->kb->state_locked;
+		saved_mods = next_state = b->kb->state_locked & KB_STATE_KNOWN;
 	}
 
 	if (b->kc[l]<minkc || b->kc[l]>maxkc) return;

@@ -63,7 +63,7 @@ XWindowAttributes wa0;
 Xkbd *kb = NULL;
 char **exec_cmd;
 
-int Xkb_sync = 0;
+int Xkb_sync = 2;
 int no_lock = 0;
 #ifdef CACHE_PIX
 int cache_pix = 1;
@@ -245,33 +245,33 @@ int main(int argc, char **argv)
    static struct resource {
 	char param;
 	char *name;
-	int type;
+	char type,ch;
 	void *ptr;
 	char *help;
    } __attribute__ ((__packed__)) resources[] = {
-	{ 'g', "xkbd.geometry", 0, &geometry, "(default -0-0, left/top +0+0)\n\
+	{ 'g', "xkbd.geometry", 0, 0, &geometry, "(default -0-0, left/top +0+0)\n\
      ( NOTE: The above will overide the configs font )" },
-	{ 'f', "xkbd.font_name", 0, &font_name, "font" },
-	{ '1', "xkbd.font_name1", 0, &font_name1, "font for 1-char" },
-	{ 'k', "xkbd.conf_file", 0, &conf_file, "keyboard definition file\n\
+	{ 'f', "xkbd.font_name", 0, 0, &font_name, "font" },
+	{ '1', "xkbd.font_name1", 0, 0, &font_name1, "font for 1-char" },
+	{ 'k', "xkbd.conf_file", 0, 0, &conf_file, "keyboard definition file\n\
                       other than" DEFAULTCONFIG },
-	{ 'D', "xkbd.dock", 1, &dock, "Dock/options bitmask: 1=dock, 2=strut, 4=_NET_WM_WINDOW_TYPE_DOCK,\n\
+	{ 'D', "xkbd.dock", 1, 0, &dock, "Dock/options bitmask: 1=dock, 2=strut, 4=_NET_WM_WINDOW_TYPE_DOCK,\n\
       8=_NET_WM_WINDOW_TYPE_TOOLBAR, 16=_NET_WM_STATE_STICKY.\n\
       32=resize (slock), 64=strut horizontal, 128=_NET_WM_STATE_SKIP_TASKBAR\n\
       For OpenBox I use 178 = $[2+16+32+128]." },
 #ifndef MINIMAL
-	{ 'X', "xkbd.sync", 2, &Xkb_sync, "Xkb state interaction" },
+	{ 'X', "xkbd.sync", 2, 0, &Xkb_sync, "Xkb state interaction: 0=none, 1=sync, 2-semi-sync" },
 #else
 	{ 'X' },
 #endif
-	{ 'l', "xkbd.no_lock", 2, &no_lock, "disable modifiers lock" },
+	{ 'l', "xkbd.no_lock", 2, 0, &no_lock, "disable modifiers lock" },
 #ifdef USE_XR
-	{ 'o', "xkbd.output", 0, &output, "xrandr output name" },
+	{ 'o', "xkbd.output", 0, 0, &output, "xrandr output name" },
 #else
 	{ 'o' },
 #endif
 #ifdef CACHE_PIX
-	{ 'C', "xkbd.cache", 1, &cache_pix, "pixmap cache 0=disable, 1=enable/default, 2=preload" },
+	{ 'C', "xkbd.cache", 1, 0, &cache_pix, "pixmap cache 0=disable, 1=enable, 2=preload" },
 #endif
 	{ 0, NULL }
    };
@@ -316,20 +316,21 @@ Options:\n\
   -h  this help\n", IAM);
 				for (res=0; (res1=&resources[res])->param; res++) {
 					char *t,*h=res1->help?:"";
+					void *p;
 					if (!res1->name) continue;
 					switch (res1->type) {
-					case 0:t="string";break;
-					case 1:t="int";break;
-					case 2:printf("  -%c [<%s: 1>]  %s\n",res1->param, res1->name, h);continue;
+					case 0:printf("  -%c <%s>  (string%s%s) %s\n",res1->param, res1->name, *(char **)res1->ptr?"=":"", *(char **)res1->ptr?:"", h);break;
+					case 1:printf("  -%c <%s>  (int=%i) %s\n",res1->param, res1->name, *(int *)res1->ptr, h);break;
+					case 2:printf("  -%c [<%s: 1>]  ([int]=%i) %s\n",res1->param, res1->name, *(int *)res1->ptr, h);break;
 					}
-					printf("  -%c <%s>  (%s) %s\n",res1->param, res1->name, t, h);
 				}
 				exit(0);
 			}
 		};
 		if (!res1->ptr) continue;
+		res1->ch++;
 		switch (res1->type) {
-		    case 0: 
+		    case 0:
 			*(char **)res1->ptr = *argv[++i]?argv[i]:NULL;
 			break;
 		    case 1:
@@ -343,7 +344,6 @@ Options:\n\
 			} else i--;
 			break;
 		}
-		res1->ptr = NULL;
 		break;
 	 }
       }
@@ -369,7 +369,7 @@ stop_argv:
 	int n;
 	val.addr = NULL;
 
-	if (res1->ptr && XrmGetResource(xrm,s,NULL,&type,&val) && val.addr) {
+	if (res1->ptr && !res1->ch && XrmGetResource(xrm,s,NULL,&type,&val) && val.addr) {
 		switch (res1->type) {
 		case 0:
 			*(char **)(res1->ptr) = NULL;
@@ -620,11 +620,11 @@ re_crts:
 	// not found how to get keymap change on XInput, so keep Xkb events
 	int xkbError, reason_rtrn, xkbmjr = XkbMajorVersion, xkbmnr = XkbMinorVersion, xkbop;
 	if (XkbQueryExtension(display,&xkbop,&xkbEventType,&xkbError,&xkbmjr,&xkbmnr)) {
-		if (Xkb_sync) {
-			XkbSelectEvents(display,XkbUseCoreKbd,XkbAllEventsMask,XkbNewKeyboardNotifyMask|XkbStateNotifyMask);
+		unsigned int m = XkbNewKeyboardNotifyMask;
+		if (Xkb_sync) m|=XkbStateNotifyMask;
+		XkbSelectEvents(display,XkbUseCoreKbd,XkbAllEventsMask,m);
+		if (m & XkbStateNotifyMask)
 			XkbSelectEventDetails(display,XkbUseCoreKbd,XkbStateNotifyMask,XkbAllStateComponentsMask,XkbModifierStateMask|XkbModifierLatchMask|XkbModifierLockMask|XkbModifierBaseMask);
-		} else
-			XkbSelectEvents(display,XkbUseCoreKbd,XkbAllEventsMask,XkbNewKeyboardNotifyMask);
 	} else xkbEventType = 0;
 #endif
 

@@ -98,14 +98,15 @@ unsigned int xkbd_sync_state(Xkbd *xkbd, unsigned int mods, unsigned int locked_
 {
 	unsigned int ch=0;
 	int i=0;
-	Display *dpy = xkbd->kb->display;
+	keyboard *kb = xkbd->kb;
+	Display *dpy = kb->display;
 
 //	locked_mods &= STATE(KBIT_CAPS) | ~KB_STATE_KNOWN;
 
-	if (((mods|locked_mods) ^ ((xkbd->kb->state|xkbd->kb->state_locked)) && KB_STATE_KNOWN))
-		ch|=_set_state(&xkbd->kb->state, mods)|_set_state(&xkbd->kb->state_locked, locked_mods);
-	if (group!=xkbd->kb->group){
-		kb_switch_layout(xkbd->kb,group,0);
+	if (((mods|locked_mods) ^ ((kb->state|kb->state_locked)) && KB_STATE_KNOWN))
+		ch|=_set_state(&kb->state, mods)|_set_state(&kb->state_locked, locked_mods);
+	if (group!=kb->group){
+		kb_switch_layout(kb,group,0);
 		ch=0;
 	}
 //	XkbGetIndicatorState(dpy,XkbUseCoreKbd,&i);
