@@ -241,7 +241,7 @@ int main(int argc, char **argv)
 
    XEvent ev;
    int xkbEventType = 0;
-   long evmask = ExposureMask|StructureNotifyMask|VisibilityChangeMask|ButtonPressMask;
+   long evmask = ExposureMask|StructureNotifyMask|VisibilityChangeMask;
 
    int i,j,w,h;
    char *s,*r;
@@ -266,7 +266,7 @@ int main(int argc, char **argv)
       8=_NET_WM_WINDOW_TYPE_TOOLBAR, 16=_NET_WM_STATE_STICKY.\n\
       32=resize (slock), 64=strut horizontal, 128=_NET_WM_STATE_SKIP_TASKBAR\n\
       For OpenBox I use 178 = $[2+16+32+128]." },
-	{ 't', "xkbd.touch_emulation", 2, 0, &touch_button, "touch over button events" },
+	{ 't', "xkbd.touch_emulation", 2, 0, &touch_button, "touch over button events 0=release, 1=all=press|motion|release, 2=press, 3=press|release, 4=none" },
 #ifndef MINIMAL
 	{ 'X', "xkbd.sync", 2, 0, &Xkb_sync, "Xkb state interaction: 0=none, 1=sync, 2-semi-sync" },
 #else
@@ -349,7 +349,10 @@ Options:\n\
 			} else if (res1->type == 1){
 				fprintf(stderr,"%s: invalid option value: %s %s\n",IAM,s,argv[i]);
 //				exit(1);
-			} else i--;
+			} else {
+				*(int *)res1->ptr = 1;
+				i--;
+			}
 			break;
 		}
 		break;
@@ -649,7 +652,12 @@ re_crts:
 	// probably need all motions or nothing
 	// button events required for mouse only or if XI not used
 //	Button1MotionMask |
-      if (touch_button) evmask|=ButtonMotionMask|ButtonReleaseMask;
+      switch (touch_button) {
+      case 0:evmask|=ButtonReleaseMask;break;
+      case 1:evmask|=ButtonPressMask|ButtonMotionMask|ButtonReleaseMask;break;
+      case 2:evmask|=ButtonPressMask;break;
+      case 3:evmask|=ButtonPressMask|ButtonReleaseMask;break;
+      }
       XSelectInput(display, win, evmask);
 
       XSetErrorHandler(xerrh);
@@ -670,11 +678,23 @@ re_crts:
 #define e ((XIDeviceEvent*)ev.xcookie.data)
 //			switch(e->evtype) {
 			switch(ev.xcookie.evtype) {
-			    //case XI_ButtonRelease:
+/*
+			    case XI_ButtonRelease: type++;
+			    case XI_Motion: type++;
+			    case XI_ButtonPress:
+				switch (touch_button) {
+				    case 4: break;
+				    case 0:
+				    case 2:
+					xkbd_process(kb, 0, e->event_x + .5, e->event_y + .5, e->detail, e->sourceid, e->time);
+					type = 2;
+				    default:
+					xkbd_process(kb, type, e->event_x + .5, e->event_y + .5, e->detail, e->sourceid, e->time);
+				}
+				break;
+*/
 			    case XI_TouchEnd: type++;
-			    //case XI_Motion:
 			    case XI_TouchUpdate: type++;
-			    //case XI_ButtonPress:
 			    case XI_TouchBegin:
 				xkbd_process(kb, type, e->event_x + .5, e->event_y + .5, e->detail, e->sourceid, e->time);
 			}
@@ -685,14 +705,15 @@ re_crts:
 	    case ButtonRelease: type++;
 	    case MotionNotify: type++;
 	    case ButtonPress:
-		xkbd_process(kb, type, ev.xmotion.x, ev.xmotion.y, 0, 0, ev.xmotion.time);
-		// motions concurrent with updates and flooding,
-		// but required to avoid release loss.
-		// separate button from touch & motion from update:
-		// button press -> release for mouse
-		// ugly mouse workaround, wantfix for oneshot
-		if (!touch_button)
-			xkbd_process(kb, 2, ev.xmotion.x, ev.xmotion.y, 0, 0, ev.xmotion.time);
+		switch (touch_button) {
+		    case 4: break;
+		    case 0:
+		    case 2:
+			xkbd_process(kb, 0, ev.xmotion.x, ev.xmotion.y, 0, 0, ev.xmotion.time);
+			type = 2;
+		    default:
+			xkbd_process(kb, type, ev.xmotion.x, ev.xmotion.y, 0, 0, ev.xmotion.time);
+		}
 		break;
 	    case ClientMessage:
 		if ((ev.xclient.message_type == wm_protocols[1])

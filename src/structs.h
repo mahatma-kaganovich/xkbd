@@ -270,8 +270,6 @@ typedef struct _button
 
   int vwidth;  /* width  of contents ( min width ) */
   int vheight; /* height of contents ( min height ) */
-  int x_pad;    /* total padding horiz */
-  int y_pad;    /* total padding vert  */
   int b_size;   /* size of border in pixels */
                 /* eg. total width = vwidth+pad_x+(2*b_size) */
 

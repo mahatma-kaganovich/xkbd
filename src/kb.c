@@ -879,7 +879,6 @@ void kb_size(keyboard *kb) {
 		kb->vheight = kb->vheight1 = b->kb->font_info->ascent + b->kb->font_info->descent;
 
 
-	int cy = 0;
 	int max_single_char_width = 0;
 	int max_single_char_height = kb->vheight1;
 	int max_width = 0; /* required for sizing code */
@@ -985,42 +984,43 @@ void kb_size(keyboard *kb) {
 				kb->kbd_layouts[0]->min_height = vbox->min_height;
 			vbox->min_width = max_width;
 		}
+		const int hack = 1; /* hack for using all screen space */
 		for(i=0;i<kb->total_layouts;i++) {
+		    int cy = 0;
+		    int fx = 0;
 		    box *vbox = kb->kbd_layouts[i];
 		    kb->vbox = vbox;
 		    for (listp = vbox->root_kid; listp; listp = listp->next) {
 			int cx = 0;
-			//int total = 0;
-			int y_pad = 0;
 			bx = (box *)listp->data;
 			bx->y = cy;
 			bx->x = 0;
-			y_pad =  ldiv((unsigned long)bx->min_height * vbox->act_height,vbox->min_height).quot;
+			bx->act_width = vbox->act_width;
+			if (!listp->next && vbox->act_height>=scr_height) bx->act_height = max(vbox->act_height - hack - cy, bx->min_height);
+			else bx->act_height = max(bx->min_height,
+			    (vbox->height && bx->height)?
+				ldiv((unsigned long)bx->height * vbox->act_height,vbox->height).quot:
+				ldiv((unsigned long)bx->min_height * vbox->act_height,vbox->min_height).quot);
+			cy += bx->act_height;
 			for(ip=bx->root_kid; ip; ip= ip->next) {
-				int but_total_width;
 				b = (button *)ip->data;
+				if (!ip->next && vbox->act_width>=scr_width) b->act_width = max(bx->act_width - hack - cx, b->vwidth);
+				else b->act_width = max(b->vwidth + (b->b_size<<1),
+				    (b->width && bx->width)?
+					ldiv((unsigned long)b->width*vbox->act_width,bx->width).quot:
+					ldiv((unsigned long)b->vwidth*vbox->act_width,bx->min_width).quot);
 				b->x = cx; /*remember relative to holding box ! */
-				but_total_width = b->vwidth+(2*b->b_size);
-				b->x_pad = ldiv((unsigned long) but_total_width * vbox->act_width,bx->min_width).quot;
-				b->x_pad -= but_total_width;
-				b->act_width=bx->width?ldiv((unsigned long)b->width*vbox->act_width,bx->width).quot:b->vwidth + b->x_pad + b->b_size*2;
 				cx += b->act_width;
 				b->y = 0;
-				b->y_pad = y_pad - b->vheight - b->b_size*2;
-				b->act_height = y_pad;
+				b->act_height = bx->act_height;
 //				b->act_height = bx->height?ldiv(b->height*vbox->act_height,bx->height).quot:y_pad;
-				/*  hack for using all screen space */
-				if (listp->next == NULL) b->act_height--;
 				b->vx = button_get_abs_x(b) - vbox->x + vbox->vx;
 				b->vy = button_get_abs_y(b) - vbox->y + vbox->vy;
 			}
-			/*  another hack for using up all space */
-			b->x_pad += (vbox->act_width-cx) -1 ;
-			b->act_width += (vbox->act_width-cx) -1;
-			cy += y_pad ; //+ 1;
-			bx->act_height = y_pad;
-			bx->act_width = vbox->act_width;
+			fx = max(fx,cx);
 		    }
+		    vbox->act_height = cy + hack;
+		    vbox->act_width = fx + hack;
 		}
 /*
 	} else {
@@ -1587,15 +1587,15 @@ button * kb_find_button(keyboard *kb, int x, int y)
 		bx = (box *)listp->data;
 		i = bx->y;
 		if (y < i) break;
-		if (y >= i+bx->act_height) continue;
+		if (y >= i+bx->act_height && listp->next) continue;
 		for(ip=bx->root_kid; ip; ip=ip->next) {
 			tmp_but = (button *)ip->data;
 			i = tmp_but->x+bx->x;
 			if (x<i) break;
-			if (x>=i+tmp_but->act_width) continue;
+			if (x>=i+tmp_but->act_width && ip->next) continue;
 //			i = tmp_but->y+bx->y
 //			if (y<i) break;
-//			if (y>i+tmp_but->act_height) continue;
+//			if (y>i+tmp_but->act_height && listp->next) continue;
 			/* if pressed invariant/border - check buttons are identical */
 			if (but && memcmp(but,tmp_but,(char*)&but->flags - (char*)&but->ks) + sizeof(but->flags)) return NULL;
 			but = tmp_but;
