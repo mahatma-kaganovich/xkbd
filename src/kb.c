@@ -800,8 +800,8 @@ void kb_size(keyboard *kb) {
 			bx->undef=0;
 			for(ip=bx->root_kid; ip; ip= ip->next) {
 				b = (button *)ip->data;
-				w2+=b->width+b->b_size*2;
-				h2=max(h2,b->height+b->b_size*2);
+				w2+=b->width+(b->b_size<<1);
+				h2=max(h2,b->height+(b->b_size<<1));
 				if (!b->width) bx->undef++;
 			}
 			bx->width = w2;
@@ -970,8 +970,8 @@ void kb_size(keyboard *kb) {
 						}
 					}
 
-					tmp_width += b->vwidth + b->b_size*2;
-					tmp_height = b->vheight + b->b_size*2;
+					tmp_width += b->vwidth + (b->b_size<<1);
+					tmp_height = b->vheight + (b->b_size<<1);
 					if (tmp_height >= max_height) max_height = tmp_height;
 				}
 				if (tmp_width > max_width) max_width = tmp_width;
