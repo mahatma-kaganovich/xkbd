@@ -994,26 +994,28 @@ void kb_size(keyboard *kb) {
 			int cx = 0;
 			bx = (box *)listp->data;
 			bx->y = cy;
-			bx->x = 0;
+			//bx->x = 0;
 			bx->act_width = vbox->act_width;
-			if (!listp->next && vbox->act_height>=scr_height) bx->act_height = max(vbox->act_height - hack - cy, bx->min_height);
-			else bx->act_height = max(bx->min_height,
+			bx->act_height = max(bx->min_height,
+			    (!listp->next && vbox->act_height>=scr_height)?
+				vbox->act_height - hack - cy:
 			    (vbox->height && bx->height)?
 				ldiv((unsigned long)bx->height * vbox->act_height,vbox->height).quot:
 				ldiv((unsigned long)bx->min_height * vbox->act_height,vbox->min_height).quot);
 			cy += bx->act_height;
 			for(ip=bx->root_kid; ip; ip= ip->next) {
 				b = (button *)ip->data;
-				if (!ip->next && vbox->act_width>=scr_width) b->act_width = max(bx->act_width - hack - cx, b->vwidth);
-				else b->act_width = max(b->vwidth + (b->b_size<<1),
+				b->x = cx; /*remember relative to holding box ! */
+				//b->y = 0;
+				b->act_width = max(b->vwidth + (b->b_size<<1),
+				    (!ip->next && vbox->act_width>=scr_width)?
+					bx->act_width - hack - cx:
 				    (b->width && bx->width)?
 					ldiv((unsigned long)b->width*vbox->act_width,bx->width).quot:
 					ldiv((unsigned long)b->vwidth*vbox->act_width,bx->min_width).quot);
-				b->x = cx; /*remember relative to holding box ! */
-				cx += b->act_width;
-				b->y = 0;
 				b->act_height = bx->act_height;
 //				b->act_height = bx->height?ldiv(b->height*vbox->act_height,bx->height).quot:y_pad;
+				cx += b->act_width;
 				b->vx = button_get_abs_x(b) - vbox->x + vbox->vx;
 				b->vy = button_get_abs_y(b) - vbox->y + vbox->vy;
 			}
