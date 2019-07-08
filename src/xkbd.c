@@ -671,7 +671,8 @@ re_crts:
       XSetErrorHandler(xerrh);
       XSync(display, False);
 
-
+//#define SERIAL(s) static unsigned long serial = 0; if (serial==(serial=ev.xmotion.serial))
+#define SERIAL(s) static unsigned long serial = 0; if ((long)(serial-(serial=ev.xmotion.serial-serial))>0)
       while (1)
       {
 	    int type = 0;
@@ -685,16 +686,19 @@ re_crts:
 		    ) {
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
-//			switch(e->evtype) {
 			static int lastid = -1;
+			// in this plase serial looks nice,
+			// but multitouch control work better
+			//SERIAL(e->serial); else
+//			switch(e->evtype) {
 			switch(ev.xcookie.evtype) {
-
 #ifdef XI_BUTTON
 			    case XI_ButtonRelease: type++;
 			    case XI_Motion: type++;
 			    case XI_ButtonPress:
 				if (lastid == e->sourceid) break;
 				if ((input_events^(input_events>>2))&1) {
+					SERIAL(ev.xmotion.serial) break;
 					xkbd_process(kb, 0, e->event_x + .5, e->event_y + .5, e->detail, e->sourceid, e->time);
 					type = 2;
 				}
@@ -717,6 +721,7 @@ re_crts:
 	    case MotionNotify: type++;
 	    case ButtonPress:
 	        if ((input_events^(input_events>>2))&1) {
+			SERIAL(ev.xmotion.serial) break;
 			xkbd_process(kb, 0, ev.xmotion.x, ev.xmotion.y, 0, 0, ev.xmotion.time);
 			type = 2;
 	        }
