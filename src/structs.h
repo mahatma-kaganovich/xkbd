@@ -96,11 +96,8 @@ static inline unsigned int MODS(unsigned int l){
 #define SIBLINGS
 #endif
 
-#undef XI_BUTTON
 #ifdef USE_XI
 #define MULTITOUCH
-// broken
-//#define XI_BUTTON
 #else
 #undef MULTITOUCH
 #endif
