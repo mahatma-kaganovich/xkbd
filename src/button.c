@@ -78,14 +78,11 @@ void button_set_pixmap(button *b, char *filename)
   //XGCValues gc_vals;
   //unsigned long valuemask = 0;
 
-  b->pixmap = malloc(sizeof(Pixmap));
-  b->mask = malloc(sizeof(Pixmap));
-
   attrib.valuemask = XpmCloseness;
   attrib.closeness = 40000;
 
   if (XpmReadFileToPixmap( b->kb->display, b->kb->win, filename,
-		       b->pixmap, b->mask, &attrib)
+		       &b->pixmap, &b->mask, &attrib)
       != XpmSuccess )
     {
           fprintf(stderr, "xkbd: failed loading image '%s'\n", filename);
@@ -95,11 +92,11 @@ void button_set_pixmap(button *b, char *filename)
   /* we'll also be needing a gc for transparency */
   b->mask_gc = _createGC(b->kb,1);
   /*
-  gc_vals.clip_mask = *(b->mask);
+  gc_vals.clip_mask = b->mask;
   valuemask = GCClipMask;
   XChangeGC(b->kb->display, b->mask_gc, valuemask, &gc_vals);
   */
-  XSetClipMask(b->kb->display, b->mask_gc, *(b->mask));
+  XSetClipMask(b->kb->display, b->mask_gc, b->mask);
 
   b->vwidth  = attrib.width;
   b->vheight = attrib.height;
@@ -391,14 +388,14 @@ int button_render(button *b, int mode)
     {
       /* TODO: improve alignment of images, kinda hacked at the mo ! */
       XGCValues gc_vals;
-      int xx = x+((w-b->vwidth)>>1);
+      int xx = x+((w - b->vwidth)>>1);
       int yy = y+((h - b->vheight)>>1);
 
       gc_vals.clip_x_origin = xx;
       gc_vals.clip_y_origin = yy;
       XChangeGC(kb->display, b->mask_gc, GCClipXOrigin|GCClipYOrigin, &gc_vals);
 
-      XCopyArea(kb->display, *(b->pixmap), kb->backing, b->mask_gc,
+      XCopyArea(kb->display, b->pixmap, kb->backing, b->mask_gc,
 		0, 0, b->vwidth, b->vheight, xx, yy);
       goto pixmap; /* imgs cannot have text aswell ! */
     }

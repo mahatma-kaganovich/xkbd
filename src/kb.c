@@ -911,7 +911,7 @@ void kb_size(keyboard *kb) {
 					if ( ( DEFAULT_TXT(b) == NULL || strlen1utf8(DEFAULT_TXT(b)))
 						&& (SHIFT_TXT(b) == NULL || strlen1utf8(SHIFT_TXT(b)))
 						&& (MOD_TXT(b) == NULL || strlen1utf8(MOD_TXT(b)))
-						&& b->pixmap == NULL) {
+						&& !b->pixmap) {
 							if (b->vwidth > max_single_char_width)
 								max_single_char_width = b->vwidth;
 					} 
@@ -963,7 +963,7 @@ void kb_size(keyboard *kb) {
 						 if ((DEFAULT_TXT(b) == NULL || (strlen(DEFAULT_TXT(b)) == 1))
 						    && (SHIFT_TXT(b) == NULL || (strlen(SHIFT_TXT(b)) == 1))
 						    && (MOD_TXT(b) == NULL || (strlen(MOD_TXT(b)) == 1))
-						    && b->pixmap == NULL ) {
+						    && !b->pixmap) {
 							b->vwidth = max_single_char_width;
 							b->vheight = max_single_char_height;
 							if (b->key_span_width) b->vwidth = b->key_span_width * max_single_char_width;

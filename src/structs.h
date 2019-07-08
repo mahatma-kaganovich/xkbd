@@ -96,8 +96,11 @@ static inline unsigned int MODS(unsigned int l){
 #define SIBLINGS
 #endif
 
+#undef XI_BUTTON
 #ifdef USE_XI
 #define MULTITOUCH
+// broken
+//#define XI_BUTTON
 #else
 #undef MULTITOUCH
 #endif
@@ -292,8 +295,8 @@ typedef struct _button
   XftColor col_rev;
 #endif
 
-  Pixmap *pixmap;
-  Pixmap *mask;
+  Pixmap pixmap;
+  Pixmap mask;
   GC mask_gc;
 
 }

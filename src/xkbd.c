@@ -614,19 +614,22 @@ re_crts:
 	unsigned char mask_[3] = {0, 0, 0};
 	XIEventMask mask = { .deviceid = XIAllDevices, .mask_len = XIMaskLen(XI_TouchEnd), .mask = (unsigned char *)&mask_ };
 
-	// keep "button" events in standard events while
-//	if (input_events & 1) XISetMask(mask.mask, XI_ButtonPress);
-//	if (input_events & 2) XISetMask(mask.mask, XI_Motion);
-//	if (input_events & 4) XISetMask(mask.mask, XI_ButtonRelease);
-
+#ifdef XI_BUTTON
+	if (input_events & 1) XISetMask(mask.mask, XI_ButtonPress);
+	if (input_events & 2) XISetMask(mask.mask, XI_Motion);
+	if (input_events & 4) XISetMask(mask.mask, XI_ButtonRelease);
+#endif
 	if (input_events & 8) XISetMask(mask.mask, XI_TouchBegin);
 	if (input_events & 16) XISetMask(mask.mask, XI_TouchUpdate);
 	if (input_events & 32) XISetMask(mask.mask, XI_TouchEnd);
 	XISelectEvents(display, win, &mask, 1);
 	xi = 1;
-      }
+      } 
+#ifdef XI_BUTTON
+      else
 #endif
-
+#endif
+      {
 	// may be lost "release" on libinput
 	// probably need all motions or nothing
 	// button events required for mouse only or if XI not used
@@ -634,6 +637,7 @@ re_crts:
       if (input_events & 1) evmask|=ButtonPressMask;
       if (input_events & 2) evmask|=ButtonMotionMask;
       if (input_events & 4) evmask|=ButtonReleaseMask;
+     }
       XSelectInput(display, win, evmask);
 
       long prop[12] = {2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
@@ -682,21 +686,27 @@ re_crts:
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
 //			switch(e->evtype) {
+			static int lastid = -1;
 			switch(ev.xcookie.evtype) {
-/*
+
+#ifdef XI_BUTTON
 			    case XI_ButtonRelease: type++;
 			    case XI_Motion: type++;
 			    case XI_ButtonPress:
+				if (lastid == e->sourceid) break;
 				if ((input_events^(input_events>>2))&1) {
 					xkbd_process(kb, 0, e->event_x + .5, e->event_y + .5, e->detail, e->sourceid, e->time);
 					type = 2;
 				}
 				xkbd_process(kb, type, e->event_x + .5, e->event_y + .5, e->detail, e->sourceid, e->time);
 				break;
-*/
+#endif
 			    case XI_TouchEnd: type++;
 			    case XI_TouchUpdate: type++;
 			    case XI_TouchBegin:
+#ifdef XI_BUTTON
+				lastid = e->sourceid;
+#endif
 				xkbd_process(kb, type, e->event_x + .5, e->event_y + .5, e->detail, e->sourceid, e->time);
 			}
 			XFreeEventData(display, &ev.xcookie);
