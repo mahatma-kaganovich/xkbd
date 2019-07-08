@@ -179,6 +179,7 @@ static void _reset(int sig){
 		XkbLockModifiers(display,XkbUseCoreKbd,0xffff,0);
 		XkbLatchModifiers(display,XkbUseCoreKbd,0xffff,0);
 		XkbLockGroup(display,XkbUseCoreKbd,0);
+		//XFlush(display);
 	}
 	if (stopped) exit(1);
 }
@@ -261,7 +262,7 @@ int main(int argc, char **argv)
 	{ 'f', "xkbd.font_name", 0, 0, &font_name, "font" },
 	{ '1', "xkbd.font_name1", 0, 0, &font_name1, "font for 1-char" },
 	{ 'k', "xkbd.conf_file", 0, 0, &conf_file, "keyboard definition file\n\
-                      other than" DEFAULTCONFIG },
+                      other than " DEFAULTCONFIG },
 	{ 'D', "xkbd.dock", 1, 0, &dock, "Dock/options bitmask: 1=dock, 2=strut, 4=_NET_WM_WINDOW_TYPE_DOCK,\n\
       8=_NET_WM_WINDOW_TYPE_TOOLBAR, 16=_NET_WM_STATE_STICKY.\n\
       32=resize (slock), 64=strut horizontal, 128=_NET_WM_STATE_SKIP_TASKBAR\n\
@@ -517,11 +518,6 @@ re_crts:
       if (!left) x += scr_width - w;
       if (!top) y += scr_height - h;
 
-      win = XCreateSimpleWindow(display, rootWin, x, y, w, h,
-	0, BlackPixel(display, screen), WhitePixel(display, screen));
-
-
-
       /* check for user selected keyboard conf file */
 
 
@@ -547,6 +543,9 @@ re_crts:
 	    }
 	}
 
+      win = XCreateSimpleWindow(display, rootWin, x, y, w, h,
+	0, WhitePixel(display, screen), BlackPixel(display, screen));
+
       _reset(0);
       signal(SIGTERM, _reset);
 
@@ -559,6 +558,7 @@ re_crts:
 	if (!top) y += h - j;
 	XMoveResizeWindow(display,win,x,y,width=i,height=j);
       }
+//      if (cache_pix) xkbd_repaint(kb); // reduce blinking on start
 
       size_hints.flags = PPosition | PSize | PMinSize;
       size_hints.x = 0;
@@ -582,32 +582,6 @@ re_crts:
       XFree(wm_hints);
       XSetWMProtocols(display, win, wm_protocols, sizeof(wm_protocols) /
 		      sizeof(Atom));
-		      
-      long prop[12] = {2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-      XChangeProperty(display,win, mwm_atom, mwm_atom,32,PropModeReplace,(unsigned char *)&prop,5);
-      prop[0] = 0;
-      if(dock & 4)
-	_propAtom32("_NET_WM_WINDOW_TYPE","_NET_WM_WINDOW_TYPE_DOCK");
-      if (dock & 8)
-	_propAtom32("_NET_WM_WINDOW_TYPE","_NET_WM_WINDOW_TYPE_TOOLBAR");
-      if (dock & 16)
-	_propAtom32("_NET_WM_STATE","_NET_WM_STATE_STICKY");
-      if (dock & 128)
-	_propAtom32("_NET_WM_STATE","_NET_WM_STATE_SKIP_TASKBAR");
-//      _propAtom32("_NET_WM_STATE","_NET_WM_STATE_ABOVE");
-//      _propAtom32("_NET_WM_STATE","_NET_WM_STATE_FOCUSED");
-//      Atom version = 4;
-//      _prop(32,"XdndAware",XA_ATOM,&version,1);
-
-
-
-      if (embed) {
-	 fprintf(stdout, "%li\n", win);
-	 fclose(stdout);
-      } else {
-	XMapWindow(display, win);
-      }
-      signal(SIGUSR1, handle_sig); /* for extenal mapping / unmapping */
 
 #ifdef USE_XR
       if (xrr) {
@@ -648,6 +622,7 @@ re_crts:
 	xi = 1;
       }
 #endif
+
 	// may be lost "release" on libinput
 	// probably need all motions or nothing
 	// button events required for mouse only or if XI not used
@@ -660,8 +635,37 @@ re_crts:
       }
       XSelectInput(display, win, evmask);
 
+      long prop[12] = {2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+      XChangeProperty(display,win, mwm_atom, mwm_atom,32,PropModeReplace,(unsigned char *)&prop,5);
+      prop[0] = 0;
+      if(dock & 4)
+	_propAtom32("_NET_WM_WINDOW_TYPE","_NET_WM_WINDOW_TYPE_DOCK");
+      if (dock & 8)
+	_propAtom32("_NET_WM_WINDOW_TYPE","_NET_WM_WINDOW_TYPE_TOOLBAR");
+      if (dock & 16)
+	_propAtom32("_NET_WM_STATE","_NET_WM_STATE_STICKY");
+      if (dock & 128)
+	_propAtom32("_NET_WM_STATE","_NET_WM_STATE_SKIP_TASKBAR");
+//      _propAtom32("_NET_WM_STATE","_NET_WM_STATE_ABOVE");
+//      _propAtom32("_NET_WM_STATE","_NET_WM_STATE_FOCUSED");
+//      Atom version = 4;
+//      _prop(32,"XdndAware",XA_ATOM,&version,1);
+
+
+
+
+      if (embed) {
+	 fprintf(stdout, "%li\n", win);
+	 fclose(stdout);
+      } else {
+	XMapWindow(display, win);
+      }
+      signal(SIGUSR1, handle_sig); /* for extenal mapping / unmapping */
+
+
       XSetErrorHandler(xerrh);
       XSync(display, False);
+
 
       while (1)
       {

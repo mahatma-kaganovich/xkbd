@@ -1,4 +1,4 @@
-DEFAULT_CONFIG=$(pkgdatadir)/all.qwerty.xkbd
+DEFAULT_CONFIG=$(pkgdatadir)/xkbd-std.conf
 
 LDADD = @X_LIBS@ -lX11 -lXtst
 AM_CFLAGS = -O2 -DDEFAULTCONFIG=\"$(DEFAULT_CONFIG)\" -Dprefix=\"${prefix}\"
