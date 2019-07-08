@@ -226,11 +226,11 @@ int main(int argc, char **argv)
    int x=0, y=0, width=0, height=0;
    int top=0, left=0;
    int crts=0;
-   static int touch_button =
+   static int input_events =
 #ifdef USE_XI
-	0;
+	60; // Touch* + ButtonRelease
 #else
-	1;
+	7; // Button*
 #endif
    static char *conf_file = NULL;
    static char *font_name = NULL;
@@ -267,7 +267,11 @@ int main(int argc, char **argv)
       8=_NET_WM_WINDOW_TYPE_TOOLBAR, 16=_NET_WM_STATE_STICKY.\n\
       32=resize (slock), 64=strut horizontal, 128=_NET_WM_STATE_SKIP_TASKBAR\n\
       For OpenBox I use 178 = $[2+16+32+128]." },
-	{ 't', "xkbd.touch_emulation", 2, 0, &touch_button, "touch over button events 0=release, 1=all=press|motion|release, 2=press, 3=press|release, 4=none" },
+	{ 'i', "xkbd.input_events", 1, 0, &input_events, "touch over button events bitmask:\n\
+      1=ButtonPress, 2=ButtonMotion, 4=ButtonRelease,\n\
+      8=TouchBegin, 16=TouchUpdate, 32=TouchEnd.\n\
+      (7=Button*, 56=Touch*, 60=Touch*|ButtonRelease)\n\
+      ButtonPress ^ ButtonRelease will cause press+release emulation." },
 #ifndef MINIMAL
 	{ 'X', "xkbd.sync", 2, 0, &Xkb_sync, "Xkb state interaction: 0=none, 1=sync, 2-semi-sync" },
 #else
@@ -611,13 +615,13 @@ re_crts:
 	XIEventMask mask = { .deviceid = XIAllDevices, .mask_len = XIMaskLen(XI_TouchEnd), .mask = (unsigned char *)&mask_ };
 
 	// keep "button" events in standard events while
-//	XISetMask(mask.mask, XI_ButtonPress);
-//	XISetMask(mask.mask, XI_ButtonRelease);
-//	XISetMask(mask.mask, XI_Motion);
+//	if (input_events & 1) XISetMask(mask.mask, XI_ButtonPress);
+//	if (input_events & 2) XISetMask(mask.mask, XI_Motion);
+//	if (input_events & 4) XISetMask(mask.mask, XI_ButtonRelease);
 
-	XISetMask(mask.mask, XI_TouchBegin);
-	XISetMask(mask.mask, XI_TouchUpdate);
-	XISetMask(mask.mask, XI_TouchEnd);
+	if (input_events & 8) XISetMask(mask.mask, XI_TouchBegin);
+	if (input_events & 16) XISetMask(mask.mask, XI_TouchUpdate);
+	if (input_events & 32) XISetMask(mask.mask, XI_TouchEnd);
 	XISelectEvents(display, win, &mask, 1);
 	xi = 1;
       }
@@ -627,12 +631,9 @@ re_crts:
 	// probably need all motions or nothing
 	// button events required for mouse only or if XI not used
 //	Button1MotionMask |
-      switch (touch_button) {
-      case 0:evmask|=ButtonReleaseMask;break;
-      case 1:evmask|=ButtonPressMask|ButtonMotionMask|ButtonReleaseMask;break;
-      case 2:evmask|=ButtonPressMask;break;
-      case 3:evmask|=ButtonPressMask|ButtonReleaseMask;break;
-      }
+      if (input_events & 1) evmask|=ButtonPressMask;
+      if (input_events & 2) evmask|=ButtonMotionMask;
+      if (input_events & 4) evmask|=ButtonReleaseMask;
       XSelectInput(display, win, evmask);
 
       long prop[12] = {2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
@@ -686,15 +687,11 @@ re_crts:
 			    case XI_ButtonRelease: type++;
 			    case XI_Motion: type++;
 			    case XI_ButtonPress:
-				switch (touch_button) {
-				    case 4: break;
-				    case 0:
-				    case 2:
+				if ((input_events^(input_events>>2))&1) {
 					xkbd_process(kb, 0, e->event_x + .5, e->event_y + .5, e->detail, e->sourceid, e->time);
 					type = 2;
-				    default:
-					xkbd_process(kb, type, e->event_x + .5, e->event_y + .5, e->detail, e->sourceid, e->time);
 				}
+				xkbd_process(kb, type, e->event_x + .5, e->event_y + .5, e->detail, e->sourceid, e->time);
 				break;
 */
 			    case XI_TouchEnd: type++;
@@ -709,15 +706,11 @@ re_crts:
 	    case ButtonRelease: type++;
 	    case MotionNotify: type++;
 	    case ButtonPress:
-		switch (touch_button) {
-		    case 4: break;
-		    case 0:
-		    case 2:
+	        if ((input_events^(input_events>>2))&1) {
 			xkbd_process(kb, 0, ev.xmotion.x, ev.xmotion.y, 0, 0, ev.xmotion.time);
 			type = 2;
-		    default:
-			xkbd_process(kb, type, ev.xmotion.x, ev.xmotion.y, 0, 0, ev.xmotion.time);
-		}
+	        }
+		xkbd_process(kb, type, ev.xmotion.x, ev.xmotion.y, 0, 0, ev.xmotion.time);
 		break;
 	    case ClientMessage:
 		if ((ev.xclient.message_type == wm_protocols[1])
