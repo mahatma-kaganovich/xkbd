@@ -51,7 +51,8 @@
 #define WIN_OVERIDE_AWAYS_TOP 0
 #define WIN_OVERIDE_NOT_AWAYS_TOP 1
 
-char *IAM = "xkbd";
+#define IAM "xkbd"
+char *iam = IAM;
 
 Display* display; /* ack globals due to sighandlers - another way ? */
 Window   win;
@@ -88,7 +89,7 @@ enum {
 static int xerrh(Display *dsp, XErrorEvent *ev) {
 	char buf[256];
 
-	fprintf(stderr,"%s: X error %i ",IAM,ev->error_code);
+	fprintf(stderr,"%s: X error %i ",iam,ev->error_code);
 	if (!XFlush(dsp)) {
 		fprintf(stderr,"fatal\n");
 		exit(1);
@@ -210,8 +211,8 @@ int inbound(int x,int xin,int x1,int x2){
 
 int main(int argc, char **argv)
 {
-   char *window_name = IAM;
-   char *icon_name = IAM;
+   char *window_name = iam;
+   char *icon_name = iam;
 
    XSizeHints size_hints;
    XWMHints *wm_hints;
@@ -252,30 +253,34 @@ int main(int argc, char **argv)
 	void *ptr;
 	char *help;
    } __attribute__ ((__packed__)) resources[] = {
-	{ 'g', "xkbd.geometry", 0, 0, &geometry, "(default -0-0, left/top +0+0)\n\
-     ( NOTE: The above will overide the configs font )" },
-	{ 'f', "xkbd.font_name", 0, 0, &font_name, "font" },
-	{ '1', "xkbd.font_name1", 0, 0, &font_name1, "font for 1-char" },
-	{ 'k', "xkbd.conf_file", 0, 0, &conf_file, "keyboard definition file\n\
-                      other than " DEFAULTCONFIG },
-	{ 'D', "xkbd.dock", 1, 0, &dock, "Dock/options bitmask: 1=dock, 2=strut, 4=_NET_WM_WINDOW_TYPE_DOCK,\n\
-      8=_NET_WM_WINDOW_TYPE_TOOLBAR, 16=_NET_WM_STATE_STICKY.\n\
-      32=resize (slock), 64=strut horizontal, 128=_NET_WM_STATE_SKIP_TASKBAR\n\
-      For OpenBox I use 178 = $[2+16+32+128]." },
-	{ 'i', "xkbd.fake_touch", 2, 0, &fake_touch, "use fake touch device / no XI2" },
+	{ 'g', IAM ".geometry", 0, 0, &geometry, "(default -0-0, left/top +0+0)" },
+	{ 'f', IAM ".font_name", 0, 0, &font_name, "font" },
+	{ '1', IAM ".font_name1", 0, 0, &font_name1, "font for 1-char" },
+	{ 'k', IAM ".conf_file", 0, 0, &conf_file, "keyboard definition file\n\
+	other than from ~/." IAM " or " DEFAULTCONFIG },
+	{ 'D', IAM ".dock", 1, 0, &dock, "Dock/options bitmask:\n\
+	1=dock, 2=strut, 4=_NET_WM_WINDOW_TYPE_DOCK,\n\
+	8=_NET_WM_WINDOW_TYPE_TOOLBAR, 16=_NET_WM_STATE_STICKY.\n\
+	32=resize (slock), 64=strut horizontal, 128=_NET_WM_STATE_SKIP_TASKBAR\n\
+	For OpenBox I use 178 = $[2+16+32+128]." },
+	{ 'i', IAM ".fake_touch", 2, 0, &fake_touch,
+#ifdef USE_XI
+		"fake touch device / no XI2 (2=both types over XI2)"
+#endif
+	},
+	{ 'X', IAM ".sync", 2, 0, &Xkb_sync, 
 #ifndef MINIMAL
-	{ 'X', "xkbd.sync", 2, 0, &Xkb_sync, "Xkb state interaction: 0=none, 1=sync, 2-semi-sync" },
-#else
-	{ 'X' },
+		"Xkb state interaction: 0=none, 1=sync, 2-semi-sync"
 #endif
-	{ 'l', "xkbd.no_lock", 2, 0, &no_lock, "disable modifiers lock" },
+	},
+	{ 'l', IAM ".no_lock", 2, 0, &no_lock, "disable modifiers lock" },
+	{ 'o', IAM ".output", 0, 0, &output,
 #ifdef USE_XR
-	{ 'o', "xkbd.output", 0, 0, &output, "xrandr output name" },
-#else
-	{ 'o' },
+		"xrandr output name"
 #endif
+	},
 #ifdef CACHE_PIX
-	{ 'C', "xkbd.cache", 1, 0, &cache_pix, "pixmap cache 0=disable, 1=enable, 2=preload" },
+	{ 'C', IAM ".cache", 1, 0, &cache_pix, "pixmap cache 0=disable, 1=enable, 2=preload" },
 #endif
 	{ 0, NULL }
    };
@@ -309,7 +314,7 @@ int main(int argc, char **argv)
 	    default:
 		for (res=0; (res1=&resources[res])->param!=s[1]; res++) {
 			if (!res1->param) {
-   printf("Usage: %s <options>\n\
+   printf("Usage: " IAM " <options>\n\
 Options:\n\
   -d  <display>\n\
   -x  used for gtk embedding\n\
@@ -317,7 +322,7 @@ Options:\n\
   -s  strut\n\
   -v  version\n\
   -e {<...>}   exec on restart (to end of line)\n\
-  -h  this help\n", IAM);
+  -h  this help\n");
 				for (res=0; (res1=&resources[res])->param; res++) {
 					char *t,*h=res1->help?:"";
 					void *p;
@@ -343,7 +348,7 @@ Options:\n\
 			if (!*r && r!=argv[i]) {
 				*(int *)res1->ptr = j;
 			} else if (res1->type == 1){
-				fprintf(stderr,"%s: invalid option value: %s %s\n",IAM,s,argv[i]);
+				fprintf(stderr,"%s: invalid option value: %s %s\n",iam,s,argv[i]);
 //				exit(1);
 			} else {
 				*(int *)res1->ptr = 1;
@@ -389,7 +394,7 @@ stop_argv:
 			if (!*r && r!=(char *)val.addr) {
 				*(int *)res1->ptr = j;
 			} else if (res1->type == 1){
-				fprintf(stderr,"%s: invalid xrdb value: %s %s\n",IAM,s,(char *)val.addr);
+				fprintf(stderr,"%s: invalid xrdb value: %s %s\n",iam,s,(char *)val.addr);
 //				exit(1);
 			};
 			break;
@@ -520,7 +525,7 @@ re_crts:
 	{
 	  strcpy(userconffile,getenv("HOME"));
 	  strcat(userconffile, "/.");
-	  strcat(userconffile, IAM);
+	  strcat(userconffile, iam);
 
 	  if ((fp = fopen(userconffile, "r")) != NULL)
 	    {
@@ -599,14 +604,16 @@ re_crts:
 #ifdef USE_XI
       int xiopcode, xievent = 0, xierror, xi = 0;
       int ximajor = 2, ximinor = 2;
-      if(!fake_touch && XQueryExtension(display, "XInputExtension", &xiopcode, &xievent, &xierror) &&
+      if(fake_touch!=1 && XQueryExtension(display, "XInputExtension", &xiopcode, &xievent, &xierror) &&
 		XIQueryVersion(display, &ximajor, &ximinor) != BadRequest) {
 
 	unsigned char mask_[3] = {0, 0, 0};
 	XIEventMask mask = { .deviceid = XIAllDevices, .mask_len = XIMaskLen(XI_TouchEnd), .mask = (unsigned char *)&mask_ };
 
-	//XISetMask(mask.mask, XI_ButtonPress);
-	//XISetMask(mask.mask, XI_Motion);
+	if (fake_touch==2) {
+		XISetMask(mask.mask, XI_ButtonPress);
+		XISetMask(mask.mask, XI_Motion);
+	}
 	XISetMask(mask.mask, XI_ButtonRelease);
 
 	XISetMask(mask.mask, XI_TouchBegin);
@@ -673,22 +680,27 @@ re_crts:
 #define e ((XIDeviceEvent*)ev.xcookie.data)
 			// protect from fusion button/touch events
 			static int lastid = -1;
+			int ex = e->event_x + .5;
+			int ey = e->event_y + .5;
 			// in this place serial looks nice,
 			// but multitouch control work better
 			//SERIAL(e->serial); else
 //			switch(e->evtype) {
 			switch(ev.xcookie.evtype) {
-			    case XI_ButtonRelease: // keep mouse working
+			    case XI_ButtonRelease: type++;
+			    case XI_Motion: type++;
+			    case XI_ButtonPress:
 				if (lastid == e->sourceid) break;
-				SERIAL(ev.xmotion.serial) break;
-				for (type=0; type<3; type+=2)
-				    xkbd_process(kb, type, e->event_x + .5, e->event_y + .5, e->detail, e->sourceid, e->time);
+				if (!fake_touch) { // only release -> press+release
+					SERIAL(ev.xmotion.serial) break;
+					xkbd_process(kb, 0, ex, ey, 0, e->sourceid, e->time);
+				}
+				xkbd_process(kb, type, ex, ey, 0, e->sourceid, e->time);
 				break;
 			    case XI_TouchEnd: type++;
 			    case XI_TouchUpdate: type++;
 			    case XI_TouchBegin:
-				lastid = e->sourceid;
-				xkbd_process(kb, type, e->event_x + .5, e->event_y + .5, e->detail, e->sourceid, e->time);
+				xkbd_process(kb, type, ex, ey, e->detail, lastid = e->sourceid, e->time);
 			}
 			XFreeEventData(display, &ev.xcookie);
 		}
