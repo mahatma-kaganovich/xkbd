@@ -17,7 +17,6 @@
 
 #ifndef _KBD_H_
 #define _KBD_H_
-void _kb_load_font(keyboard *kb, char *fontname );
 keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		 int kb_width, int kb_height, char *conf_file,
 		 char *font_name, char *font_name1);

@@ -160,13 +160,6 @@ void button_set_slide_ks(button *b, char *txt, int dir)
     }
 }
 
-char *button_set(char *txt)
-{
-    char *res = malloc(sizeof(char)*(strlen(txt)+1));
-    strcpy(res, txt);
-    return res;
-}
-
 KeySym button_ks(char *txt)
 {
   KeySym res;
@@ -179,19 +172,13 @@ int _button_get_txt_size(keyboard *kb, char *txt)
 {
   if (!txt) return 0;
 #ifdef USE_XFT
-  if (kb->render_type == xft)
-    {
-      XGlyphInfo       extents;
-      XftTextExtentsUtf8(kb->display, strlen1utf8(txt)?kb->xftfont1:kb->xftfont,
-			 (unsigned char *) txt, strlen(txt),
-			 &extents);
-      return extents.width;
-
-    } else {
-#endif
-      return XTextWidth(kb->font_info, txt, strlen(txt));
-#ifdef USE_XFT
-    }
+  XGlyphInfo       extents;
+  XftTextExtentsUtf8(kb->display, strlen1utf8(txt)?kb->font1:kb->font,
+	(unsigned char *) txt, strlen(txt),
+	&extents);
+  return extents.width;
+#else
+  return XTextWidth(kb->font_info, txt, strlen(txt));
 #endif
 }
 
@@ -409,21 +396,19 @@ int button_render(button *b, int mode)
   }
 #endif
  
-  if (txt)
-    {
+  if (txt) {
     int xx = x+((w - _but_size(b,l))>>1);
     int yy = y+((h - (b->vheight?:strlen1utf8(txt)?kb->vheight1:kb->vheight))>>1);
 #ifdef USE_XFT
-    if (kb->render_type == xft)
-	 XftDrawStringUtf8(kb->xftdraw, &tmp_col, strlen1utf8(txt)?kb->xftfont1:kb->xftfont,
-			xx, yy + kb->xftfont->ascent,
-		       (unsigned char *) txt, strlen(txt));
-    else
+    XftDrawStringUtf8(kb->xftdraw, &tmp_col, strlen1utf8(txt)?kb->font1:kb->font,
+		xx, yy + kb->font->ascent,
+		(unsigned char *) txt, strlen(txt));
+#else
+    XDrawString(kb->display, kb->backing, gc_txt,
+		xx, yy + kb->font->ascent,
+		txt, strlen(txt));
 #endif
-	XDrawString(kb->display, kb->backing, gc_txt,
-		    xx, yy + kb->font_info->ascent,
-		    txt, strlen(txt));
-    }
+  }
 pixmap:
 #ifdef CACHE_PIX
   if (cache_pix)

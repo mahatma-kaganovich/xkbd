@@ -46,52 +46,58 @@
 #define DBG(txt, args... ) /* nothing */
 #endif
 
+#define DEFAULT_FONT "Monospace-%i|-%i|sans-%i|fixed-%i|fixed"
+
 static KeySym *keymap = NULL;
 static int minkc = 0;
 static int maxkc = 0;
 static int notkc = 0;
 static int ks_per_kc = 0;
 
+static char *font = NULL;
+static char *font1 = NULL;
+static char *loaded_font = NULL;
+static char *loaded_font1 = NULL;
 
-static Bool
-load_a_single_font(keyboard *kb, char *fontname )
-{
+int load_a_single_font(keyboard *kb, char *fontname, FNTYPE *f) {
 #ifdef USE_XFT
-  if (kb->xftfont) XftFontClose(kb->display, kb->xftfont);
-
-  if ((kb->xftfont = XftFontOpenName(kb->display,
-				     DefaultScreen(kb->display),
-				     fontname)) != NULL)
-    {
-      return True;
-    }
+  if (*f) XftFontClose(kb->display, *f);
+  return ((*f = XftFontOpenName(kb->display, DefaultScreen(kb->display), fontname)) != NULL);
 #else
-  if ((kb->font_info = XLoadQueryFont(kb->display, fontname)) != NULL)
-    {
-      XSetFont(kb->display, kb->gc, kb->font_info->fid);
-      return True;
-    }
+  if (*f) XUnloadFont((*f)->fid);
+  if ((*f = XLoadQueryFont(kb->display, fontname)) == NULL) return 0;
+  XSetFont(kb->display, kb->gc, (*f)->fid);
+  return True;
 #endif
-  return False;
 }
 
-char *loaded_font = NULL;
-void _kb_load_font(keyboard *kb, char *font)
-{
-  const char delim[] = "|";
-  char *token;
+void load_font(keyboard *kb, char **loaded, char *fnt, FNTYPE *f){
+	char *fnames0, *fnames, *fname, *fname1;
+	int i;
 
-
-
-  if (loaded_font && strcmp(loaded_font,font)) return;
-  loaded_font = strdup(font);
-  if ((strchr(loaded_font, delim[0]) != NULL)) {
-      while( (token = strsep (&loaded_font, delim)) != NULL )
-	  if (load_a_single_font(kb, token)) return;
-  } else if (load_a_single_font(kb, loaded_font)) return;
-
-  fprintf(stderr, "xkbd: unable to find suitable font in '%s'\n", font);
-  exit(1);
+	if (*loaded) {
+		if (!strcmp(*loaded,fnt)) return;
+		free(*loaded);
+	}
+	fnames0 = fnames = strdup(fnt);
+	*loaded = fname1 = malloc(strlen(fnt)+10);
+	while((fname = strsep(&fnames, "|"))) {
+		sprintf(fname1,fname,10);
+		if (!load_a_single_font(kb,fname1,f)) continue;
+		// font found
+		if (strcmp(fname1,fname)) {
+			// font is variable print mask. scale
+			i = ldiv(kb->vbox->act_width, _button_get_txt_size(kb,"ABCabc123+")).quot;
+			if (i && i!=10 && i<1000) {
+				sprintf(fname1,fname,i);
+				if (!load_a_single_font(kb,fname1,f)) continue;
+			}
+		}
+		free(fnames0);
+		return;
+	}
+	fprintf(stderr, "xkbd: unable to find suitable font in '%s'\n", fnt);
+	exit(1);
 }
 
 void button_update(button *b) {
@@ -328,7 +334,7 @@ void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
 		perror("color allocation failed\n"); exit(1);
 	}
 #ifdef USE_XFT
-	if (xc && kb->render_type == xft) {
+	if (xc) {
 		colortmp.red   = col.red;
 		colortmp.green = col.green;
 		colortmp.blue  = col.blue;
@@ -440,19 +446,6 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 
   kb->grey_gc=_createGC(kb,1);
   kb->kp_gc=_createGC(kb,1);
-
-#ifdef USE_XFT
-  kb->render_type = xft;
-#else
-  kb->render_type = oldskool;
-#endif
-  if (font_name1) {
-	_kb_load_font(kb, font_name1);
-	kb->xftfont1 = kb->xftfont;
-	kb->xftfont = NULL;
-	loaded_font = NULL;
-  }
-  if (font_name) _kb_load_font(kb, font_name);
 
 #ifdef USE_XFT
 
@@ -595,19 +588,11 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 	    switch (context) {
 	      case none:
 		break;
-	      case kbddef: /*
-		if (strcmp(tmpstr_A, "render") == 0)
-		  {
-		    if ((strncmp(tmpstr_C, "xft", 3) == 0)
-			&& !font_loaded)
-		      {
-			kb->render_type = xft;
-		      }
-		  }
-		else
-			   */
-		if ((strcmp(tmpstr_A, "font") == 0) && !loaded_font)
-		     _kb_load_font(kb,tmpstr_C );
+	      case kbddef:
+		if ((strcmp(tmpstr_A, "font") == 0))
+			font = strdup(tmpstr_C);
+		if ((strcmp(tmpstr_A, "font1") == 0))
+			font1 = strdup(tmpstr_C);
 		else if (strcmp(tmpstr_A, "button_style") == 0)
 		  {
 		    if (strcmp(tmpstr_C, "square") == 0)
@@ -656,9 +641,9 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		break;
 	      case keydef:
 		if (strcmp(tmpstr_A, "default") == 0)
-		  DEFAULT_TXT(tmp_but) = button_set(tmpstr_C);
+		  DEFAULT_TXT(tmp_but) = strdup(tmpstr_C);
 		else if (strcmp(tmpstr_A, "shift") == 0)
-		  SHIFT_TXT(tmp_but) = button_set(tmpstr_C);
+		  SHIFT_TXT(tmp_but) = strdup(tmpstr_C);
 		else if (strcmp(tmpstr_A, "switch") == 0) {
 		  // -1 is default, but setting in config -> -2 & switch KeySym
 		  // to other keysym - set -2 & concrete default_ks
@@ -667,9 +652,9 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 		    tmp_but->layout_switch = -2;
 		  }
 		} else if (strcmp(tmpstr_A, "mod") == 0)
-		  MOD_TXT(tmp_but) = button_set(tmpstr_C);
+		  MOD_TXT(tmp_but) = strdup(tmpstr_C);
 		else if (strcmp(tmpstr_A, "shift_mod") == 0)
-		  SHIFT_MOD_TXT(tmp_but) = button_set(tmpstr_C);
+		  SHIFT_MOD_TXT(tmp_but) = strdup(tmpstr_C);
 		else if (strcmp(tmpstr_A, "default_ks") == 0)
 		  button_set_txt_ks(tmp_but, tmpstr_C);
 		else if (strcmp(tmpstr_A, "shift_ks") == 0)
@@ -742,6 +727,16 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 	  }
 	}
       line_no++;
+    }
+
+    if (font_name) {
+	if (font) free(font);
+	font = strdup(font_name);
+    } else if (!font) font = strdup(DEFAULT_FONT);
+
+    if (font_name1) {
+	if (font1) free(font1);
+	font1 = strdup(font_name1);
     }
 
     switch  (kb->theme) {
@@ -847,36 +842,19 @@ void kb_size(keyboard *kb) {
 	mw = kb->width?:w1;
 	mh = kb->height?:h1;
 
-	if (!loaded_font) {
-#ifdef USE_XFT
-#define FNT "Monospace-%i"
-		sprintf(fname,FNT,10);
-		_kb_load_font(kb, fname);
-		i = ldiv(w1,_button_get_txt_size(kb,"ABCabc123+")).quot;
-		if (i!=10) {
-			sprintf(fname,FNT,i);
-			free(loaded_font);
-			loaded_font = NULL;
-			_kb_load_font(kb, fname);
-		}
-#else
-		_kb_load_font(kb, fname);
-#define fname "fixed"
-#endif
-		free(loaded_font);
-		loaded_font = NULL;
-	}
-#ifdef USE_XFT
-	if (!kb->xftfont1) kb->xftfont1 = kb->xftfont;
-#endif
+	if (kb->font1 == kb->font) kb->font1 = NULL;
+	if (font1 && !strcmp(font, font1)) font1 = NULL;
+	load_font(kb, &loaded_font, font, &kb->font);
+	if (font1) load_font(kb, &loaded_font1, font1, &kb->font1);
+	else kb->font1 = kb->font;
 
 #ifdef USE_XFT
-	if (b->kb->render_type == xft) {
-		kb->vheight = max(kb->xftfont->height,kb->xftfont->ascent+kb->xftfont->descent);
-		kb->vheight1 = max(kb->xftfont1->height,kb->xftfont1->ascent+kb->xftfont1->descent);
-	} else
+	kb->vheight = max(kb->font->height,kb->font->ascent+kb->font->descent);
+	kb->vheight1 = max(kb->font1->height,kb->font1->ascent+kb->font1->descent);
+#else
+	kb->vheight = b->kb->font->ascent + b->kb->font->descent;
+	kb->vheight1 = b->kb->font1->ascent + b->kb->font1->descent;
 #endif
-		kb->vheight = kb->vheight1 = b->kb->font_info->ascent + b->kb->font_info->descent;
 
 
 	int max_single_char_width = 0;

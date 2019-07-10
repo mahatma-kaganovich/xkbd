@@ -26,6 +26,8 @@
 #include <X11/Xft/Xft.h>
 #endif
 
+#define DEFAULT_FONT "Monospace-%i|-%i|sans-%i|fixed-%i|fixed"
+
 // shift,mod/alt
 //#define LEVEL_BITS 2
 // +ctrl-alt
@@ -153,6 +155,12 @@ typedef struct _box
 
 } box;
 
+#ifdef USE_XFT
+#define FNTYPE XftFont *
+#else
+#define FNTYPE XFontStruct *
+#endif
+
 typedef struct _keyboard
 {
   int mode;
@@ -189,11 +197,12 @@ typedef struct _keyboard
 
   GC filled;
 
-  XFontStruct* font_info;
+  FNTYPE font;
+  FNTYPE font1;
+
   unsigned int state;  /* shifted | caps | modded | normal */
   unsigned int state_locked;  /* shifted | modded | normal */
 
-  enum { oldskool, xft } render_type;
   enum { rounded, square, plain } theme;
 
   int slide_margin;
@@ -204,8 +213,6 @@ typedef struct _keyboard
 
 #ifdef USE_XFT
   XftDraw *xftdraw;   /* xft aa bits */
-  XftFont *xftfont;
-  XftFont *xftfont1;
   XftColor color;
   XftColor color_rev;
 #endif

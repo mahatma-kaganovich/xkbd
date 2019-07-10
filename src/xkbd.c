@@ -254,8 +254,9 @@ int main(int argc, char **argv)
 	char *help;
    } __attribute__ ((__packed__)) resources[] = {
 	{ 'g', IAM ".geometry", 0, 0, &geometry, "(default -0-0, left/top +0+0)" },
-	{ 'f', IAM ".font_name", 0, 0, &font_name, "font" },
-	{ '1', IAM ".font_name1", 0, 0, &font_name1, "font for 1-char" },
+	{ 'f', IAM ".font_name", 0, 0, &font_name, "force font\n\
+	default (if not in file): " DEFAULT_FONT "" },
+	{ '1', IAM ".font_name1", 0, 0, &font_name1, "force font for 1-char" },
 	{ 'k', IAM ".conf_file", 0, 0, &conf_file, "keyboard definition file\n\
 	other than from ~/." IAM " or " DEFAULTCONFIG },
 	{ 'D', IAM ".dock", 1, 0, &dock, "Dock/options bitmask:\n\

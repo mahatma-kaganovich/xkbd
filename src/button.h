@@ -26,7 +26,6 @@ GC _createGC(keyboard *kb, int rev);
 
 int _XColorFromStr(Display *display, XColor *col, const char *defstr);
 
-char *button_set(char *txt);
 KeySym button_ks(char *txt);
 
 void button_set_pixmap(button *b, char *txt);
