@@ -106,9 +106,6 @@ static inline unsigned int MODS(unsigned int l){
 
 #ifdef MULTITOUCH
 #define MAX_TOUCH 16
-// count pressions per button possible overcode
-// at least for small screens
-#define DO_CNT
 #else
 #define MAX_TOUCH 1
 #undef SIBLINGS
@@ -303,6 +300,7 @@ typedef struct _button
   Pixmap mask;
   GC mask_gc;
 
+  int cnt;
 }
 //    __attribute__ ((__packed__))
     button;

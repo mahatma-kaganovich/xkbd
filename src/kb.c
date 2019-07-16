@@ -1096,8 +1096,10 @@ static inline void bdraw(button *b, int flags){
 
 void _release(button *b){
 #ifdef MULTITOUCH
-	if (b->flags & STATE(OBIT_PRESSED))
+	if (b->flags & STATE(OBIT_PRESSED)) {
 		kb_process_keypress(b,0,STATE(OBIT_UGLY));
+		fprintf(stderr,"pressed\n");
+	}
 	else
 #endif
 	bdraw(b,0);
@@ -1123,7 +1125,7 @@ void _press(button *b, unsigned int flags){
 
 button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int dev, Time time)
 {
-	button *b, *b1;
+	button *b, *b1, *b2;
 	int i,j;
 	int n;
 	Time T;
@@ -1135,13 +1137,6 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 #ifdef SIBLINGS
 	static button *sib[MAX_TOUCH][MAX_SIBLINGS];
 	static short nsib[MAX_TOUCH] = {};
-#endif
-
-#ifdef DO_CNT
-	int cnt=0;
-#define IF_CNT(B) if (!cnt) for (i=P; i!=N; TOUCH_INC(i)) if (but[i] == B && devid[i] == dev) cnt++; if (cnt<2)
-#else
-#define IF_CNT(B)
 #endif
 
 #ifdef MULTITOUCH
@@ -1163,7 +1158,6 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 //		fprintf(stderr,"untracked touch on state %i\n",type);
 		return NULL;
 	}
-
 #else
 	const int t=0;
 #endif
@@ -1181,17 +1175,14 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 		for(i=0;i<n;i++) if ((b1=sib[t][i])!=but[t]) _release(b1);
 		nsib[t] = -1;
 #endif
-		if ((b1=but[t]) && b1!=b) {
-			IF_CNT(b1) {
-				_release(b1);
-				b1=NULL;
-			}
-		}
+		if ((b1=but[t]) && b1!=b && !--b1->cnt)
+			_release(b1);
 		but[t] = b;
 		times[t] = time;
 		touchid[t] = ptr;
 		devid[t] = dev;
-		if (b1!=b) _press(b,0);
+		if (b1!=b && !(b->cnt++))
+			_press(b,0);
 		return b;
 	}
 
@@ -1228,10 +1219,10 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 			ns = b1->nsiblings;
 			n = 0;
 			for(i=0; i<ns; i++) {
-				b1=s[i];
+				b2=s[i];
 				for(j=0; j<ns1; j++) {
-					if (b1==s1[j]) {
-						_press(sib[t][n++]=b1,STATE(OBIT_UGLY));
+					if (b2==s1[j]) {
+						_press(sib[t][n++]=b2,STATE(OBIT_UGLY));
 						break;
 					}
 				}
@@ -1240,22 +1231,24 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 			ns = n;
 			n = 0;
 			for(i=0; i<ns; i++) {
-				b1=sib[t][i];
+				b2=sib[t][i];
 				for(j=0; j<ns1; j++) {
-					if (b1==s1[j]) {
-						sib[t][n++]=b1;
-						b1=NULL;
+					if (b2==s1[j]) {
+						sib[t][n++]=b2;
+						b2=NULL;
 						break;
 					}
 				}
-				if (b1) _release(b1);
+				if (b2) _release(b2);
 			}
 		}
 		nsib[t]=n;
 		if (n==0) { // no siblings, drop touch
 			goto drop;
 		} else if (n==1) { // 1 intersection: found button
+			b1->cnt--;
 			but[t] = b = sib[t][0];
+			b->cnt++;
 		} else { // multiple, need to calculate or touch more
 #if 0
 			if (type==2) goto drop;
@@ -1264,14 +1257,16 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 			button *s2[2] = { but[t], b };
 			int n1=0;
 			for(j=0; j<2; j++) {
-				b1=s2[j];
-				for(i=0; i<n; i++) if (sib[t][i]==b1) {
-					s2[n1++]=b1;
+				b2=s2[j];
+				for(i=0; i<n; i++) if (sib[t][i]==b2) {
+					s2[n1++]=b2;
 					break;
 				}
 			}
 			if (n1==1) {
+				b1->cnt--;
 				but[t] = b = s2[0];
+				b->cnt++;
 				// in this place we can select single button, but no preview is wrong
 #if 0
 				// 2do? keep all set, but highlite or "press" (release)
@@ -1298,29 +1293,27 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 #ifdef SLIDES
 	kb_set_slide(b, x, y );
 #endif
-	IF_CNT(b) kb_process_keypress(b,0,0);
+	if (b->cnt<2) 
+		kb_process_keypress(b,0,0);
 	if (b->layout_switch != -1) {
 		b->flags &= ~(STATE(OBIT_PRESSED)|STATE(OBIT_UGLY));
 #ifdef SIBLINGS
 		n = nsib[t];
 		for(i=0;i<n;i++) sib[t][i]->flags &= ~(STATE(OBIT_PRESSED)|STATE(OBIT_UGLY));
+		for (i=P; i!=N; TOUCH_INC(i)) but[i]->cnt=0;
 		N=P=0;
 #endif
 		return NULL;
 	}
-	if (b->modifier) but[t] = NULL;
-drop:
-#ifdef DO_CNT
-	if (b!=but[t]) {
-		b=but[t];
-		cnt=0;
-	}
-	if (b) {
-#else
-	if (b=but[t]) {
-#endif
+	if (b->modifier) {
+		if (but[t]) but[t]->cnt--;
 		but[t] = NULL;
-		IF_CNT(b) _release(b);
+	}
+drop:
+	if (b=but[t]) {
+		but[t] = NULL;
+		if (!--(b->cnt))
+			_release(b);
 #ifdef SLIDES
 		b->slide = 0;
 #endif
