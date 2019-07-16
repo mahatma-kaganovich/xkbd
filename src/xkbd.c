@@ -245,6 +245,7 @@ int main(int argc, char **argv)
    char userconffile[256];
    FILE *fp;
    KeySym mode_switch_ksym;
+   XWindowAttributes wa;
 
    static struct resource {
 	char param;
@@ -547,11 +548,18 @@ re_crts:
       win = XCreateSimpleWindow(display, rootWin, x, y, w, h,
 	0, WhitePixel(display, screen), BlackPixel(display, screen));
 
+#ifdef USE_XR
+      if (xrr) {
+	XRRSelectInput(display, win, RRScreenChangeNotifyMask);
+      }
+#endif
+
       _reset(0);
       signal(SIGTERM, _reset);
 
       kb = xkbd_realize(display, win, conf_file, font_name, font_name1, 0, 0,
 			width, height);
+      kb_size(kb->kb);
       i=xkbd_get_width(kb);
       j=xkbd_get_height(kb);
       if (width != i || height != j) {
@@ -583,12 +591,6 @@ re_crts:
       XFree(wm_hints);
       XSetWMProtocols(display, win, wm_protocols, sizeof(wm_protocols) /
 		      sizeof(Atom));
-
-#ifdef USE_XR
-      if (xrr) {
-	XRRSelectInput(display, win, RRScreenChangeNotifyMask);
-      }
-#endif
 
 #ifndef MINIMAL
 	// not found how to get keymap change on XInput, so keep Xkb events
@@ -734,6 +736,8 @@ re_crts:
 		xkbd_repaint(kb);
 		break;
 	    case MapNotify:
+		XGetWindowAttributes(display,rootWin,&wa);
+		if (wa0.x!=wa.x || wa0.y!=wa.y || wa0.width!=wa.width || wa0.height!=wa.height) restart();
 		XTranslateCoordinates(display,win,rootWin,0,0,&x,&y,&win1);
 		if (dock & 2) {
 			if (top) {
@@ -770,7 +774,6 @@ re_crts:
 	    case VisibilityNotify: if (dock & 32) {
 		Window rw, pw, *wins;
 		unsigned int nw;
-		XWindowAttributes wa;
 		static int lock_cnt = 0;
 
 		if (ev.xvisibility.state!=VisibilityFullyObscured ||

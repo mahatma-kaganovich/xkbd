@@ -30,7 +30,7 @@ xkbd_realize(Display *display,
 
    /* to event -> working starting here */
 
-   kb_size(xkbd->kb);
+//   kb_size(xkbd->kb);
    return xkbd;
 }
 
