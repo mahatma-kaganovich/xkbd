@@ -187,7 +187,7 @@ int _but_size(button *b, int l){
 	int i,s=0;
 	if (!(s=b->txt_size[l])) {
 		// set size=1 to empty as checked
-		s=_button_get_txt_size(b->kb, b->txt[i])?:1;
+		s=_button_get_txt_size(b->kb, b->txt[l])?:1;
 		for (i=0; i<STD_LEVELS; i++) if (b->txt[i]==b->txt[l]) b->txt_size[i]=s;
 	}
 	return s;
