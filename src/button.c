@@ -261,7 +261,7 @@ int button_render(button *b, int mode)
   int ah = b->act_height - p;
 
 #ifdef CACHE_PIX
-  Pixmap pix;
+  Pixmap pix = None;
   int i, m, j;
 
    // reuse bit as blank/spacer

@@ -1407,7 +1407,7 @@ void kb_process_keypress(button *b, int repeat, unsigned int flags)
     const unsigned int mod = b->modifier;
     int layout = b->layout_switch;
     int keypress = 1;
-    unsigned int st,st0;
+    unsigned int st,st0 = 0;
     Display *dpy = kb->display;
 
     DBG("got release state %i %i %i %i \n", state, STATE(KBIT_SHIFT), STATE(KBIT_MOD), STATE(KBIT_CTRL) );
