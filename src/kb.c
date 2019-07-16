@@ -1096,10 +1096,8 @@ static inline void bdraw(button *b, int flags){
 
 void _release(button *b){
 #ifdef MULTITOUCH
-	if (b->flags & STATE(OBIT_PRESSED)) {
+	if (b->flags & STATE(OBIT_PRESSED))
 		kb_process_keypress(b,0,STATE(OBIT_UGLY));
-		fprintf(stderr,"pressed\n");
-	}
 	else
 #endif
 	bdraw(b,0);
@@ -1170,19 +1168,23 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 		TOUCH_INC(N);
 		if (N==P) TOUCH_INC(P);
 #endif
-#ifdef SIBLINGS
-		n = nsib[t];
-		for(i=0;i<n;i++) if ((b1=sib[t][i])!=but[t]) _release(b1);
-		nsib[t] = -1;
-#endif
-		if ((b1=but[t]) && b1!=b && !--b1->cnt)
-			_release(b1);
-		but[t] = b;
 		times[t] = time;
 		touchid[t] = ptr;
 		devid[t] = dev;
-		if (b1!=b && !(b->cnt++))
-			_press(b,0);
+		if (b!=b1) {
+			but[t] = b;
+			if (b1) {
+				if (!--b1->cnt)
+					_release(b1);
+#ifdef SIBLINGS
+				n = nsib[t];
+				// if (!b1->cnt)
+					for(i=0;i<n;i++) if ((b2=sib[t][i])!=b1) _release(b2);
+				nsib[t] = -1;
+#endif
+			}
+			if (!(b->cnt++)) _press(b,0);
+		}
 		return b;
 	}
 
@@ -1211,6 +1213,8 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 		b=b1;
 	} else if (b->flags & STATE(OBIT_PRESSED)) { // pressed somewere
 		b=NULL;
+	} else if (b->cnt) { // pressed somewere
+		b=NULL;
 	} else { // button -> button, invariant
 		int ns, ns1 = b->nsiblings;
 		button **s1 = (button **)b->siblings;
@@ -1222,7 +1226,9 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 				b2=s[i];
 				for(j=0; j<ns1; j++) {
 					if (b2==s1[j]) {
-						_press(sib[t][n++]=b2,STATE(OBIT_UGLY));
+						sib[t][n++]=b2;
+						if (!b2->cnt)
+						    _press(b2,STATE(OBIT_UGLY));
 						break;
 					}
 				}
@@ -1239,7 +1245,9 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 						break;
 					}
 				}
-				if (b2) _release(b2);
+				if (b2)
+				    if (!b2->cnt)
+					_release(b2);
 			}
 		}
 		nsib[t]=n;
@@ -1312,7 +1320,7 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 drop:
 	if (b=but[t]) {
 		but[t] = NULL;
-		if (!--(b->cnt))
+		if (!--b->cnt)
 			_release(b);
 #ifdef SLIDES
 		b->slide = 0;

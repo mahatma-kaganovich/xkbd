@@ -311,6 +311,7 @@ int button_render(button *b, int mode)
 //  b->flags = (b->flags & ~(STATE(OBIT_PRESSED)|STATE(OBIT_LOCKED)|BUTTON_RELEASED))|mode;
   if (mode & STATE(OBIT_PRESSED))
     {
+	
       gc_solid = b->fg_gc;
       if (no_lock) {
 	gc_txt   = kb->txt_rev_gc;
