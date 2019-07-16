@@ -1213,8 +1213,8 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 		b=b1;
 	} else if (b->flags & STATE(OBIT_PRESSED)) { // pressed somewere
 		b=NULL;
-	} else if (b->cnt) { // pressed somewere
-		b=NULL;
+//	} else if (b->cnt) { // pressed somewere
+//		b=NULL;
 	} else { // button -> button, invariant
 		int ns, ns1 = b->nsiblings;
 		button **s1 = (button **)b->siblings;
@@ -1227,7 +1227,7 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 				for(j=0; j<ns1; j++) {
 					if (b2==s1[j]) {
 						sib[t][n++]=b2;
-						if (!b2->cnt)
+//						if (!b2->cnt)
 						    _press(b2,STATE(OBIT_UGLY));
 						break;
 					}
@@ -1246,7 +1246,7 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 					}
 				}
 				if (b2)
-				    if (!b2->cnt)
+//				    if (!b2->cnt)
 					_release(b2);
 			}
 		}
