@@ -66,7 +66,7 @@ kp_width 18
 		default Esc
 		default_ks Escape
 	</key>
-	<key>width 6</key>
+	<key>width -1</key>
 	<key>
 		default_ks F1
 	</key>
@@ -79,7 +79,7 @@ kp_width 18
 	<key>
 		default_ks F4
 	</key>
-	<key>width 6</key>
+	<key>width -1</key>
 	<key>
 		default_ks F5
 	</key>
@@ -92,7 +92,6 @@ kp_width 18
 	<key>
 		default_ks F8
 	</key>
-	<key>width 6</key>
 	<key>
 		default_ks F9
 	</key>
@@ -108,16 +107,7 @@ kp_width 18
 	<key>
 		default_ks Delete
 	</key>
-#	<key>
-#		default_ks Print
-#	</key>
-#	<key>
-#		default SclLk
-#		default_ks Scroll_Lock
-#	</key>
-#	<key>
-#		default_ks Pause
-#	</key>
+	<key>width -1</key>
 </row>
 <row>
 	<key>
