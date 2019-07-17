@@ -92,6 +92,7 @@ kp_width 18
 	<key>
 		default_ks F8
 	</key>
+	<key>width -1</key>
 	<key>
 		default_ks F9
 	</key>
