@@ -373,6 +373,7 @@ box *clone_box(Display *dpy, box *vbox, int group){
 		for (ip = ((box *)listp->data)->root_kid; ip; ip = ip->next) {
 			b0 = (button *)ip->data;
 			memcpy(b=malloc(sizeof(button)),b0,sizeof(button));
+			b->cnt=0;
 			box_add_button(bx1,b);
 			// new layout
 			// in first look same code must be used to reconfigure 1 layout,
