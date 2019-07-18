@@ -373,7 +373,6 @@ box *clone_box(Display *dpy, box *vbox, int group){
 		for (ip = ((box *)listp->data)->root_kid; ip; ip = ip->next) {
 			b0 = (button *)ip->data;
 			memcpy(b=malloc(sizeof(button)),b0,sizeof(button));
-			b->cnt=0;
 			box_add_button(bx1,b);
 			// new layout
 			// in first look same code must be used to reconfigure 1 layout,
@@ -1302,18 +1301,20 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 #ifdef SLIDES
 	kb_set_slide(b, x, y );
 #endif
-	if (b->cnt<2) 
-		kb_process_keypress(b,0,0);
 	if (b->layout_switch != -1) {
 		b->flags &= ~(STATE(OBIT_PRESSED)|STATE(OBIT_UGLY));
 #ifdef SIBLINGS
 		n = nsib[t];
 		for(i=0;i<n;i++) sib[t][i]->flags &= ~(STATE(OBIT_PRESSED)|STATE(OBIT_UGLY));
+#endif
+#ifdef MULTITOUCH
 		for (i=P; i!=N; TOUCH_INC(i)) but[i]->cnt=0;
 		N=P=0;
 #endif
+		if (b->cnt<2)  kb_process_keypress(b,0,0);
 		return NULL;
 	}
+	if (b->cnt<2) kb_process_keypress(b,0,0);
 	if (b->modifier) {
 		if (but[t]) but[t]->cnt--;
 		but[t] = NULL;
