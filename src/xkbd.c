@@ -797,7 +797,7 @@ re_crts:
 		// first lock: fork (to realize init-lock safe wait)
 		if (!lock_cnt++ && fork()) exit(0);
 	    }
-//	    if (dock & 256) XRaiseWindow(display, win);
+	    if (dock & 256) XRaiseWindow(display, win);
 	    if (dock & (256|32)) XFlush(display);
 	    break;
 	    case 0: break;
