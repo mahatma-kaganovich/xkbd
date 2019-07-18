@@ -1205,6 +1205,8 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 		for(i=0;i<n;i++) _release(sib[t][i]);
 		nsib[t]=-1;
 		_press(b,STATE(OBIT_UGLY));
+		but[t] = b;
+		b->cnt++;
 	} else if (b1==b) { // first/main button - reset motions
 		for(i=0;i<n;i++) if (sib[t][i]!=b) _release(sib[t][i]);
 		//nsib[t]=1; sib[t][0]=b;
@@ -1281,7 +1283,7 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 				else if (type==1) _press(b,STATE(OBIT_UGLY)|STATE(OBIT_SELECT));
 				if (type==2) nsib[t]=1;
 #endif
-			} else b = n1 ? but[t] : NULL;
+			} else b = n1 ? b1 : NULL;
 #endif
 		}
 	}
@@ -1295,25 +1297,20 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 	// the END/release
 	if (!b) goto drop;
 
-	// finally one. simplify
-	if (b!=but[t]) {
-		but[t]->cnt--;
-		but[t]=b;
-		b->cnt++;
-	}
+	// b == b[t]
 
 	if (b->cnt > 1) goto drop;
 #ifdef SIBLINGS
+	n = nsib[t];
 	// on any logic, don't press without preview
-	if (nsib[t]>1) goto drop;
+	if (n > 1) goto drop;
 #endif
 #ifdef SLIDES
-	kb_set_slide(b, x, y );
+	kb_set_slide(b, x, y);
 #endif
 	if (b->layout_switch != -1) {
 		b->flags &= ~(STATE(OBIT_PRESSED)|STATE(OBIT_UGLY));
 #ifdef SIBLINGS
-		n = nsib[t];
 		for(i=0;i<n;i++) sib[t][i]->flags &= ~(STATE(OBIT_PRESSED)|STATE(OBIT_UGLY));
 #endif
 #ifdef MULTITOUCH
