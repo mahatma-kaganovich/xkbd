@@ -736,13 +736,10 @@ re_crts:
 		}
 		break;
 	    case Expose:
-	      XGetWindowAttributes(display,rootWin,&wa);
-	      if (wa0.x!=wa.x || wa0.y!=wa.y || wa0.width!=wa.width || wa0.height!=wa.height) restart();
-	      wa0=wa;
-	      static int x1=-1,y1=-1;
-	      XTranslateCoordinates(display,win,rootWin,0,0,&x,&y,&win1);
-	      if (x!=x1 && y!=y1) {
-		x1=x; y1=y;
+		XGetWindowAttributes(display,rootWin,&wa);
+		if (wa0.x!=wa.x || wa0.y!=wa.y || wa0.width!=wa.width || wa0.height!=wa.height) restart();
+		wa0=wa;
+		XTranslateCoordinates(display,win,rootWin,0,0,&x,&y,&win1);
 		if (dock & 2) {
 			if (top) {
 				prop[2] = y + height;
@@ -774,9 +771,8 @@ re_crts:
 			//8: top_start_x, top_end_x, bottom_start_x, bottom_end_x
 			_prop(32,"_NET_WM_STRUT_PARTIAL",XA_CARDINAL,&prop,12);
 		}
-	      }
-	      xkbd_repaint(kb);
-	      break;
+		xkbd_repaint(kb);
+		break;
 	    case VisibilityNotify: if (dock & 32) {
 		Window rw, pw, *wins;
 		unsigned int nw;
