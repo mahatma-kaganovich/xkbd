@@ -196,13 +196,13 @@ void version()
 #endif
 }
 
-void _prop(int i, char *prop, Atom type, void *data, int n){
-	XChangeProperty(display,win,prop?XInternAtom(display,prop,False):mwm_atom,type,i,PropModeReplace,(unsigned char *)data,n); 
+void _prop(int i, char *prop, Atom type, void *data, int n, int mode){
+	XChangeProperty(display,win,XInternAtom(display,prop,False),type,i,mode,(unsigned char *)data,n); 
 }
 
 void _propAtom32(char *prop, char *data){
 	Atom a=XInternAtom(display,data,False);
-	_prop(32,prop,XA_ATOM,&a,1);
+	_prop(32,prop,XA_ATOM,&a,1,PropModeAppend);
 }
 
 int inbound(int x,int xin,int x1,int x2){
@@ -567,8 +567,8 @@ re_crts:
         int k;
         k = x + w - i;
 	if (!left && k>=X1 && k<=X2) x = k;
-        k = x + h -j;
-	if (!top && k>=Y1 && k>=Y2) y += k;
+        k = y + h - j;
+	if (!top && k>=Y1 && k<=Y2) y = k;
 	XMoveResizeWindow(display,win,x,y,width=i,height=j);
       }
 //      if (cache_pix) xkbd_repaint(kb); // reduce blinking on start
@@ -768,10 +768,10 @@ re_crts:
 //			for(i=0;i<12;i++) fprintf(stderr," %li",prop[i]);fprintf(stderr," crts=%i\n",crts);
 			//0: left, right, top, bottom,
 			// don't strut global on xrandr multihead
-			if (crts<2) _prop(32,"_NET_WM_STRUT",XA_CARDINAL,&prop,4);
+			if (crts<2) _prop(32,"_NET_WM_STRUT",XA_CARDINAL,&prop,4,PropModeReplace);
 			//4: left_start_y, left_end_y, right_start_y, right_end_y,
 			//8: top_start_x, top_end_x, bottom_start_x, bottom_end_x
-			_prop(32,"_NET_WM_STRUT_PARTIAL",XA_CARDINAL,&prop,12);
+			_prop(32,"_NET_WM_STRUT_PARTIAL",XA_CARDINAL,&prop,12,PropModeReplace);
 		}
 		xkbd_repaint(kb);
 		break;
@@ -797,7 +797,7 @@ re_crts:
 		// first lock: fork (to realize init-lock safe wait)
 		if (!lock_cnt++ && fork()) exit(0);
 	    }
-	    if (dock & 256) XRaiseWindow(display, win);
+//	    if (dock & 256) XRaiseWindow(display, win);
 	    if (dock & (256|32)) XFlush(display);
 	    break;
 	    case 0: break;
