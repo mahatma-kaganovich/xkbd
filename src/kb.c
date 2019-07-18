@@ -1294,6 +1294,15 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 
 	// the END/release
 	if (!b) goto drop;
+
+	// finally one. simplify
+	if (b!=but[t]) {
+		but[t]->cnt--;
+		but[t]=b;
+		b->cnt++;
+	}
+
+	if (b->cnt > 1) goto drop;
 #ifdef SIBLINGS
 	// on any logic, don't press without preview
 	if (nsib[t]>1) goto drop;
@@ -1314,12 +1323,12 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 		}
 		N=P=0;
 #endif
-		if (b->cnt<2)  kb_process_keypress(b,0,0);
+		kb_process_keypress(b,0,0);
 		return NULL;
 	}
-	if (b->cnt<2) kb_process_keypress(b,0,0);
+	kb_process_keypress(b,0,0);
 	if (b->modifier) {
-		if (but[t]) but[t]->cnt--;
+		b->cnt--;
 		but[t] = NULL;
 	}
 drop:
