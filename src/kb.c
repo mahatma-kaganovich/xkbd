@@ -1308,7 +1308,10 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 		for(i=0;i<n;i++) sib[t][i]->flags &= ~(STATE(OBIT_PRESSED)|STATE(OBIT_UGLY));
 #endif
 #ifdef MULTITOUCH
-		for (i=P; i!=N; TOUCH_INC(i)) but[i]->cnt=0;
+		for (i=P; i!=N; TOUCH_INC(i)) {
+			but[i]->cnt=0;
+			but[i]=NULL;
+		}
 		N=P=0;
 #endif
 		if (b->cnt<2)  kb_process_keypress(b,0,0);
