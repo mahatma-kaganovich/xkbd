@@ -262,9 +262,10 @@ int main(int argc, char **argv)
 	other than from ~/." IAM " or " DEFAULTCONFIG },
 	{ 'D', IAM ".dock", 1, 0, &dock, "Dock/options bitmask:\n\
 	1=dock, 2=strut, 4=_NET_WM_WINDOW_TYPE_DOCK,\n\
-	8=_NET_WM_WINDOW_TYPE_TOOLBAR, 16=_NET_WM_STATE_STICKY.\n\
-	32=resize (slock), 64=strut horizontal, 128=_NET_WM_STATE_SKIP_TASKBAR\n\
-	For OpenBox I use 178 = $[2+16+32+128]." },
+	8=_NET_WM_WINDOW_TYPE_TOOLBAR, 16=_NET_WM_STATE_STICKY,\n\
+	32=resize (slock), 64=strut horizontal, 128=_NET_WM_STATE_SKIP_TASKBAR,\n\
+	256=_NET_WM_STATE_ABOVE + RaiseWindow().\n\
+	For OpenBox I use 434 = $[2+16+32+128+256]." },
 	{ 'i', IAM ".fake_touch", 2, 0, &fake_touch,
 #ifdef USE_XI
 		"fake touch device / no XI2 (2=both types over XI2)"
@@ -649,7 +650,8 @@ re_crts:
 	_propAtom32("_NET_WM_STATE","_NET_WM_STATE_STICKY");
       if (dock & 128)
 	_propAtom32("_NET_WM_STATE","_NET_WM_STATE_SKIP_TASKBAR");
-//      _propAtom32("_NET_WM_STATE","_NET_WM_STATE_ABOVE");
+      if (dock & 256)
+	_propAtom32("_NET_WM_STATE","_NET_WM_STATE_ABOVE");
 //      _propAtom32("_NET_WM_STATE","_NET_WM_STATE_FOCUSED");
 //      Atom version = 4;
 //      _prop(32,"XdndAware",XA_ATOM,&version,1);
@@ -795,6 +797,8 @@ re_crts:
 		// first lock: fork (to realize init-lock safe wait)
 		if (!lock_cnt++ && fork()) exit(0);
 	    }
+	    if (dock & 256) XRaiseWindow(display, win);
+	    if (dock & (256|32)) XFlush(display);
 	    break;
 	    case 0: break;
 	    default:
