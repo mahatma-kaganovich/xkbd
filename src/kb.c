@@ -1171,7 +1171,7 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 		times[t] = time;
 		touchid[t] = ptr;
 		devid[t] = dev;
-		if (b!=b1) {
+		if (b!=(b1=but[t])) {
 			but[t] = b;
 			if (b1) {
 				if (!--b1->cnt)
