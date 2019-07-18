@@ -783,6 +783,7 @@ void kb_size(keyboard *kb) {
 	int i,j,k;
 	box *vbox, *bx;
 	static unsigned long long init_cnt = 0;
+	const int hack = 1; /* hack for using all screen space */
 
 	// [virtual] kb size based on buttons
 	w=0; h=0;
@@ -962,7 +963,6 @@ void kb_size(keyboard *kb) {
 				kb->kbd_layouts[0]->min_height = vbox->min_height;
 			vbox->min_width = max_width;
 		}
-		const int hack = 1; /* hack for using all screen space */
 		for(i=0;i<kb->total_layouts;i++) {
 		    int cy = 0;
 		    int fx = 0;

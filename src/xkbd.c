@@ -563,8 +563,11 @@ re_crts:
       i=xkbd_get_width(kb);
       j=xkbd_get_height(kb);
       if (width != i || height != j) {
-	if (!left) x += w - i;
-	if (!top) y += h - j;
+        int k;
+        k = x + w - i;
+	if (!left && k>=X1 && k<=X2) x = k;
+        k = x + h -j;
+	if (!top && k>=Y1 && k>=Y2) y += k;
 	XMoveResizeWindow(display,win,x,y,width=i,height=j);
       }
 //      if (cache_pix) xkbd_repaint(kb); // reduce blinking on start
@@ -733,12 +736,13 @@ re_crts:
 		}
 		break;
 	    case Expose:
-		xkbd_repaint(kb);
-		break;
-	    case MapNotify:
-		XGetWindowAttributes(display,rootWin,&wa);
-		if (wa0.x!=wa.x || wa0.y!=wa.y || wa0.width!=wa.width || wa0.height!=wa.height) restart();
-		XTranslateCoordinates(display,win,rootWin,0,0,&x,&y,&win1);
+	      XGetWindowAttributes(display,rootWin,&wa);
+	      if (wa0.x!=wa.x || wa0.y!=wa.y || wa0.width!=wa.width || wa0.height!=wa.height) restart();
+	      wa0=wa;
+	      static int x1=-1,y1=-1;
+	      XTranslateCoordinates(display,win,rootWin,0,0,&x,&y,&win1);
+	      if (x!=x1 && y!=y1) {
+		x1=x; y1=y;
 		if (dock & 2) {
 			if (top) {
 				prop[2] = y + height;
@@ -770,7 +774,9 @@ re_crts:
 			//8: top_start_x, top_end_x, bottom_start_x, bottom_end_x
 			_prop(32,"_NET_WM_STRUT_PARTIAL",XA_CARDINAL,&prop,12);
 		}
-		break;
+	      }
+	      xkbd_repaint(kb);
+	      break;
 	    case VisibilityNotify: if (dock & 32) {
 		Window rw, pw, *wins;
 		unsigned int nw;
