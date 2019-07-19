@@ -901,7 +901,7 @@ void kb_size(keyboard *kb) {
 	}
 	kb->vbox = kb->kbd_layouts[kb->group = 0];
 
-	if (cache_pix) {
+	if (cache_pix && cache_pix!=3) {
 	    if (kb->backing) XFreePixmap(kb->display, kb->backing);
 
 	    kb->backing = XCreatePixmap(kb->display, kb->win,
@@ -1036,7 +1036,7 @@ void kb_size(keyboard *kb) {
     int N;
     for (N=0; N<1024; N++)
 #endif
-    if (cache_pix>1) for(i=0;i<kb->total_layouts;i++) cache_preload(kb,i);
+    if (cache_pix==2) for(i=0;i<kb->total_layouts;i++) cache_preload(kb,i);
     init_cnt++;
 }
 
@@ -1048,7 +1048,7 @@ kb_switch_layout(keyboard *kb, int kbd_layout_num, int shift)
 
   for(; kbd_layout_num >= kb->total_layouts; kb->total_layouts++) {
 	kb->kbd_layouts[kb->total_layouts] = clone_box(kb->display,kb->kbd_layouts[0],kb->total_layouts);
-	if (cache_pix>1) cache_preload(kb,kb->total_layouts);
+	if (cache_pix==2) cache_preload(kb,kb->total_layouts);
   }
 
   b = kb->kbd_layouts[kb->group = kbd_layout_num];
@@ -1064,7 +1064,8 @@ kb_switch_layout(keyboard *kb, int kbd_layout_num, int shift)
 void kb_render(keyboard *kb)
 {
 	list *listp, *ip;
-	XFillRectangle(kb->display, kb->backing,
+	if (kb->backing!=kb->win)
+	    XFillRectangle(kb->display, kb->backing,
 		kb->filled=kb->rev_gc, kb->vvbox->vx, kb->vvbox->vy,
 		kb->vvbox->act_width, kb->vvbox->act_height);
 	for (listp = kb->vvbox->root_kid; listp; listp = listp->next) {
@@ -1078,7 +1079,7 @@ void kb_render(keyboard *kb)
 
 void kb_paint(keyboard *kb)
 {
-  if (cache_pix)
+  if (kb->backing!=kb->win)
   XCopyArea(kb->display, kb->backing, kb->win, kb->gc,
 	    0, 0, kb->vbox->act_width, kb->vbox->act_height,
 	    kb->vbox->x, kb->vbox->y);
@@ -1562,6 +1563,10 @@ void kb_send_keypress(button *b, unsigned int next_state, unsigned int flags) {
 	if (mods != next_state && next_state == mods0) {
 		XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,mods0);
 		_xsync(True);
+	}
+	if (Xkb_sync==2) {
+		XFlush(dpy);
+		XSync(dpy,True);
 	}
 }
 

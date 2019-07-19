@@ -67,7 +67,7 @@ char **exec_cmd;
 int Xkb_sync = 2;
 int no_lock = 0;
 #ifdef CACHE_PIX
-int cache_pix = 1;
+int cache_pix = 3;
 #endif
 
 // dpi
@@ -283,7 +283,7 @@ int main(int argc, char **argv)
 #endif
 	},
 #ifdef CACHE_PIX
-	{ 'C', IAM ".cache", 1, 0, &cache_pix, "pixmap cache 0=disable, 1=enable, 2=preload" },
+	{ 'C', IAM ".cache", 1, 0, &cache_pix, "pixmap cache 0=disable, 1=enable, 2=preload, 3=direct+cache" },
 #endif
 	{ 0, NULL }
    };

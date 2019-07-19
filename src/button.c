@@ -247,7 +247,9 @@ int button_render(button *b, int mode)
   int l=KBLEVEL(b);
   char *txt;
   keyboard *kb = b->kb;
+  Pixmap backing = kb->backing;
   int p = kb->pad;
+//  int p = cache_pix==3?0:kb->pad;
   int x = b->vx + p;
   int y = b->vy + p;
   int w = b->act_width - (p<<1);
@@ -277,22 +279,19 @@ int button_render(button *b, int mode)
     pix = b->pix[i];
     if (pix) {
 	if (mode & STATE(OBIT_DIRECT)) {
-		XCopyArea(kb->display, pix, kb->win, kb->gc,
-		0, 0, aw, ah,
-		ax+kb->vvbox->x, ay+kb->vvbox->y);
-		return 1;
-	} else {
-		XCopyArea(kb->display, pix, kb->backing, kb->gc,
-		0, 0, aw, ah,
-		ax, ay);
-		return 0;
+		backing = cache_pix==4?backing:kb->win;
+		ax+=kb->vvbox->x;
+		ay+=kb->vvbox->y;
 	}
+	XCopyArea(kb->display, pix, backing, kb->gc, 0, 0, aw, ah, ax, ay);
+	return backing==kb->win;
     }
     b->pix[i] = pix = XCreatePixmap(kb->display,
 	kb->win,
-//	kb->backing,
+//	backing,
 	aw, ah,
 	DefaultDepth(kb->display, DefaultScreen(kb->display)) );
+//   if (cache_pix==3) backing=pix;
   }
     // pixmap must pass too as txt[]=0
   txt = GET_TXT(b,l);
@@ -353,21 +352,21 @@ int button_render(button *b, int mode)
   }
 
   if (!kb->filled || (gc_solid!=kb->filled && getGCFill(kb,kb->filled)!=getGCFill(kb,gc_solid)))
-	XFillRectangle(kb->display, kb->backing, gc_solid, x1, y1, x2, y2);
+	XFillRectangle(kb->display, backing, gc_solid, x1, y1, x2, y2);
 
   switch (kb->theme) {
     case rounded:
-	XDrawRectangle( kb->display, kb->backing, kb->bdr_gc, x, y, w, h);
+	XDrawRectangle( kb->display, backing, kb->bdr_gc, x, y, w, h);
 	x2+=x;
 	y2+=y;
-	XDrawPoint(kb->display, kb->backing, kb->bdr_gc, x1, y1);
-	XDrawPoint(kb->display, kb->backing, kb->bdr_gc, x2, y1);
-	XDrawPoint(kb->display, kb->backing, kb->bdr_gc, x1, y2);
-	XDrawPoint(kb->display, kb->backing, kb->bdr_gc, x2, y2);
+	XDrawPoint(kb->display, backing, kb->bdr_gc, x1, y1);
+	XDrawPoint(kb->display, backing, kb->bdr_gc, x2, y1);
+	XDrawPoint(kb->display, backing, kb->bdr_gc, x1, y2);
+	XDrawPoint(kb->display, backing, kb->bdr_gc, x2, y2);
 	break;
     case square:
 	if (!(mode & STATE(OBIT_DIRECT)))
-	XDrawRectangle( kb->display, kb->backing, kb->bdr_gc, x, y, w, h);
+	XDrawRectangle( kb->display, backing, kb->bdr_gc, x, y, w, h);
 	break;
   }
 
@@ -383,7 +382,7 @@ int button_render(button *b, int mode)
       gc_vals.clip_y_origin = yy;
       XChangeGC(kb->display, b->mask_gc, GCClipXOrigin|GCClipYOrigin, &gc_vals);
 
-      XCopyArea(kb->display, b->pixmap, kb->backing, b->mask_gc,
+      XCopyArea(kb->display, b->pixmap, backing, b->mask_gc,
 		0, 0, b->vwidth, b->vheight, xx, yy);
       goto pixmap; /* imgs cannot have text aswell ! */
     }
@@ -405,7 +404,7 @@ int button_render(button *b, int mode)
 		xx, yy + kb->font->ascent,
 		(unsigned char *) txt, strlen(txt));
 #else
-    XDrawString(kb->display, kb->backing, gc_txt,
+    XDrawString(kb->display, backing, gc_txt,
 		xx, yy + kb->font->ascent,
 		txt, strlen(txt));
 #endif
@@ -413,15 +412,16 @@ int button_render(button *b, int mode)
 pixmap:
 #ifdef CACHE_PIX
   if (cache_pix)
-	XCopyArea(kb->display, kb->backing, pix, kb->gc,
+	XCopyArea(kb->display, backing, pix, kb->gc,
 		ax, ay, aw, ah, 0, 0);
 #endif
-   return !cache_pix;
+   return backing == kb->win;
 }
 
 void button_paint(button *b)
 {
 #ifdef CACHE_PIX
+    if (b->kb->backing != b->kb->win) {
   /* use the vbox offsets for the location within the window */
 	int p = b->kb->pad;
 	int x = b->vx + p;
@@ -431,6 +431,7 @@ void button_paint(button *b)
 	XCopyArea(b->kb->display, b->kb->backing, b->kb->win, b->kb->gc,
 	    x, y, b->act_width - p, b->act_height - p,
 	    x+b->kb->vvbox->x, y+b->kb->vvbox->y);
+    }
 #endif
 }
 
