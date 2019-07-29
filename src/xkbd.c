@@ -614,8 +614,8 @@ re_crts:
       if(fake_touch!=1 && XQueryExtension(display, "XInputExtension", &xiopcode, &xievent, &xierror) &&
 		XIQueryVersion(display, &ximajor, &ximinor) != BadRequest) {
 
-	unsigned char mask_[3] = {0, 0, 0};
-	XIEventMask mask = { .deviceid = XIAllDevices, .mask_len = XIMaskLen(XI_TouchEnd), .mask = (unsigned char *)&mask_ };
+	static unsigned char mask_[XIMaskLen(XI_TouchEnd)];
+	static XIEventMask mask = { .deviceid = XIAllDevices, .mask_len = sizeof(mask_), .mask = (unsigned char *)&mask_ };
 
 	if (fake_touch==2) {
 		XISetMask(mask.mask, XI_ButtonPress);
