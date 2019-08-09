@@ -34,6 +34,10 @@
 'Meta_L'=>'Meta',
 'Delete'=>'Del',
 'Insert'=>'Ins',
+'XF86Next_VMode'=>'+m',
+'XF86Prev_VMode'=>'-m',
+'XF86Ungrab'=>'/gr',
+'XF86ClearGrab'=>'*gr',
 );
 
 $h='/usr/include/X11/keysymdef.h';
