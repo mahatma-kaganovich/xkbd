@@ -886,14 +886,19 @@ void kb_size(keyboard *kb) {
 #endif
 				}
 				button_calc_vwidth(b);
-				if (!(b->flags & STATE(OBIT_WIDTH_SPEC))) {
+				if (b->vheight) continue;
+				b->vheight = kb->vheight;
+				if (
+					!(b->width && b->height && kb->vheight == kb->vheight1) && // opt
+					!(b->flags & STATE(OBIT_WIDTH_SPEC))) {
 					if ( ( DEFAULT_TXT(b) == NULL || strlen1utf8(DEFAULT_TXT(b)))
 						&& (SHIFT_TXT(b) == NULL || strlen1utf8(SHIFT_TXT(b)))
 						&& (MOD_TXT(b) == NULL || strlen1utf8(MOD_TXT(b)))
 						&& !b->pixmap) {
+							b->vheight = kb->vheight1;
 							if (b->vwidth > max_single_char_width)
 								max_single_char_width = b->vwidth;
-					} 
+					}
 				}
 				if (b->vheight > max_single_char_height) max_single_char_height = b->vheight;
 			}
@@ -938,17 +943,22 @@ void kb_size(keyboard *kb) {
 				bx = (box *)listp->data;
 				for(ip=bx->root_kid; ip; ip= ip->next) {
 					b = (button *)ip->data;
-					if (!(b->flags & STATE(OBIT_WIDTH_SPEC))) {
+
+					if (
+						!(b->width && b->height) &&
+						!(b->flags & STATE(OBIT_WIDTH_SPEC))) {
 						 if ((DEFAULT_TXT(b) == NULL || (strlen(DEFAULT_TXT(b)) == 1))
 						    && (SHIFT_TXT(b) == NULL || (strlen(SHIFT_TXT(b)) == 1))
 						    && (MOD_TXT(b) == NULL || (strlen(MOD_TXT(b)) == 1))
 						    && !b->pixmap) {
-							b->vwidth = max_single_char_width;
-							b->vheight = max_single_char_height;
-							if (b->key_span_width) b->vwidth = b->key_span_width * max_single_char_width;
+							if (!b->height) b->vheight = max_single_char_height;
+							if (!b->width) {
+								b->vwidth = max_single_char_width;
+								if (b->key_span_width) b->vwidth = b->key_span_width * max_single_char_width;
+							}
 						}
 					}
-
+  
 					tmp_width += b->vwidth + (b->b_size<<1);
 					tmp_height = b->vheight + (b->b_size<<1);
 					if (tmp_height >= max_height) max_height = tmp_height;
