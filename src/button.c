@@ -202,7 +202,7 @@ int button_calc_vwidth(button *b)
 
 #ifdef CACHE_SIZES
   int i,sz = 0;
-  for (i=0; i<STD_LEVELS; i++) if (b->txt) sz = max(sz,_but_size(b,i));
+  for (i=0; i<STD_LEVELS; i++) if (b->txt[i]) sz = max(sz,_but_size(b,i));
   b->vwidth = sz;
 #else
   b->vwidth = max(
