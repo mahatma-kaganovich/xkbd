@@ -41,7 +41,8 @@
 
 #include "../config.h"
 
-#include "libXkbd.h"
+#include "structs.h"
+#include "kb.h"
 
 #define DEBUG 1
 
@@ -61,7 +62,9 @@ Atom mwm_atom;
 int screen;
 XWindowAttributes wa0;
 
-Xkbd *kb = NULL;
+keyboard *kb = NULL;
+button *active_but = NULL;
+
 char **exec_cmd;
 
 int Xkb_sync = 2;
@@ -558,11 +561,10 @@ re_crts:
       _reset(0);
       signal(SIGTERM, _reset);
 
-      kb = xkbd_realize(display, win, conf_file, font_name, font_name1, 0, 0,
-			width, height);
-      kb_size(kb->kb);
-      i=xkbd_get_width(kb);
-      j=xkbd_get_height(kb);
+      kb = kb_new(win, display, 0, 0, width, height, conf_file, font_name, font_name1);
+      kb_size(kb);
+      i=kb->vbox->act_width;
+      j=kb->vbox->act_height;
       if (width != i || height != j) {
         int k;
         k = x + w - i;
@@ -571,7 +573,7 @@ re_crts:
 	if (!top && k>=Y1 && k<=Y2) y = k;
 	XMoveResizeWindow(display,win,x,y,width=i,height=j);
       }
-//      if (cache_pix) xkbd_repaint(kb); // reduce blinking on start
+//      if (cache_pix) kb_repaint(kb); // reduce blinking on start
 
       size_hints.flags = PPosition | PSize | PMinSize;
       size_hints.x = 0;
@@ -701,14 +703,14 @@ re_crts:
 				if (lastid == e->sourceid) break;
 				if (!fake_touch) { // only release -> press+release
 					SERIAL(ev.xmotion.serial) break;
-					xkbd_process(kb, 0, ex, ey, 0, e->sourceid, e->time);
+					active_but = kb_handle_events(kb, 0, ex, ey, 0, e->sourceid, e->time);
 				}
-				xkbd_process(kb, type, ex, ey, 0, e->sourceid, e->time);
+				active_but = kb_handle_events(kb, type, ex, ey, 0, e->sourceid, e->time);
 				break;
 			    case XI_TouchEnd: type++;
 			    case XI_TouchUpdate: type++;
 			    case XI_TouchBegin:
-				xkbd_process(kb, type, ex, ey, e->detail, lastid = e->sourceid, e->time);
+				active_but = kb_handle_events(kb, type, ex, ey, e->detail, lastid = e->sourceid, e->time);
 			}
 			XFreeEventData(display, &ev.xcookie);
 		}
@@ -717,22 +719,22 @@ re_crts:
 	    case ButtonRelease: type++;
 	    case MotionNotify: type++;
 	    case ButtonPress:
-		xkbd_process(kb, type, ev.xmotion.x, ev.xmotion.y, 0, 0, ev.xmotion.time);
+		active_but = kb_handle_events(kb, type, ev.xmotion.x, ev.xmotion.y, 0, 0, ev.xmotion.time);
 		break;
 	    case ClientMessage:
 		if ((ev.xclient.message_type == wm_protocols[1])
 		      && (ev.xclient.data.l[0] == wm_protocols[0]))
 		{
-			xkbd_destroy(kb);
+//			xkbd_destroy(kb);
 			XCloseDisplay(display);
 			exit(0);
 		}
 		break;
 	    case ConfigureNotify:
-		if ( ev.xconfigure.width != xkbd_get_width(kb)
-		    || ev.xconfigure.height != xkbd_get_height(kb))
+		if ( ev.xconfigure.width != kb->vbox->act_width
+		    || ev.xconfigure.height != kb->vbox->act_height)
 		{
-			xkbd_resize(kb,
+			kb_resize(kb,
 				 ev.xconfigure.width,
 				 ev.xconfigure.height );
 		}
@@ -773,7 +775,7 @@ re_crts:
 			//8: top_start_x, top_end_x, bottom_start_x, bottom_end_x
 			_prop(32,"_NET_WM_STRUT_PARTIAL",XA_CARDINAL,&prop,12,PropModeReplace);
 		}
-		xkbd_repaint(kb);
+		kb_repaint(kb);
 		break;
 	    case VisibilityNotify: if (dock & 32) {
 		Window rw, pw, *wins;
@@ -810,8 +812,8 @@ re_crts:
 			    case XkbStateNotify:
 #undef e
 #define e (((XkbEvent)ev).state)
-				if (xkbd_sync_state(kb,e.mods,e.locked_mods,e.group))
-					xkbd_repaint(kb);
+				if (kb_sync_state(kb,e.mods,e.locked_mods,e.group))
+					kb_repaint(kb);
 				break;
 			    case XkbNewKeyboardNotify:
 #undef e
@@ -829,7 +831,7 @@ re_crts:
 		if (xrr && ev.type == xrevent + RRScreenChangeNotify) restart();
 #endif
 	    }
-	    while (xkbd_process_repeats(kb) && !XPending(display))
+	    while (kb_do_repeat(kb, active_but) && !XPending(display))
 		usleep(10000L); /* sleep for a 10th of a second */
       }
 no_dpy:

@@ -320,6 +320,32 @@ int kb_load_keymap(Display *dpy) {
    return 0;
 }
 
+unsigned int _set_state(unsigned int *s, unsigned int new)
+{
+	unsigned int old = *s & KB_STATE_KNOWN;
+	new &= KB_STATE_KNOWN;
+	*s = (*s & ~KB_STATE_KNOWN)|new;
+	return old^new;
+}
+
+
+unsigned int kb_sync_state(keyboard *kb, unsigned int mods, unsigned int locked_mods, int group)
+{
+	unsigned int ch=0;
+	int i=0;
+
+//	locked_mods &= STATE(KBIT_CAPS) | ~KB_STATE_KNOWN;
+
+	if (((mods|locked_mods) ^ ((kb->state|kb->state_locked)) && KB_STATE_KNOWN))
+		ch|=_set_state(&kb->state, mods)|_set_state(&kb->state_locked, locked_mods);
+	if (group!=kb->group){
+		kb_switch_layout(kb,group,0);
+		ch=0;
+	}
+//	XkbGetIndicatorState(kb->display,XkbUseCoreKbd,&i);
+	return ch;
+}
+
 #ifdef USE_XFT
 #define _set_color_fg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,xc)
 void __set_color_fg(keyboard *kb, char *txt,GC *gc, XftColor *xc){
@@ -1050,8 +1076,7 @@ void kb_size(keyboard *kb) {
     init_cnt++;
 }
 
-void
-kb_switch_layout(keyboard *kb, int kbd_layout_num, int shift)
+int kb_switch_layout(keyboard *kb, int kbd_layout_num, int shift)
 {
   box *b;
   box *b0 = kb->vvbox;
@@ -1064,11 +1089,10 @@ kb_switch_layout(keyboard *kb, int kbd_layout_num, int shift)
   b = kb->kbd_layouts[kb->group = kbd_layout_num];
   kb->vbox = b;
   if (!shift) kb->vvbox = b;
-  if (b0 == kb->vvbox) return;
+  if (b0 == kb->vvbox) return 0;
 
-//  kb_size(kb);
-  kb_render(kb);
-  kb_paint(kb);
+  kb_repaint(kb);
+  return 1;
 }
 
 void kb_render(keyboard *kb)
@@ -1093,6 +1117,20 @@ void kb_paint(keyboard *kb)
   XCopyArea(kb->display, kb->backing, kb->win, kb->gc,
 	    0, 0, kb->vbox->act_width, kb->vbox->act_height,
 	    kb->vbox->x, kb->vbox->y);
+}
+
+void kb_repaint(keyboard *kb){
+	kb_render(kb);
+	kb_paint(kb);
+}
+
+void kb_resize(keyboard *kb, int width, int height)
+{
+	if (kb->vbox->act_width == width && kb->vbox->act_height == height) return;
+	kb->vbox->act_width = width;
+	kb->vbox->act_height = height;
+	kb_size(kb);
+	kb_repaint(kb);
 }
 
 static inline void bdraw(button *b, int flags){
@@ -1430,7 +1468,7 @@ void kb_process_keypress(button *b, int repeat, unsigned int flags)
     const unsigned int mod = b->modifier;
     int layout = b->layout_switch;
     int keypress = 1;
-    unsigned int st,st0 = 0;
+    unsigned int st,st0 = 0,paint=0;
     Display *dpy = kb->display;
 
     DBG("got release state %i %i %i %i \n", state, STATE(KBIT_SHIFT), STATE(KBIT_MOD), STATE(KBIT_CTRL) );
@@ -1484,8 +1522,19 @@ void kb_process_keypress(button *b, int repeat, unsigned int flags)
     if (keypress) {
 	kb_send_keypress(b, st, flags);
 	DBG("%s clicked \n", DEFAULT_TXT(b));
+	if (Xkb_sync==2) {
+		XkbStateRec s;
+		XFlush(dpy);
+		XSync(dpy,True);
+		XkbGetState(dpy,XkbUseCoreKbd,&s);
+		paint |=
+		    kb_sync_state(b->kb,s.mods,s.locked_mods,s.group);
+		state = kb->state;
+		lock = kb->state_locked;
+	}
     }
     if (state != kb->state || lock != kb->state_locked) {
+	fprintf(stderr,"tst");
 #ifndef MINIMAL
 	if (Xkb_sync) {
 		XSync(dpy,False); // serialize
@@ -1498,11 +1547,10 @@ void kb_process_keypress(button *b, int repeat, unsigned int flags)
 #endif
 	kb->state = state;
 	kb->state_locked = lock;
-	kb_render(kb);
-	kb_paint(kb);
+	paint = 1;
    }
 
-   if (layout) {
+   if (layout!=-1) {
     if (layout>-1) {
 #ifndef MINIMAL
 	if (Xkb_sync) {
@@ -1512,16 +1560,17 @@ void kb_process_keypress(button *b, int repeat, unsigned int flags)
 	}
 #endif
     } else {
-        XkbStateRec s;
+	XkbStateRec s;
 	XkbGetState(dpy,XkbUseCoreKbd,&s);
 	layout = s.group;
     }
     // shift-layout: trans-layout mode (silent)
     st0 &= STATE(KBIT_SHIFT);
-    kb_switch_layout(kb,layout,st0);
+    paint |= !kb_switch_layout(kb,layout,st0);
     if (st0)
 	bdraw(b,0);
-   }
+  }
+  if (paint) kb_repaint(kb);
 }
 
 #ifndef MINIMAL
@@ -1573,10 +1622,6 @@ void kb_send_keypress(button *b, unsigned int next_state, unsigned int flags) {
 	if (mods != next_state && next_state == mods0) {
 		XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,mods0);
 		_xsync(True);
-	}
-	if (Xkb_sync==2) {
-		XFlush(dpy);
-		XSync(dpy,True);
 	}
 }
 
