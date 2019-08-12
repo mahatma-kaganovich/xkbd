@@ -1468,7 +1468,7 @@ void kb_process_keypress(button *b, int repeat, unsigned int flags)
     const unsigned int mod = b->modifier;
     int layout = b->layout_switch;
     int keypress = 1;
-    unsigned int st,st0 = 0,paint=0;
+    unsigned int st,st0 = 0;
     Display *dpy = kb->display;
 
     DBG("got release state %i %i %i %i \n", state, STATE(KBIT_SHIFT), STATE(KBIT_MOD), STATE(KBIT_CTRL) );
@@ -1525,16 +1525,13 @@ void kb_process_keypress(button *b, int repeat, unsigned int flags)
 	if (Xkb_sync==2) {
 		XkbStateRec s;
 		XFlush(dpy);
-		XSync(dpy,True);
+		XSync(dpy,False);
 		XkbGetState(dpy,XkbUseCoreKbd,&s);
-		paint |=
-		    kb_sync_state(b->kb,s.mods,s.locked_mods,s.group);
-		state = kb->state;
-		lock = kb->state_locked;
+		kb_sync_state(b->kb,s.mods,s.locked_mods,layout>=0?layout:s.group);
+		return;
 	}
     }
     if (state != kb->state || lock != kb->state_locked) {
-	fprintf(stderr,"tst");
 #ifndef MINIMAL
 	if (Xkb_sync) {
 		XSync(dpy,False); // serialize
@@ -1547,7 +1544,7 @@ void kb_process_keypress(button *b, int repeat, unsigned int flags)
 #endif
 	kb->state = state;
 	kb->state_locked = lock;
-	paint = 1;
+	kb_repaint(kb);
    }
 
    if (layout!=-1) {
@@ -1566,11 +1563,10 @@ void kb_process_keypress(button *b, int repeat, unsigned int flags)
     }
     // shift-layout: trans-layout mode (silent)
     st0 &= STATE(KBIT_SHIFT);
-    paint |= !kb_switch_layout(kb,layout,st0);
+    kb_switch_layout(kb,layout,st0);
     if (st0)
 	bdraw(b,0);
   }
-  if (paint) kb_repaint(kb);
 }
 
 #ifndef MINIMAL
