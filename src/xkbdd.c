@@ -1,5 +1,5 @@
 /*
-	xkbdd v1.0- per-window keyboard layout switcher.
+	xkbdd v1.1- per-window keyboard layout switcher.
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 
 	I found some problems in kbdd (for example - startup WM detection),
@@ -23,6 +23,7 @@
 #include <X11/XKBlib.h>
 
 #define grp_t CARD32
+#define NO_GRP 99
 
 Display *dpy;
 Window win, win1;
@@ -30,6 +31,7 @@ XWindowAttributes wa;
 Atom aActWin, aKbdGrp, aXkbRules;
 grp_t grp, grp1;
 int xkbEventType, xkbError;
+XEvent ev;
 
 Bool getProp(Window w, Atom prop, Atom type, void *res, int size){
 	Atom t;
@@ -79,23 +81,6 @@ void printGrp(){
 	fflush(stdout);
 }
 
-void getWinGrp(){
-	win = win1;
-	if (!getProp(win,aKbdGrp,XA_CARDINAL,&grp1,sizeof(grp1)) && win != wa.root)
-		getProp(wa.root,aKbdGrp,XA_CARDINAL,&grp1,sizeof(grp1));
-}
-
-void setWinGrp(){
-	grp_t g;
-	if (grp1 != grp)
-		XkbLockGroup(dpy, XkbUseCoreKbd, grp = grp1);
-	if (!getProp(win,aKbdGrp,XA_CARDINAL,&g,sizeof(g)) || g != grp1)
-		XChangeProperty(dpy,win,aKbdGrp,XA_CARDINAL,32,PropModeReplace,(unsigned char*) &grp1,1);
-	XFlush(dpy);
-	XSync(dpy,False);
-	printGrp();
-}
-
 void getWin(){
 	int revert;
 	win1 = 0;
@@ -104,8 +89,25 @@ void getWin(){
 		win1 = wa.root;
 }
 
+void getWinGrp(){
+	if (!win1) getWin();
+	win = win1;
+	// set default always 0: single point = layout config
+	grp1 = 0;
+	if (win!=wa.root)
+		getProp(win,aKbdGrp,XA_CARDINAL,&grp1,sizeof(grp1));
+}
+
+void setWinGrp(){
+	printGrp();
+	if (win!=wa.root && (!getProp(win,aKbdGrp,XA_CARDINAL,&grp,sizeof(grp)) || grp != grp1))
+		XChangeProperty(dpy,win,aKbdGrp,XA_CARDINAL,32,PropModeReplace,(unsigned char*) &grp1,1);
+	XFlush(dpy);
+	//XSync(dpy,False);
+	grp = grp1;
+}
+
 void init(){
-	XkbStateRec st;
 	int reason_rtrn, xkbmjr = XkbMajorVersion, xkbmnr = XkbMinorVersion;
 
 	dpy = XkbOpenDisplay(NULL,&xkbEventType,&xkbError,&xkbmjr,&xkbmnr,&reason_rtrn);
@@ -120,34 +122,26 @@ void init(){
 		PropertyChangeMask|
 		FocusChangeMask|
 		wa.your_event_mask);
-	getWin();
-	XkbGetState(dpy,XkbUseCoreKbd,&st);
-#if 1
-	// use Xkb state
-	win = win1;
-	grp1 = st.group;
-	grp = grp1 + 1;
-#else
-	// restore active window property state
-	win = 0;
-	grp = st.group;
-#endif
-	printGrp();
+	win = wa.root;
+	win1 = 0;
+	grp = NO_GRP;
+	grp1 = 0;
 }
 
 int main(){
-	XEvent ev;
-
 	init();
-	grp = 0;
 	while (1) {
-		if (win1 != win) getWinGrp();
-		if (grp1 != grp) setWinGrp();
+		if (win1 != win) {
+			getWinGrp();
+			if (grp1 != grp)
+				XkbLockGroup(dpy, XkbUseCoreKbd, grp1);
+			setWinGrp();
+		}
 		XNextEvent(dpy, &ev);
 //		fprintf(stderr,"ev %i\n",ev.type);
 		switch (ev.type) {
 		    case FocusOut:
-			win1 = wa.root;
+			//win1 = wa.root;
 			break;
 		    case FocusIn:
 			win1 = ev.xfocus.window;
@@ -158,17 +152,15 @@ int main(){
 			switch (e.state) {
 			    case PropertyNewValue:
 				if (e.window==wa.root && e.atom==aActWin) {
-					getWin();
+					win1 = 0;
 				} else if (e.window==win && e.atom==aKbdGrp) {
-					win1 = wa.root;
+					win = 0;
 				}
 				break;
 			    case PropertyDelete:
-				if (e.window==wa.root && e.atom==aActWin) {
-					win1 = wa.root;
-				} else if (e.window==win && e.atom==aKbdGrp) {
-					win1 = wa.root;
-					if (win==win1) win++;
+				if ((e.window==wa.root && e.atom==aActWin) ||
+				    (e.window==win && e.atom==aKbdGrp)) {
+					win1 = 0;
 				}
 				break;
 			}
@@ -185,13 +177,10 @@ int main(){
 					grp1 = e.group;
 					break;
 				    case XkbNewKeyboardNotify:
-					printGrp();
+					grp = NO_GRP;
 					break;
 				}
-				if (grp1 != grp) {
-					grp = grp1; // skip Xkb
-					setWinGrp();
-				}
+				if (grp1 != grp) setWinGrp();
 			}
 			break;
 		}
