@@ -93,7 +93,7 @@ void syncGrp(){
 void getWin(){
 	int revert;
 	//win1 = 0;
-	if ((!getProp(wa.root,aActWin,XA_WINDOW,&win1,sizeof(win1) || !win1) &&
+	if ((!getProp(wa.root,aActWin,XA_WINDOW,&win1,sizeof(win1) || !win1)) &&
 	    (XGetInputFocus(dpy, &win1, &revert)!=Success || !win1))
 		win1 = wa.root;
 }
