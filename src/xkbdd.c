@@ -83,7 +83,6 @@ void printGrp(){
 				break;
 			}
 		}
-		XFree(ret);
 	}
 	if (n1==2 && n2==grp1) {
 		*(s-1)=0;
@@ -91,6 +90,7 @@ void printGrp(){
 	} else {
 		fprintf(stdout,"%lu\n",(unsigned long)grp1);
 	}
+	XFree(ret);
 	fflush(stdout);
 }
 
