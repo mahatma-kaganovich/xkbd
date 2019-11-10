@@ -1,12 +1,12 @@
 /*
-	xkbdd v1.1- per-window keyboard layout switcher.
+	xkbdd v1.2 - per-window keyboard layout switcher.
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
 	I found some problems in kbdd (for example - startup WM detection),
 	CPU usage and strange random bugs...
 
-	But looking in code I found is terrible, overcoded and required
+	But looking in code - I found this is terrible, overcoded and required
 	to be much simpler.
 
 	I use window properties for state tracking, unify WM model
@@ -14,7 +14,7 @@
 
 	Default layout always 0: respect single point = layout config order.
 
-	(C) 2019+ Denis Kaganovich
+	(C) 2019 Denis Kaganovich, Anarchy license
 */
 
 #include <stdio.h>
@@ -57,36 +57,46 @@ Bool getProp(Window w, Atom prop, Atom type, void *res, int size){
 
 void printGrp(){
 	Atom t;
-	int f, i;
+	int f, i, n1=0, n2=0;
 	unsigned long n=0,b;
-	unsigned char *ret = NULL;
-	unsigned char *p, *s;
+	unsigned char *ret = NULL, *s, *p;
 
 	if (XGetWindowProperty(dpy,wa.root,aXkbRules,0,256,False,XA_STRING,&t,&f,&n,&b,&ret)==Success) {
-		if (n>0 && t==XA_STRING) {
-			i=0;
-			for(p=ret; p && p-ret < (long)n; p += strlen(p)+1) {
-				if (i++<2) continue;
-				s=p;
-				i=0;
-				while ((s = strsep((char **)&p, ","))){
-					if (i++<grp1) continue;
-					fprintf(stdout,"%s\n",s);
-					fflush(stdout);
-					XFree(ret);
-					return;
+		if (n>0 && t==XA_STRING && ret) {
+			p = s = ret;
+			for (i=0; i<n; i++) {
+				switch (*(s++)) {
+				case '\0':
+					if ((n2==grp1 && n1>1) || n1>2) break;
+					n1++;
+					n2=0;
+					p=s;
+					continue;
+				case ',':
+					if (n2==grp1 && n1>1) break;
+					n2++;
+					p=s;
+					continue;
+				default:
+					continue;;
 				}
+				break;
 			}
 		}
 		XFree(ret);
 	}
-	fprintf(stdout,"%lu\n",(unsigned long)grp1);
+	if (n1==2 && n2==grp1) {
+		*(s-1)=0;
+		fprintf(stdout,"%s\n",p);
+	} else {
+		fprintf(stdout,"%lu\n",(unsigned long)grp1);
+	}
 	fflush(stdout);
 }
 
 void syncGrp(){
-	XFlush(dpy);
-	XSync(dpy,False);
+	//XFlush(dpy);
+	//XSync(dpy,False);
 	grp = grp1;
 }
 
@@ -101,7 +111,6 @@ void getWin(){
 void getWinGrp(){
 	if (!win1) getWin();
 	win = win1;
-	// set 
 	grp1 = 0;
 	if (win!=wa.root)
 		getProp(win,aKbdGrp,XA_CARDINAL,&grp1,sizeof(grp1));
@@ -149,7 +158,6 @@ int main(){
 		if (win1 != win) getWinGrp();
 		else if (grp1 != grp) setWinGrp();
 		XNextEvent(dpy, &ev);
-//		fprintf(stderr,"ev %i\n",ev.type);
 		switch (ev.type) {
 		    case FocusOut:
 			//win1 = wa.root;
@@ -162,8 +170,8 @@ int main(){
 		    case PropertyNotify:
 			if (e.window==wa.root && e.atom==aActWin) win1 = 0;
 			else if (e.window==win && e.atom==aKbdGrp) {
-				if (e.state==PropertyNewValue) win = 0;
-				else win1 = 0;
+				if (e.state==PropertyDelete) grp1 = 0;
+				else win = 0;
 			}
 			break;
 		    default:
