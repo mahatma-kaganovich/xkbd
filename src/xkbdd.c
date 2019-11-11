@@ -18,7 +18,6 @@
 */
 
 #include <stdio.h>
-#include <string.h>
 
 #include <X11/Xproto.h>
 #include <X11/Xlib.h>
@@ -27,6 +26,10 @@
 
 #define grp_t CARD32
 #define NO_GRP 99
+
+#if Window != CARD32
+#include <string.h>
+#endif
 
 Display *dpy;
 Window win, win1;
@@ -45,8 +48,13 @@ Bool getProp(Window w, Atom prop, Atom type, void *res, int size){
 //	XFlush(dpy);
 //	XSync(dpy,False);
 	if (XGetWindowProperty(dpy,w,prop,0,1,False,type,&t,&f,&n,&b,&ret)==Success) {
-		if (n>0 && t==type) {
+#if Window == CARD32
+		if (n>0 && f==32) {
+			*(CARD32*)res = *(CARD32*)ret;
+#else
+		if (n>0 && (f>>3) == size) {
 			memcpy(res,ret,size);
+#endif
 			XFree(ret);
 			return True;
 		}
