@@ -63,17 +63,17 @@ void printGrp(){
 
 	if (XGetWindowProperty(dpy,wa.root,aXkbRules,0,256,False,XA_STRING,&t,&f,&n,&b,&ret)==Success) {
 		if (n>0 && t==XA_STRING && ret) {
-			p = s = ret;
+			s = ret;
 			for (i=0; i<n; i++) {
 				switch (*(s++)) {
 				case '\0':
-					if ((n2==grp1 && n1>1) || n1>2) break;
+					if ((n2==grp1 && n1==2) || n1>2) break;
 					n1++;
 					n2=0;
 					p=s;
 					continue;
 				case ',':
-					if (n2==grp1 && n1>1) break;
+					if (n2==grp1 && n1==2) break;
 					n2++;
 					p=s;
 					continue;
@@ -156,7 +156,6 @@ int main(){
 	init();
 	while (1) {
 		if (win1 != win) getWinGrp();
-		else if (grp1 != grp) setWinGrp();
 		XNextEvent(dpy, &ev);
 		switch (ev.type) {
 		    case FocusOut:
@@ -168,10 +167,10 @@ int main(){
 #undef e
 #define e (ev.xproperty)
 		    case PropertyNotify:
-			if (e.window==wa.root && e.atom==aActWin) win1 = 0;
-			else if (e.window==win && e.atom==aKbdGrp) {
-				if (e.state==PropertyDelete) grp1 = 0;
-				else win = 0;
+			if (e.window==wa.root) {
+				 if (e.atom==aActWin) win1 = 0;
+			} else if (e.window==win) {
+				if (e.atom==aKbdGrp) win = 0;
 			}
 			break;
 		    default:
@@ -188,6 +187,7 @@ int main(){
 					grp = NO_GRP;
 					break;
 				}
+				if (grp1 != grp) setWinGrp();
 			}
 			break;
 		}
