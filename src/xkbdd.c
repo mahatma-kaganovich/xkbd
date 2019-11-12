@@ -36,8 +36,28 @@ Window win, win1;
 XWindowAttributes wa;
 Atom aActWin, aKbdGrp, aXkbRules;
 grp_t grp, grp1;
-int xkbEventType, xkbError;
+unsigned char *rul, *rul2;
+unsigned long rulLen;
+int xkbEventType, xkbError, n1;
 XEvent ev;
+
+Bool getRules(){
+	Atom t;
+	int f, i;
+	unsigned long b;
+
+	XFree(rul);
+	rul = NULL;
+	rulLen = 0;
+	n1 = 0;
+	if (XGetWindowProperty(dpy,wa.root,aXkbRules,0,256,False,XA_STRING,&t,&f,&rulLen,&b,&rul)==Success && rul) {
+		rul2 = rul;
+		if (rulLen>1 && t==XA_STRING) return 1;
+		XFree(rul);
+	}
+	rul2 = NULL;
+	return 0;
+}
 
 Bool getProp(Window w, Atom prop, Atom type, void *res, int size){
 	Atom t;
@@ -47,7 +67,7 @@ Bool getProp(Window w, Atom prop, Atom type, void *res, int size){
 
 //	XFlush(dpy);
 //	XSync(dpy,False);
-	if (XGetWindowProperty(dpy,w,prop,0,1,False,type,&t,&f,&n,&b,&ret)==Success) {
+	if (XGetWindowProperty(dpy,w,prop,0,1,False,type,&t,&f,&n,&b,&ret)==Success && ret) {
 #if Window == CARD32
 		if (n>0 && f==32) {
 			*(CARD32*)res = *(CARD32*)ret;
@@ -64,41 +84,40 @@ Bool getProp(Window w, Atom prop, Atom type, void *res, int size){
 }
 
 void printGrp(){
-	Atom t;
-	int f, i, n1=0, n2=0;
-	unsigned long n=0,b;
-	unsigned char *ret = NULL, *s, *p;
+	int i, n2 = 0;
+	unsigned char *s, *p, c;
 
-	if (XGetWindowProperty(dpy,wa.root,aXkbRules,0,256,False,XA_STRING,&t,&f,&n,&b,&ret)==Success) {
-		if (n>0 && t==XA_STRING && ret) {
-			s = ret;
-			for (i=0; i<n; i++) {
-				switch (*(s++)) {
-				case '\0':
-					if ((n2==grp1 && n1==2) || n1>2) break;
-					n1++;
-					n2=0;
-					p=s;
-					continue;
-				case ',':
-					if (n2==grp1 && n1==2) break;
-					n2++;
-					p=s;
-					continue;
-				default:
-					continue;;
-				}
-				break;
+	if (rul2 || getRules()) {
+		p = s = rul2;
+		for (i=rulLen-(rul2-rul); i; i--) {
+			switch (*(s++)) {
+			    case '\0':
+				if ((n2==grp1 && n1==2) || n1>2) break;
+				n1++;
+				n2=0;
+				p=s;
+				if (n1==2) rul2 = s;
+				continue;
+			    case ',':
+				if (n2==grp1 && n1==2) break;
+				n2++;
+				p=s;
+				continue;
+			    default:
+				continue;;
 			}
+			break;
 		}
 	}
 	if (n1==2 && n2==grp1) {
-		*(s-1)=0;
+		s--;
+		c = *s;
+		*s = '\0';
 		fprintf(stdout,"%s\n",p);
+		*s = c;
 	} else {
 		fprintf(stdout,"%lu\n",(unsigned long)grp1);
 	}
-	XFree(ret);
 	fflush(stdout);
 }
 
@@ -147,7 +166,10 @@ void init(){
 	aActWin = XInternAtom(dpy, "_NET_ACTIVE_WINDOW", False);
 	aKbdGrp = XInternAtom(dpy, "_KBD_ACTIVE_GROUP", False);
 	aXkbRules = XInternAtom(dpy, "_XKB_RULES_NAMES", False);
-	XkbSelectEvents(dpy,XkbUseCoreKbd,XkbAllEventsMask,XkbStateNotifyMask|XkbNewKeyboardNotifyMask);
+	XkbSelectEvents(dpy,XkbUseCoreKbd,XkbAllEventsMask,
+		XkbStateNotifyMask
+//		|XkbNewKeyboardNotifyMask
+		);
 	XkbSelectEventDetails(dpy,XkbUseCoreKbd,XkbStateNotify,
 		XkbAllStateComponentsMask,XkbGroupStateMask);
 	XSelectInput(dpy, wa.root,
@@ -158,6 +180,7 @@ void init(){
 	win1 = 0;
 	grp = NO_GRP;
 	grp1 = 0;
+	rul = NULL;
 }
 
 int main(){
@@ -175,10 +198,15 @@ int main(){
 #undef e
 #define e (ev.xproperty)
 		    case PropertyNotify:
-			if (e.window==wa.root) {
-				 if (e.atom==aActWin) win1 = 0;
-			} else if (e.window==win) {
-				if (e.atom==aKbdGrp) win = 0;
+			 if (e.atom==aActWin) {
+				if (e.window==wa.root) win1 = 0;
+			 } else if (e.atom==aKbdGrp) {
+				if (e.window==win) win = 0;
+			 } else if (e.atom==aXkbRules) {
+				if (e.window==wa.root) {
+					rul2 = NULL;
+					printGrp();
+				}
 			}
 			break;
 		    default:
@@ -190,12 +218,11 @@ int main(){
 #define e (((XkbEvent)ev).state)
 				    case XkbStateNotify:
 					grp1 = e.group;
+					setWinGrp();
 					break;
-				    case XkbNewKeyboardNotify:
-					grp = NO_GRP;
-					break;
+				    //case XkbNewKeyboardNotify:
+					//break;
 				}
-				if (grp1 != grp) setWinGrp();
 			}
 			break;
 		}
