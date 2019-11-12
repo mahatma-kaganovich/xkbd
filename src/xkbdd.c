@@ -142,7 +142,10 @@ void getWinGrp(){
 	if (win!=wa.root)
 		getProp(win,aKbdGrp,XA_CARDINAL,&grp1,sizeof(grp1));
 	if (grp1 != grp) {
-		XkbLockGroup(dpy, XkbUseCoreKbd, grp1);
+		while (XkbLockGroup(dpy, XkbUseCoreKbd, grp1)!=Success && !grp) {
+			grp1 = 0;
+			XDeleteProperty(dpy,win,aKbdGrp);
+		}
 		printGrp();
 		syncGrp();
 	}
