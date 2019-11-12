@@ -121,12 +121,6 @@ void printGrp(){
 	fflush(stdout);
 }
 
-void syncGrp(){
-	//XFlush(dpy);
-	//XSync(dpy,False);
-	grp = grp1;
-}
-
 void getWin(){
 	int revert;
 	//win1 = 0;
@@ -141,14 +135,9 @@ void getWinGrp(){
 	grp1 = 0;
 	if (win!=wa.root)
 		getProp(win,aKbdGrp,XA_CARDINAL,&grp1,sizeof(grp1));
-	if (grp1 != grp) {
-		while (XkbLockGroup(dpy, XkbUseCoreKbd, grp1)!=Success && grp1) {
-			XDeleteProperty(dpy,win,aKbdGrp);
-			grp1 = 0;
-			if (!grp) return;
-		}
-		printGrp();
-		syncGrp();
+	while (grp1 != grp && XkbLockGroup(dpy, XkbUseCoreKbd, grp1)!=Success && grp1) {
+		XDeleteProperty(dpy,win,aKbdGrp);
+		grp1 = 0;
 	}
 }
 
@@ -159,7 +148,7 @@ void setWinGrp(){
 		&& (getProp(win,aKbdGrp,XA_CARDINAL,&grp,sizeof(grp)) ? grp != grp1 : grp1)
 	    )
 		XChangeProperty(dpy,win,aKbdGrp,XA_CARDINAL,32,PropModeReplace,(unsigned char*) &grp1,1);
-	syncGrp();
+	grp = grp1;
 }
 
 void init(){
@@ -189,6 +178,7 @@ void init(){
 
 int main(){
 	init();
+	printGrp();
 	while (1) {
 		if (win1 != win) getWinGrp();
 		XNextEvent(dpy, &ev);
