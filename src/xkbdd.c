@@ -197,9 +197,11 @@ int main(){
 				if (e.window==win) win = 0;
 			 } else if (e.atom==aXkbRules) {
 				if (e.window==wa.root) {
+#if 0
 					XkbStateRec s;
 					XkbGetState(dpy,XkbUseCoreKbd,&s);
 					grp1 = s.group;
+#endif
 					grp = grp1 + 1;
 					rul2 = NULL;
 				}
