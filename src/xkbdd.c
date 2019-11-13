@@ -83,7 +83,7 @@ Bool getProp(Window w, Atom prop, Atom type, void *res, int size){
 	return False;
 }
 
-int printGrp(){
+void printGrp(){
 	int i, n2 = 0;
 	unsigned char *s, *p, c;
 
@@ -109,17 +109,17 @@ int printGrp(){
 			break;
 		}
 	}
-	if (i=(n1==2 && n2==grp1)) {
+	if (n1==2 && n2==grp1) {
 		s--;
 		c = *s;
 		*s = '\0';
 		fprintf(stdout,"%s\n",p);
 		*s = c;
 	} else {
+		rul2 = NULL;
 		fprintf(stdout,"%lu\n",(unsigned long)grp1);
 	}
 	fflush(stdout);
-	return i;
 }
 
 void getWin(){
@@ -197,11 +197,11 @@ int main(){
 				if (e.window==win) win = 0;
 			 } else if (e.atom==aXkbRules) {
 				if (e.window==wa.root) {
+					XkbStateRec s;
+					XkbGetState(dpy,XkbUseCoreKbd,&s);
+					grp1 = s.group;
+					grp = grp1 + 1;
 					rul2 = NULL;
-					if (!printGrp()) {
-						rul2 = NULL;
-						grp1 = 0;
-					}
 				}
 			}
 			break;
