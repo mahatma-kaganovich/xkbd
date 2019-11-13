@@ -83,7 +83,7 @@ Bool getProp(Window w, Atom prop, Atom type, void *res, int size){
 	return False;
 }
 
-void printGrp(){
+int printGrp(){
 	int i, n2 = 0;
 	unsigned char *s, *p, c;
 
@@ -109,7 +109,7 @@ void printGrp(){
 			break;
 		}
 	}
-	if (n1==2 && n2==grp1) {
+	if (i=(n1==2 && n2==grp1)) {
 		s--;
 		c = *s;
 		*s = '\0';
@@ -119,6 +119,7 @@ void printGrp(){
 		fprintf(stdout,"%lu\n",(unsigned long)grp1);
 	}
 	fflush(stdout);
+	return i;
 }
 
 void getWin(){
@@ -143,10 +144,7 @@ void getWinGrp(){
 
 void setWinGrp(){
 	printGrp();
-	if (win!=wa.root
-		// optimization, may be omitted
-		&& (getProp(win,aKbdGrp,XA_CARDINAL,&grp,sizeof(grp)) ? grp != grp1 : grp1)
-	    )
+	if (win!=wa.root)
 		XChangeProperty(dpy,win,aKbdGrp,XA_CARDINAL,32,PropModeReplace,(unsigned char*) &grp1,1);
 	grp = grp1;
 }
@@ -181,6 +179,7 @@ int main(){
 	printGrp();
 	while (1) {
 		if (win1 != win) getWinGrp();
+		else if (grp1 != grp) setWinGrp();
 		XNextEvent(dpy, &ev);
 		switch (ev.type) {
 		    case FocusOut:
@@ -199,7 +198,10 @@ int main(){
 			 } else if (e.atom==aXkbRules) {
 				if (e.window==wa.root) {
 					rul2 = NULL;
-					printGrp();
+					if (!printGrp()) {
+						rul2 = NULL;
+						grp1 = 0;
+					}
 				}
 			}
 			break;
@@ -212,7 +214,6 @@ int main(){
 #define e (((XkbEvent)ev).state)
 				    case XkbStateNotify:
 					grp1 = e.group;
-					setWinGrp();
 					break;
 				    //case XkbNewKeyboardNotify:
 					//break;
