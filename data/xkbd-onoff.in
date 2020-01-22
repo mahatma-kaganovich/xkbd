@@ -107,6 +107,7 @@ unset lock
 unset lock1
 unset xss
 unset dpms
+sudo='sudo -n --'
 touch=true
 boot=false
 dpmslockstandby=10
@@ -185,7 +186,7 @@ if _deflock lock; then
 	(
 	if [ -n "$sudo2" ]; then
 		_dpms "$dpmsstandby" "$dpmssuspend" "$dpmsoff" "$dpmslockstandby" "$dpmslocksuspend" "$dpmslockoff"
-		( $lock ; exec sudo -n $sudo2 ) &
+		( $lock ; exec $sudo $sudo2 ) &
 	else
 		_dpms "$dpmslockstandby" "$dpmslocksuspend" "$dpmslockoff" "$dpmsstandby" "$dpmssuspend" "$dpmsoff"
 		$lock &
@@ -196,7 +197,7 @@ if _deflock lock; then
 		xkbd $opt &
 		wait -n
 	fi
-	[ -n "$sudo1" ] && sudo -n $sudo1 &
+	[ -n "$sudo1" ] && $sudo $sudo1 &
 	if $kill; then
 		if $touch; then
 			wait $pid
@@ -210,10 +211,10 @@ if _deflock lock; then
     fi
 elif [ -v xss ]; then
 	case "$xss" in
-	on)exec sudo -n $sudo1;;
+	on)exec $sudo $sudo1;;
 	off|disable)
 		_deflock extlock && pchk $extlock && exit
-		exec sudo -n $sudo2
+		exec $sudo $sudo2
 	;;
 	cycle);;
 	'')_xss;;
