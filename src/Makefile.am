@@ -9,7 +9,7 @@ xkbd_SOURCES = xkbd.c box.c button.c kb.c ks2unicode.c \
 xkbd_LDADD   = $(LDADD)
 xssevent_LDADD = -lX11 -lXss
 xkbdd_LDADD = -lX11
-xkbdd-xss_LDADD = -lX11 -lXss
+xkbdd_xss_LDADD = -lX11 -lXss
 
 CLEANFILES = ks2unicode.c
 ks2unicode.c:
