@@ -158,7 +158,7 @@ void getWinGrp(){
 #ifdef XSS
 	State = 0;
 	getProp(win,aWMState,XA_ATOM,&State,sizeof(State));
-	if (State==aFullScreen) noXSS1=True;
+	noXSS1 = State==aFullScreen ? True : False;
 	if (noXSS1!=noXSS) XScreenSaverSuspend(dpy,noXSS=noXSS1);
 #endif
 }
