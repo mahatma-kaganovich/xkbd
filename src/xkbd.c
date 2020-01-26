@@ -746,22 +746,22 @@ re_crts:
 		XTranslateCoordinates(display,win,rootWin,0,0,&x,&y,&win1);
 		if (dock & 2) {
 			if (top) {
-				prop[2] = y + height;
+				prop[2] = y + height; // +Y1
 				prop[8] = x;
 				prop[9] = x + width - 1;
 			} else {
-				prop[3] = wa0.height - y;
+				prop[3] = Y2 - y + 1;
 				prop[10] = x;
 				prop[11] = x + width - 1;
 			}
 		}
 		if (dock & 64) {
 			if (left) {
-				prop[0] = x + width;
+				prop[0] = x + width; // +X1
 				prop[4] = y;
 				prop[5] = y + height - 1;
 			} else {
-				prop[1] = wa0.width - x;
+				prop[1] = X2 - x + 1;
 				prop[6] = y;
 				prop[7] = y + height - 1;
 			}
