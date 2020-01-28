@@ -6,6 +6,8 @@ AM_CFLAGS = -O2 -DDEFAULTCONFIG=\"$(DEFAULT_CONFIG)\" -Dprefix=\"${prefix}\" -Wm
 bin_PROGRAMS = xkbd xssevent xkbdd xkbdd-xss
 xkbd_SOURCES = xkbd.c box.c button.c kb.c ks2unicode.c \
                       structs.h box.h  button.h  kb.h  ks2unicode.h
+xkbdd_xss_SOURCES = xkbdd.c
+xkbdd_xss_CPPFLAGS = -DXSS
 xkbd_LDADD   = $(LDADD)
 xssevent_LDADD = -lX11 -lXss
 xkbdd_LDADD = -lX11

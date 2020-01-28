@@ -1,5 +1,5 @@
 /*
-	xkbdd v1.2 - per-window keyboard layout switcher.
+	xkbdd v1.3 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -14,7 +14,13 @@
 
 	Default layout always 0: respect single point = layout config order.
 
-	(C) 2019 Denis Kaganovich, Anarchy license
+
+	XSS suspend (-DXSS):
+	Disable XScreenSaver if fullscreen window focused.
+	Added to xkbdd as massive code utilization.
+
+
+	(C) 2019-2020 Denis Kaganovich, Anarchy license
 */
 
 #include <stdio.h>
@@ -23,6 +29,10 @@
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
 #include <X11/XKBlib.h>
+
+#ifdef XSS
+#include <X11/extensions/scrnsaver.h>
+#endif
 
 #define grp_t CARD32
 #define NO_GRP 99
@@ -35,10 +45,14 @@ Display *dpy;
 Window win, win1;
 XWindowAttributes wa;
 Atom aActWin, aKbdGrp, aXkbRules;
+#ifdef XSS
+Atom aWMState, aFullScreen, aCLStacking, State;
+BOOL noXSS, noXSS1;
+#endif
 grp_t grp, grp1;
 unsigned char *rul, *rul2;
 unsigned long rulLen;
-int xkbEventType, xkbError, n1;
+int xkbEventType, xkbError, n1, revert;
 XEvent ev;
 
 Bool getRules(){
@@ -68,7 +82,7 @@ Bool getProp(Window w, Atom prop, Atom type, void *res, int size){
 //	XFlush(dpy);
 //	XSync(dpy,False);
 	if (XGetWindowProperty(dpy,w,prop,0,1,False,type,&t,&f,&n,&b,&ret)==Success && ret) {
-#if Window == CARD32
+#if Window == CARD32 && Atom == CARD32
 		if (n>0 && f==32) {
 			*(CARD32*)res = *(CARD32*)ret;
 #else
@@ -122,16 +136,11 @@ void printGrp(){
 	fflush(stdout);
 }
 
-void getWin(){
-	int revert;
-	//win1 = 0;
-	if ((!getProp(wa.root,aActWin,XA_WINDOW,&win1,sizeof(win1)) || !win1) &&
-	    (XGetInputFocus(dpy, &win1, &revert)!=Success || !win1))
-		win1 = wa.root;
-}
-
 void getWinGrp(){
-	if (!win1) getWin();
+	if (!(win1 ||
+		(getProp(wa.root,aActWin,XA_WINDOW,&win1,sizeof(win1)) && win1) ||
+		(XGetInputFocus(dpy, &win1, &revert) && win1)
+	)) return;
 	win = win1;
 	grp1 = 0;
 	if (win!=wa.root)
@@ -140,6 +149,12 @@ void getWinGrp(){
 		XDeleteProperty(dpy,win,aKbdGrp);
 		grp1 = 0;
 	}
+#ifdef XSS
+	State = 0;
+	getProp(win,aWMState,XA_ATOM,&State,sizeof(State));
+	noXSS1 = State==aFullScreen ? True : False;
+	if (noXSS1!=noXSS) XScreenSaverSuspend(dpy,noXSS=noXSS1);
+#endif
 }
 
 void setWinGrp(){
@@ -157,6 +172,12 @@ void init(){
 	aActWin = XInternAtom(dpy, "_NET_ACTIVE_WINDOW", False);
 	aKbdGrp = XInternAtom(dpy, "_KBD_ACTIVE_GROUP", False);
 	aXkbRules = XInternAtom(dpy, "_XKB_RULES_NAMES", False);
+#ifdef XSS
+	aWMState = XInternAtom(dpy, "_NET_WM_STATE", False);
+	aFullScreen = XInternAtom(dpy, "_NET_WM_STATE_FULLSCREEN", False);
+	aCLStacking = XInternAtom(dpy, "_NET_CLIENT_LIST_STACKING", False);
+	noXSS = False;
+#endif
 	XkbSelectEvents(dpy,XkbUseCoreKbd,XkbAllEventsMask,
 		XkbStateNotifyMask
 //		|XkbNewKeyboardNotifyMask
@@ -191,20 +212,19 @@ int main(){
 #undef e
 #define e (ev.xproperty)
 		    case PropertyNotify:
-			 if (e.atom==aActWin) {
-				if (e.window==wa.root) win1 = 0;
-			 } else if (e.atom==aKbdGrp) {
-				if (e.window==win) win = 0;
-			 } else if (e.atom==aXkbRules) {
-				if (e.window==wa.root) {
-#if 0
-					XkbStateRec s;
-					XkbGetState(dpy,XkbUseCoreKbd,&s);
-					grp1 = s.group;
+			if (e.window!=wa.root) break;
+			if (e.atom==aActWin) win1 = 0;
+#ifdef XSS
+			else if (e.atom==aCLStacking) win = 0;
 #endif
-					grp = grp1 + 1;
-					rul2 = NULL;
-				}
+			else if (e.atom==aXkbRules) {
+#if 0
+				XkbStateRec s;
+				XkbGetState(dpy,XkbUseCoreKbd,&s);
+				grp1 = s.group;
+#endif
+				grp = grp1 + 1;
+				rul2 = NULL;
 			}
 			break;
 		    default:
