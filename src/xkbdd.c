@@ -141,9 +141,9 @@ void printGrp(){
 }
 
 void getWinGrp(){
-	if (!(win1 || (getProp(wa.root,aActWin,XA_WINDOW,&win1,sizeof(win1)) && win1)
+	if (!(win1!=None || (getProp(wa.root,aActWin,XA_WINDOW,&win1,sizeof(win1)) && win1!=None)
 #ifdef NO_PROP
-			|| (XGetInputFocus(dpy, &win1, &revert) && win1)
+			|| (XGetInputFocus(dpy, &win1, &revert) && win1!=None)
 #endif
 		)) win1 = wa.root;
 	win = win1;
@@ -195,7 +195,7 @@ void init(){
 #endif
 		PropertyChangeMask);
 	win = wa.root;
-	win1 = 0;
+	win1 = None;
 	grp = NO_GRP;
 	grp1 = 0;
 	rul = NULL;
@@ -212,7 +212,7 @@ int main(){
 #ifdef NO_PROP
 		    case FocusOut:
 			// too async "BadWindow":
-			//win1 = 0; XSync(dpy,False);
+			//win1 = None; XSync(dpy,False);
 			break;
 		    case FocusIn:
 			win1 = ev.xfocus.window;
@@ -222,11 +222,11 @@ int main(){
 #define e (ev.xproperty)
 		    case PropertyNotify:
 			//if (e.window!=wa.root) break;
-			if (e.atom==aActWin) win1 = 0;
+			if (e.atom==aActWin) win1 = None;
 #ifdef XSS
 			else if (e.atom==aCLStacking) {
 				// if changing - try modal (confirm Openbox menu,...)
-				win1 = 0;
+				win1 = None;
 				XSync(dpy,False);
 			}
 #endif
