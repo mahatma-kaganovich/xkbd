@@ -145,7 +145,7 @@ void getWinGrp(){
 #ifdef NO_PROP
 			|| (XGetInputFocus(dpy, &win1, &revert) && win1)
 #endif
-		)) win = wa.root;
+		)) win1 = wa.root;
 	win = win1;
 	grp1 = 0;
 	if (win!=wa.root)
