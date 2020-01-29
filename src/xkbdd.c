@@ -1,5 +1,5 @@
 /*
-	xkbdd v1.3 - per-window keyboard layout switcher [+ XSS suspend].
+	xkbdd v1.4 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -34,10 +34,14 @@
 #include <X11/extensions/scrnsaver.h>
 #endif
 
+// Over broken _NET_ACTIVE_WINDOW.
+// Overhead, but WM-safer
+//#define NO_PROP
+
 #define grp_t CARD32
 #define NO_GRP 99
 
-#if Window != CARD32
+#if Window != CARD32 || Atom != CARD32
 #include <string.h>
 #endif
 
@@ -137,10 +141,11 @@ void printGrp(){
 }
 
 void getWinGrp(){
-	if (!(win1 ||
-		(getProp(wa.root,aActWin,XA_WINDOW,&win1,sizeof(win1)) && win1) ||
-		(XGetInputFocus(dpy, &win1, &revert) && win1)
-	)) return;
+	if (!(win1 || (getProp(wa.root,aActWin,XA_WINDOW,&win1,sizeof(win1)) && win1)
+#ifdef NO_PROP
+			|| (XGetInputFocus(dpy, &win1, &revert) && win1)
+#endif
+		)) return;
 	win = win1;
 	grp1 = 0;
 	if (win!=wa.root)
@@ -185,9 +190,10 @@ void init(){
 	XkbSelectEventDetails(dpy,XkbUseCoreKbd,XkbStateNotify,
 		XkbAllStateComponentsMask,XkbGroupStateMask);
 	XSelectInput(dpy, wa.root,
-		PropertyChangeMask|
+#ifdef NO_PROP
 		FocusChangeMask|
-		wa.your_event_mask);
+#endif
+		PropertyChangeMask);
 	win = wa.root;
 	win1 = 0;
 	grp = NO_GRP;
@@ -203,19 +209,27 @@ int main(){
 		else if (grp1 != grp) setWinGrp();
 		XNextEvent(dpy, &ev);
 		switch (ev.type) {
+#ifdef NO_PROP
 		    case FocusOut:
-			//win1 = wa.root;
+			// too async "BadWindow":
+			//win=wa.root; win1 = 0; XSync(dpy,False);
 			break;
 		    case FocusIn:
 			win1 = ev.xfocus.window;
 			break;
+#endif
 #undef e
 #define e (ev.xproperty)
 		    case PropertyNotify:
-			if (e.window!=wa.root) break;
+			//if (e.window!=wa.root) break;
 			if (e.atom==aActWin) win1 = 0;
 #ifdef XSS
-			else if (e.atom==aCLStacking) win = 0;
+			else if (e.atom==aCLStacking) {
+				// if changing - try modal (confirm Openbox menu,...)
+				win = wa.root;
+				win1 = 0;
+				XSync(dpy,False);
+			}
 #endif
 			else if (e.atom==aXkbRules) {
 #if 0
