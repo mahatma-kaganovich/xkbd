@@ -145,7 +145,7 @@ void getWinGrp(){
 #ifdef NO_PROP
 			|| (XGetInputFocus(dpy, &win1, &revert) && win1)
 #endif
-		)) return;
+		)) win = wa.root;
 	win = win1;
 	grp1 = 0;
 	if (win!=wa.root)
@@ -212,7 +212,7 @@ int main(){
 #ifdef NO_PROP
 		    case FocusOut:
 			// too async "BadWindow":
-			//win=wa.root; win1 = 0; XSync(dpy,False);
+			//win1 = 0; XSync(dpy,False);
 			break;
 		    case FocusIn:
 			win1 = ev.xfocus.window;
@@ -226,7 +226,6 @@ int main(){
 #ifdef XSS
 			else if (e.atom==aCLStacking) {
 				// if changing - try modal (confirm Openbox menu,...)
-				win = wa.root;
 				win1 = 0;
 				XSync(dpy,False);
 			}
