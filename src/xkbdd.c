@@ -168,17 +168,16 @@ void getWinGrp(){
 
 void setWinGrp(){
 	printGrp();
-	if (win!=wa.root)
-		XChangeProperty(dpy,win,aKbdGrp,XA_CARDINAL,32,PropModeReplace,(unsigned char*) &grp1,1);
-	grp = grp1;
+	if (win!=wa.root && XChangeProperty(dpy,win,aKbdGrp,XA_CARDINAL,32,PropModeReplace,(unsigned char*) &grp1,1))
+		grp = grp1;
 }
 
 static int (*oldxerrh) (Display *, XErrorEvent *);
 static int xerrh(Display *dpy, XErrorEvent *ev){
 	if (ev->error_code!=BadWindow || !XFlush(dpy) || !XSync(dpy,False)) oldxerrh(dpy,ev);
 	/* too async? */
-	else getWin1();
-	//if (win1 == win) oldxerrh(dpy,ev);
+	win1 = None;
+	win = wa.root;
 	return 0;
 }
 
@@ -219,8 +218,9 @@ int main(){
 	init();
 	printGrp();
 	while (1) {
-		if (win1 != win) do {getWinGrp();} while(win1 != win);
+		if (win1 != win) getWinGrp();
 		else if (grp1 != grp) setWinGrp();
+		if (win1 != win) continue; // error handled
 		XNextEvent(dpy, &ev);
 		switch (ev.type) {
 #ifdef NO_PROP
