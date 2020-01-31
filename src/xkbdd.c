@@ -168,8 +168,9 @@ void getWinGrp(){
 
 void setWinGrp(){
 	printGrp();
-	if (win!=wa.root && XChangeProperty(dpy,win,aKbdGrp,XA_CARDINAL,32,PropModeReplace,(unsigned char*) &grp1,1))
-		grp = grp1;
+	if (win!=wa.root)
+		XChangeProperty(dpy,win,aKbdGrp,XA_CARDINAL,32,PropModeReplace,(unsigned char*) &grp1,1);
+	grp = grp1;
 }
 
 static int (*oldxerrh) (Display *, XErrorEvent *);
