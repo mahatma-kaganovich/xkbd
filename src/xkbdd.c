@@ -1,5 +1,5 @@
 /*
-	xkbdd v1.4 - per-window keyboard layout switcher [+ XSS suspend].
+	xkbdd v1.5 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -140,12 +140,16 @@ void printGrp(){
 	fflush(stdout);
 }
 
-void getWinGrp(){
-	if (!(win1!=None || (getProp(wa.root,aActWin,XA_WINDOW,&win1,sizeof(win1)) && win1!=None)
+void getWin1(){
+	if ((getProp(wa.root,aActWin,XA_WINDOW,&win1,sizeof(win1)) && win1!=None)
 #ifdef NO_PROP
-			|| (XGetInputFocus(dpy, &win1, &revert) && win1!=None)
+		|| (XGetInputFocus(dpy, &win1, &revert) && win1!=None)
 #endif
-		)) win1 = wa.root;
+	    ) win1 = wa.root;
+}
+
+void getWinGrp(){
+	if (win1==None) getWin1();
 	win = win1;
 	grp1 = 0;
 	if (win!=wa.root)
@@ -167,6 +171,15 @@ void setWinGrp(){
 	if (win!=wa.root)
 		XChangeProperty(dpy,win,aKbdGrp,XA_CARDINAL,32,PropModeReplace,(unsigned char*) &grp1,1);
 	grp = grp1;
+}
+
+static int (*oldxerrh) (Display *, XErrorEvent *);
+static int xerrh(Display *dpy, XErrorEvent *ev){
+	if (ev->error_code!=BadWindow || !XFlush(dpy) || !XSync(dpy,False)) oldxerrh(dpy,ev);
+	/* too async? */
+	else getWin1();
+	//if (win1 == win) oldxerrh(dpy,ev);
+	return 0;
 }
 
 void init(){
@@ -194,6 +207,7 @@ void init(){
 		FocusChangeMask|
 #endif
 		PropertyChangeMask);
+	oldxerrh = XSetErrorHandler(xerrh);
 	win = wa.root;
 	win1 = None;
 	grp = NO_GRP;
@@ -205,7 +219,7 @@ int main(){
 	init();
 	printGrp();
 	while (1) {
-		if (win1 != win) getWinGrp();
+		if (win1 != win) do {getWinGrp();} while(win1 != win);
 		else if (grp1 != grp) setWinGrp();
 		XNextEvent(dpy, &ev);
 		switch (ev.type) {
