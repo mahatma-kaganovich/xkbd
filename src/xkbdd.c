@@ -141,9 +141,11 @@ void printGrp(){
 }
 
 void getWin1(){
-	if ((getProp(wa.root,aActWin,XA_WINDOW,&win1,sizeof(win1)) && win1!=None)
+	if (
+		!getProp(wa.root,aActWin,XA_WINDOW,&win1,sizeof(win1)) || win1==None
 #ifdef NO_PROP
-		|| (XGetInputFocus(dpy, &win1, &revert) && win1!=None)
+		||
+		!XGetInputFocus(dpy, &win1, &revert) || win1==None
 #endif
 	    ) win1 = wa.root;
 }
