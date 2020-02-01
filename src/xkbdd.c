@@ -141,12 +141,13 @@ void printGrp(){
 }
 
 void getWin1(){
+	/* propery set too late, it is fixed by error handler, but ugly */
 	if (
-		!getProp(wa.root,aActWin,XA_WINDOW,&win1,sizeof(win1)) || win1==None
-#ifdef NO_PROP
-		||
+//		!getProp(wa.root,aActWin,XA_WINDOW,&win1,sizeof(win1)) || win1==None
+//#ifdef NO_PROP
+//		||
 		!XGetInputFocus(dpy, &win1, &revert) || win1==None
-#endif
+//#endif
 	    ) win1 = wa.root;
 }
 
@@ -176,8 +177,9 @@ void setWinGrp(){
 }
 
 static int (*oldxerrh) (Display *, XErrorEvent *);
-static int xerrh(Display *dpy, XErrorEvent *ev){
-	if (ev->error_code!=BadWindow || !XFlush(dpy) || !XSync(dpy,False)) oldxerrh(dpy,ev);
+static int xerrh(Display *dpy, XErrorEvent *err){
+	if (err->error_code!=BadWindow || !XFlush(dpy) || !XSync(dpy,False)) oldxerrh(dpy,err);
+	//fprintf(stderr,"BadWindow ev=%x %s\n",ev.type,ev.type==28?XGetAtomName(dpy,ev.xproperty.atom):"");
 	/* too async? */
 	win1 = None;
 	return 0;
@@ -243,7 +245,6 @@ int main(){
 			else if (e.atom==aCLStacking) {
 				// if changing - try modal (confirm Openbox menu,...)
 				win1 = None;
-				XSync(dpy,False);
 			}
 #endif
 			else if (e.atom==aXkbRules) {
