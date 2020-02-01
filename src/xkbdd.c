@@ -178,7 +178,6 @@ static int xerrh(Display *dpy, XErrorEvent *ev){
 	if (ev->error_code!=BadWindow || !XFlush(dpy) || !XSync(dpy,False)) oldxerrh(dpy,ev);
 	/* too async? */
 	win1 = None;
-	win = wa.root;
 	return 0;
 }
 
