@@ -34,26 +34,23 @@
 #include <X11/extensions/scrnsaver.h>
 #endif
 
-#define grp_t CARD32
 #define NO_GRP 99
-
-#if Window != CARD32 || Atom != CARD32
-#include <string.h>
-#endif
 
 Display *dpy;
 Window win, win1;
 XWindowAttributes wa;
 Atom aActWin, aKbdGrp, aXkbRules;
 #ifdef XSS
-Atom aWMState, aFullScreen, aCLStacking, State;
+Atom aWMState, aFullScreen, aCLStacking;
 BOOL noXSS, noXSS1;
 #endif
-grp_t grp, grp1;
+CARD32 grp, grp1;
 unsigned char *rul, *rul2;
-unsigned long rulLen;
+unsigned long rulLen, n;
 int xkbEventType, xkbError, n1, revert;
 XEvent ev;
+unsigned char *ret;
+
 
 Bool getRules(){
 	Atom t;
@@ -73,28 +70,18 @@ Bool getRules(){
 	return 0;
 }
 
-Bool getProp(Window w, Atom prop, Atom type, void *res, int size){
+int getProp(Window w, Atom prop, Atom type, int size){
 	Atom t;
 	int f;
-	unsigned long n=0,b;
-	unsigned char *ret = NULL;
+	unsigned long b;
 
+	if (ret) XFree(ret);
+	ret = NULL;
 //	XFlush(dpy);
 //	XSync(dpy,False);
-	if (XGetWindowProperty(dpy,w,prop,0,1,False,type,&t,&f,&n,&b,&ret)==Success && ret) {
-#if Window == CARD32 && Atom == CARD32
-		if (n>0 && f==32) {
-			*(CARD32*)res = *(CARD32*)ret;
-#else
-		if (n>0 && (f>>3) == size) {
-			memcpy(res,ret,size);
-#endif
-			XFree(ret);
-			return True;
-		}
-		XFree(ret);
-	}
-	return False;
+	if (!(XGetWindowProperty(dpy,w,prop,0,1024,False,type,&t,&f,&n,&b,&ret)==Success && f>>3 == size && ret))
+		n=0;
+	return n;
 }
 
 void printGrp(){
@@ -138,9 +125,16 @@ void printGrp(){
 
 #ifdef XSS
 void getWMState(){
-	State = 0;
-	getProp(win,aWMState,XA_ATOM,&State,sizeof(State));
-	noXSS1 = State==aFullScreen ? True : False;
+	int i;
+	noXSS1 = False;
+	if (getProp(win,aWMState,XA_ATOM,sizeof(Atom))) {
+		for(i=0; i<n; i++) {
+			if (((Atom*)ret)[i] == aFullScreen) {
+				noXSS1 = True;
+				break;
+			}
+		}
+	}
 	if (noXSS1!=noXSS) XScreenSaverSuspend(dpy,noXSS=noXSS1);
 }
 #endif
@@ -152,8 +146,8 @@ void getWinGrp(){
 	}
 	win = win1;
 	grp1 = 0;
-	if (win!=wa.root)
-		getProp(win,aKbdGrp,XA_CARDINAL,&grp1,sizeof(grp1));
+	if (win!=wa.root && getProp(win,aKbdGrp,XA_CARDINAL,sizeof(CARD32)))
+		grp1 = *(CARD32*)ret;
 	while (grp1 != grp && XkbLockGroup(dpy, XkbUseCoreKbd, grp1)!=Success && grp1) {
 		XDeleteProperty(dpy,win,aKbdGrp);
 		grp1 = 0;
@@ -168,6 +162,11 @@ void setWinGrp(){
 	if (win!=wa.root)
 		XChangeProperty(dpy,win,aKbdGrp,XA_CARDINAL,32,PropModeReplace,(unsigned char*) &grp1,1);
 	grp = grp1;
+}
+
+void getPropWin1(){
+	if (getProp(wa.root,aActWin,XA_WINDOW,sizeof(Window)))
+		win1 = *(Window*)ret;
 }
 
 static int (*oldxerrh) (Display *, XErrorEvent *);
@@ -207,6 +206,7 @@ void init(){
 	grp = NO_GRP;
 	grp1 = 0;
 	rul = NULL;
+	ret = NULL;
 }
 
 int main(){
@@ -222,8 +222,8 @@ int main(){
 #undef e
 #define e (ev.xclient)
 		    case ClientMessage:
-			if (e.message_type == aWMState) {
-				getProp(wa.root,aActWin,XA_WINDOW,&win1,sizeof(win1));
+			if (e.message_type == aWMState){
+				getPropWin1();
 				if (e.window == win1 && win1 == win)
 					getWMState();
 			}
@@ -234,8 +234,8 @@ int main(){
 		    case PropertyNotify:
 			//if (e.window!=wa.root) break;
 			if (e.atom==aActWin) {
-				if (!getProp(wa.root,aActWin,XA_WINDOW,&win1,sizeof(win1)))
-					win1 = None;
+				win1 = None;
+				getPropWin1();
 			} else if (e.atom==aXkbRules) {
 #if 0
 				XkbStateRec s;
