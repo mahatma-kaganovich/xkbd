@@ -1,5 +1,5 @@
 /*
-	xkbdd v1.5 - per-window keyboard layout switcher [+ XSS suspend].
+	xkbdd v1.6 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -41,8 +41,8 @@ Window win, win1;
 XWindowAttributes wa;
 Atom aActWin, aKbdGrp, aXkbRules;
 #ifdef XSS
-Atom aWMState, aFullScreen, aCLStacking;
-BOOL noXSS, noXSS1;
+Atom aWMState, aFullScreen;
+Bool noXSS, noXSS1;
 #endif
 CARD32 grp, grp1;
 unsigned char *rul, *rul2;
@@ -61,13 +61,12 @@ Bool getRules(){
 	rul = NULL;
 	rulLen = 0;
 	n1 = 0;
-	if (XGetWindowProperty(dpy,wa.root,aXkbRules,0,256,False,XA_STRING,&t,&f,&rulLen,&b,&rul)==Success && rul) {
+	if (XGetWindowProperty(dpy,wa.root,aXkbRules,0,256,False,XA_STRING,&t,&f,&rulLen,&b,&rul)==Success && rul && rulLen>1 && t==XA_STRING) {
 		rul2 = rul;
-		if (rulLen>1 && t==XA_STRING) return 1;
-		XFree(rul);
+		return True;
 	}
 	rul2 = NULL;
-	return 0;
+	return False;
 }
 
 int getProp(Window w, Atom prop, Atom type, int size){
@@ -75,10 +74,8 @@ int getProp(Window w, Atom prop, Atom type, int size){
 	int f;
 	unsigned long b;
 
-	if (ret) XFree(ret);
+	XFree(ret);
 	ret = NULL;
-//	XFlush(dpy);
-//	XSync(dpy,False);
 	if (!(XGetWindowProperty(dpy,w,prop,0,1024,False,type,&t,&f,&n,&b,&ret)==Success && f>>3 == size && ret))
 		n=0;
 	return n;
@@ -124,15 +121,13 @@ void printGrp(){
 }
 
 #ifdef XSS
-void getWMState(){
+void WMState(Atom *states, int nn){
 	int i;
 	noXSS1 = False;
-	if (getProp(win,aWMState,XA_ATOM,sizeof(Atom))) {
-		for(i=0; i<n; i++) {
-			if (((Atom*)ret)[i] == aFullScreen) {
-				noXSS1 = True;
-				break;
-			}
+	for(i=0; i<n; i++) {
+		if (states[i] == aFullScreen) {
+			noXSS1 = True;
+			break;
 		}
 	}
 	if (noXSS1!=noXSS) XScreenSaverSuspend(dpy,noXSS=noXSS1);
@@ -153,7 +148,8 @@ void getWinGrp(){
 		grp1 = 0;
 	}
 #ifdef XSS
-	getWMState();
+	getProp(win,aWMState,XA_ATOM,sizeof(Atom));
+	WMState(((Atom*)ret),n);
 #endif
 }
 
@@ -189,8 +185,8 @@ void init(){
 #ifdef XSS
 	aWMState = XInternAtom(dpy, "_NET_WM_STATE", False);
 	aFullScreen = XInternAtom(dpy, "_NET_WM_STATE_FULLSCREEN", False);
-	aCLStacking = XInternAtom(dpy, "_NET_CLIENT_LIST_STACKING", False);
 	noXSS = False;
+	// ClientMessage from XSendEvent()
 	evmask |= SubstructureNotifyMask;
 #endif
 	XkbSelectEvents(dpy,XkbUseCoreKbd,XkbAllEventsMask,
@@ -206,6 +202,7 @@ void init(){
 	grp = NO_GRP;
 	grp1 = 0;
 	rul = NULL;
+	rul2 =NULL;
 	ret = NULL;
 }
 
@@ -223,9 +220,8 @@ int main(){
 #define e (ev.xclient)
 		    case ClientMessage:
 			if (e.message_type == aWMState){
-				getPropWin1();
-				if (e.window == win1 && win1 == win)
-					getWMState();
+				if (e.window==win)
+					WMState(&e.data.l[1],e.data.l[0]);
 			}
 			break;
 #endif
@@ -235,7 +231,7 @@ int main(){
 			//if (e.window!=wa.root) break;
 			if (e.atom==aActWin) {
 				win1 = None;
-				getPropWin1();
+				if (e.state==PropertyNewValue) getPropWin1();
 			} else if (e.atom==aXkbRules) {
 #if 0
 				XkbStateRec s;
@@ -260,6 +256,7 @@ int main(){
 					//break;
 				}
 			}
+//			else fprintf(stderr,"ev? %i\n",ev.type);
 			break;
 		}
 	}
