@@ -34,10 +34,6 @@
 #include <X11/extensions/scrnsaver.h>
 #endif
 
-// Over broken _NET_ACTIVE_WINDOW.
-// Overhead, but WM-safer
-//#define NO_PROP
-
 #define grp_t CARD32
 #define NO_GRP 99
 
@@ -140,19 +136,20 @@ void printGrp(){
 	fflush(stdout);
 }
 
-void getWin1(){
-	/* propery set too late, it is fixed by error handler, but ugly */
-	if (
-//		!getProp(wa.root,aActWin,XA_WINDOW,&win1,sizeof(win1)) || win1==None
-//#ifdef NO_PROP
-//		||
-		!XGetInputFocus(dpy, &win1, &revert) || win1==None
-//#endif
-	    ) win1 = wa.root;
+#ifdef XSS
+void getWMState(){
+	State = 0;
+	getProp(win,aWMState,XA_ATOM,&State,sizeof(State));
+	noXSS1 = State==aFullScreen ? True : False;
+	if (noXSS1!=noXSS) XScreenSaverSuspend(dpy,noXSS=noXSS1);
 }
+#endif
 
 void getWinGrp(){
-	if (win1==None) getWin1();
+	if (win1==None) {
+		XGetInputFocus(dpy, &win1, &revert);
+		if (win1==None) win1 = wa.root;
+	}
 	win = win1;
 	grp1 = 0;
 	if (win!=wa.root)
@@ -162,10 +159,7 @@ void getWinGrp(){
 		grp1 = 0;
 	}
 #ifdef XSS
-	State = 0;
-	getProp(win,aWMState,XA_ATOM,&State,sizeof(State));
-	noXSS1 = State==aFullScreen ? True : False;
-	if (noXSS1!=noXSS) XScreenSaverSuspend(dpy,noXSS=noXSS1);
+	getWMState();
 #endif
 }
 
@@ -180,13 +174,13 @@ static int (*oldxerrh) (Display *, XErrorEvent *);
 static int xerrh(Display *dpy, XErrorEvent *err){
 	if (err->error_code!=BadWindow || !XFlush(dpy) || !XSync(dpy,False)) oldxerrh(dpy,err);
 	//fprintf(stderr,"BadWindow ev=%x %s\n",ev.type,ev.type==28?XGetAtomName(dpy,ev.xproperty.atom):"");
-	/* too async? */
 	win1 = None;
 	return 0;
 }
 
 void init(){
-	int reason_rtrn, xkbmjr = XkbMajorVersion, xkbmnr = XkbMinorVersion;
+	int reason_rtrn, xkbmjr = XkbMajorVersion, xkbmnr = XkbMinorVersion,
+		evmask = PropertyChangeMask;
 
 	dpy = XkbOpenDisplay(NULL,&xkbEventType,&xkbError,&xkbmjr,&xkbmnr,&reason_rtrn);
 	XGetWindowAttributes(dpy, DefaultRootWindow(dpy), &wa);
@@ -198,6 +192,7 @@ void init(){
 	aFullScreen = XInternAtom(dpy, "_NET_WM_STATE_FULLSCREEN", False);
 	aCLStacking = XInternAtom(dpy, "_NET_CLIENT_LIST_STACKING", False);
 	noXSS = False;
+	evmask |= SubstructureNotifyMask;
 #endif
 	XkbSelectEvents(dpy,XkbUseCoreKbd,XkbAllEventsMask,
 		XkbStateNotifyMask
@@ -205,11 +200,7 @@ void init(){
 		);
 	XkbSelectEventDetails(dpy,XkbUseCoreKbd,XkbStateNotify,
 		XkbAllStateComponentsMask,XkbGroupStateMask);
-	XSelectInput(dpy, wa.root,
-#ifdef NO_PROP
-		FocusChangeMask|
-#endif
-		PropertyChangeMask);
+	XSelectInput(dpy, wa.root, evmask);
 	oldxerrh = XSetErrorHandler(xerrh);
 	win = wa.root;
 	win1 = None;
@@ -227,27 +218,25 @@ int main(){
 		if (win1 != win) continue; // error handled
 		XNextEvent(dpy, &ev);
 		switch (ev.type) {
-#ifdef NO_PROP
-		    case FocusOut:
-			// too async "BadWindow":
-			//win1 = None; XSync(dpy,False);
-			break;
-		    case FocusIn:
-			win1 = ev.xfocus.window;
+#ifdef XSS
+#undef e
+#define e (ev.xclient)
+		    case ClientMessage:
+			if (e.message_type == aWMState) {
+				getProp(wa.root,aActWin,XA_WINDOW,&win1,sizeof(win1));
+				if (e.window == win1 && win1 == win)
+					getWMState();
+			}
 			break;
 #endif
 #undef e
 #define e (ev.xproperty)
 		    case PropertyNotify:
 			//if (e.window!=wa.root) break;
-			if (e.atom==aActWin) win1 = None;
-#ifdef XSS
-			else if (e.atom==aCLStacking) {
-				// if changing - try modal (confirm Openbox menu,...)
-				win1 = None;
-			}
-#endif
-			else if (e.atom==aXkbRules) {
+			if (e.atom==aActWin) {
+				if (!getProp(wa.root,aActWin,XA_WINDOW,&win1,sizeof(win1)))
+					win1 = None;
+			} else if (e.atom==aXkbRules) {
 #if 0
 				XkbStateRec s;
 				XkbGetState(dpy,XkbUseCoreKbd,&s);
