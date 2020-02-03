@@ -182,7 +182,7 @@ int _button_get_txt_size(keyboard *kb, char *txt)
 #endif
 }
 
-int _but_size(button *b, int l){
+static int _but_size(button *b, int l){
 #ifdef CACHE_SIZES
 	int i,s=0;
 	if (!(s=b->txt_size[l])) {
@@ -219,13 +219,13 @@ int button_calc_vwidth(button *b)
   return b->vwidth;
 }
 
-int button_set_b_size(button *b, int size)
+static int button_set_b_size(button *b, int size)
 {
    b->b_size = size;
    return size;
 }
 
-unsigned long getGCFill(keyboard *kb, GC gc){
+static unsigned long getGCFill(keyboard *kb, GC gc){
 	XGCValues v;
 	XGetGCValues(kb->display,gc,GCForeground,&v);
 	return v.foreground;

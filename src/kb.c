@@ -59,7 +59,10 @@ static char *font1 = NULL;
 static char *loaded_font = NULL;
 static char *loaded_font1 = NULL;
 
-int load_a_single_font(keyboard *kb, char *fontname, FNTYPE *f) {
+static void kb_process_keypress(button *b, int repeat, unsigned int flags);
+static int kb_switch_layout(keyboard *kb, int kbd_layout_num, int shift);
+
+static int load_a_single_font(keyboard *kb, char *fontname, FNTYPE *f) {
 #ifdef USE_XFT
   if (*f) XftFontClose(kb->display, *f);
   return ((*f = XftFontOpenName(kb->display, DefaultScreen(kb->display), fontname)) != NULL);
@@ -71,7 +74,7 @@ int load_a_single_font(keyboard *kb, char *fontname, FNTYPE *f) {
 #endif
 }
 
-void load_font(keyboard *kb, char **loaded, char *fnt, FNTYPE *f){
+static void load_font(keyboard *kb, char **loaded, char *fnt, FNTYPE *f){
 	char *fnames0, *fnames, *fname, *fname1;
 	int i;
 
@@ -100,7 +103,7 @@ void load_font(keyboard *kb, char **loaded, char *fnt, FNTYPE *f){
 	exit(1);
 }
 
-void button_update(button *b) {
+static void button_update(button *b) {
 	int l,l1;
 	int group = b->kb->total_layouts-1;
 	Display *dpy = b->kb->display;
@@ -241,7 +244,7 @@ found:		if (i<n) {
 }
 
 #ifdef SIBLINGS
-void kb_find_button_siblings(button *b) {
+static void kb_find_button_siblings(button *b) {
 	button *but = NULL, *tmp_but;
 	box *bx1 = (box*)b->parent;
 	box *vbox = bx1->parent, *bx;
@@ -282,7 +285,7 @@ void kb_find_button_siblings(button *b) {
 	memcpy(b->siblings = malloc(n),buf,n);
 }
 
-void kb_update(keyboard *kb){
+static void kb_update(keyboard *kb){
 	list *listp, *ip;
 	button *b;
 	int i;
@@ -320,7 +323,7 @@ int kb_load_keymap(Display *dpy) {
    return 0;
 }
 
-unsigned int _set_state(unsigned int *s, unsigned int new)
+static unsigned int _set_state(unsigned int *s, unsigned int new)
 {
 	unsigned int old = *s & KB_STATE_KNOWN;
 	new &= KB_STATE_KNOWN;
@@ -348,11 +351,11 @@ unsigned int kb_sync_state(keyboard *kb, unsigned int mods, unsigned int locked_
 
 #ifdef USE_XFT
 #define _set_color_fg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,xc)
-void __set_color_fg(keyboard *kb, char *txt,GC *gc, XftColor *xc){
+static void __set_color_fg(keyboard *kb, char *txt,GC *gc, XftColor *xc){
 	XRenderColor colortmp;
 #else
 #define _set_color_fg(kb,c,gc,xc)  __set_color_fg(kb,c,gc)
-void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
+static void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
 #endif
 	XColor col;
 	Display *dpy = kb->display;
@@ -378,14 +381,14 @@ void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
 	}
 }
 
-box *_clone_box(box *vbox){
+static box *_clone_box(box *vbox){
 	box *b = malloc(sizeof(box));
 	memcpy(b,vbox,sizeof(box));
 	b->root_kid = b->tail_kid =NULL;
 	return b;
 }
 
-box *clone_box(Display *dpy, box *vbox, int group){
+static box *clone_box(Display *dpy, box *vbox, int group){
 	box *bx = _clone_box(vbox), *bx1;
 	list *listp, *ip;
 	button *b,*b0;
@@ -780,7 +783,7 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
 
 }
 
-void cache_preload(keyboard *kb,int layout){
+static void cache_preload(keyboard *kb,int layout){
 	int i,m;
 	list *listp, *ip;
 	button *b;
@@ -1076,7 +1079,7 @@ void kb_size(keyboard *kb) {
     init_cnt++;
 }
 
-int kb_switch_layout(keyboard *kb, int kbd_layout_num, int shift)
+static int kb_switch_layout(keyboard *kb, int kbd_layout_num, int shift)
 {
   box *b;
   box *b0 = kb->vvbox;
@@ -1095,7 +1098,7 @@ int kb_switch_layout(keyboard *kb, int kbd_layout_num, int shift)
   return 1;
 }
 
-void kb_render(keyboard *kb)
+static void kb_render(keyboard *kb)
 {
 	list *listp, *ip;
 	if (kb->backing!=kb->win)
@@ -1111,7 +1114,7 @@ void kb_render(keyboard *kb)
 	kb->filled=NULL;
 }
 
-void kb_paint(keyboard *kb)
+static void kb_paint(keyboard *kb)
 {
   if (kb->backing!=kb->win)
   XCopyArea(kb->display, kb->backing, kb->win, kb->gc,
@@ -1143,7 +1146,7 @@ static inline void bdraw(button *b, int flags){
 	button_paint(b);
 }
 
-void _release(button *b){
+static void _release(button *b){
 #ifdef MULTITOUCH
 	if (b->flags & STATE(OBIT_PRESSED))
 		kb_process_keypress(b,0,STATE(OBIT_UGLY));
@@ -1152,7 +1155,7 @@ void _release(button *b){
 	bdraw(b,0);
 }
 
-void _press(button *b, unsigned int flags){
+static void _press(button *b, unsigned int flags){
 	flags |= STATE(OBIT_PRESSED);
 #ifdef MULTITOUCH
 	if (b->modifier & KB_STATE_KNOWN && !(b->flags & STATE(OBIT_LOCK)))
@@ -1408,7 +1411,7 @@ drop:
 }
 
 #ifdef SLIDES
-void kb_set_slide(button *b, int x, int y)
+static void kb_set_slide(button *b, int x, int y)
 {
   if (x < (button_get_abs_x(b)-b->kb->slide_margin))
     { b->slide = SLIDE_LEFT; return; }
@@ -1460,7 +1463,7 @@ Bool kb_do_repeat(keyboard *kb, button *b)
 }
 
 static unsigned int state_used = 0;
-void kb_process_keypress(button *b, int repeat, unsigned int flags)
+static void kb_process_keypress(button *b, int repeat, unsigned int flags)
 {
     keyboard *kb = b->kb;
     unsigned int state = kb->state;

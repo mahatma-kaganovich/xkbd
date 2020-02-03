@@ -141,7 +141,7 @@ print "
 
 print '
 
-int cmp_str(const void *x1, const void *x2){
+static int cmp_str(const void *x1, const void *x2){
 	return strcmp(((struct translator *)x1)->s1,((struct translator *)x2)->s1);
 }
 

@@ -164,7 +164,7 @@ static void handle_sig(int sig)
    }
 }
 
-void restart(){
+static void restart(){
 	// display will be closed anymore, but prefer to ignore exec failures
 //	XCloseDisplay(display);
 //	xkbd_destroy(kb);
@@ -199,16 +199,16 @@ void version()
 #endif
 }
 
-void _prop(int i, char *prop, Atom type, void *data, int n, int mode){
+static void _prop(int i, char *prop, Atom type, void *data, int n, int mode){
 	XChangeProperty(display,win,XInternAtom(display,prop,False),type,i,mode,(unsigned char *)data,n); 
 }
 
-void _propAtom32(char *prop, char *data){
+static void _propAtom32(char *prop, char *data){
 	Atom a=XInternAtom(display,data,False);
 	_prop(32,prop,XA_ATOM,&a,1,PropModeAppend);
 }
 
-int inbound(int x,int xin,int x1,int x2){
+static int inbound(int x,int xin,int x1,int x2){
 	return (xin>x1 && xin<x2)?xin:x;
 }
 

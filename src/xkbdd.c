@@ -36,23 +36,23 @@
 
 #define NO_GRP 99
 
-Display *dpy;
-Window win, win1;
-XWindowAttributes wa;
-Atom aActWin, aKbdGrp, aXkbRules;
+static Display *dpy;
+static Window win, win1;
+static XWindowAttributes wa;
+static Atom aActWin, aKbdGrp, aXkbRules;
 #ifdef XSS
-Atom aWMState, aFullScreen;
-Bool noXSS, noXSS1;
+static Atom aWMState, aFullScreen;
+static Bool noXSS, noXSS1;
 #endif
-CARD32 grp, grp1;
-unsigned char *rul, *rul2;
-unsigned long rulLen, n;
-int xkbEventType, xkbError, n1, revert;
-XEvent ev;
-unsigned char *ret;
+static CARD32 grp, grp1;
+static unsigned char *rul, *rul2;
+static unsigned long rulLen, n;
+static int xkbEventType, xkbError, n1, revert;
+static XEvent ev;
+static unsigned char *ret;
 
 
-Bool getRules(){
+static Bool getRules(){
 	Atom t;
 	int f, i;
 	unsigned long b;
@@ -69,7 +69,7 @@ Bool getRules(){
 	return False;
 }
 
-int getProp(Window w, Atom prop, Atom type, int size){
+static int getProp(Window w, Atom prop, Atom type, int size){
 	Atom t;
 	int f;
 	unsigned long b;
@@ -81,7 +81,7 @@ int getProp(Window w, Atom prop, Atom type, int size){
 	return n;
 }
 
-void printGrp(){
+static void printGrp(){
 	int i, n2 = 0;
 	unsigned char *s, *p, c;
 
@@ -121,7 +121,7 @@ void printGrp(){
 }
 
 #ifdef XSS
-void WMState(Atom *states, int nn){
+static void WMState(Atom *states, int nn){
 	int i;
 	noXSS1 = False;
 	for(i=0; i<n; i++) {
@@ -134,7 +134,7 @@ void WMState(Atom *states, int nn){
 }
 #endif
 
-void getWinGrp(){
+static void getWinGrp(){
 	if (win1==None) {
 		XGetInputFocus(dpy, &win1, &revert);
 		if (win1==None) win1 = wa.root;
@@ -153,14 +153,14 @@ void getWinGrp(){
 #endif
 }
 
-void setWinGrp(){
+static void setWinGrp(){
 	printGrp();
 	if (win!=wa.root)
 		XChangeProperty(dpy,win,aKbdGrp,XA_CARDINAL,32,PropModeReplace,(unsigned char*) &grp1,1);
 	grp = grp1;
 }
 
-void getPropWin1(){
+static void getPropWin1(){
 	if (getProp(wa.root,aActWin,XA_WINDOW,sizeof(Window)))
 		win1 = *(Window*)ret;
 }
@@ -173,7 +173,7 @@ static int xerrh(Display *dpy, XErrorEvent *err){
 	return 0;
 }
 
-void init(){
+static void init(){
 	int reason_rtrn, xkbmjr = XkbMajorVersion, xkbmnr = XkbMinorVersion,
 		evmask = PropertyChangeMask;
 
@@ -209,6 +209,7 @@ void init(){
 int main(){
 	init();
 	printGrp();
+	getPropWin1();
 	while (1) {
 		if (win1 != win) getWinGrp();
 		else if (grp1 != grp) setWinGrp();
