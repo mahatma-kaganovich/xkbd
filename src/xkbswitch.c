@@ -9,6 +9,6 @@ int main(){
 
 	XkbGetState(dpy,XkbUseCoreKbd,&s);
 	XkbLockGroup(dpy,XkbUseCoreKbd,s.group+1);
-	XFlush(dpy);
+	XCloseDisplay(dpy);
 	return 0;
 }
