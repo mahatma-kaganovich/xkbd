@@ -121,8 +121,8 @@ static void printGrp(){
 }
 
 #ifdef XSS
-static void WMState(Atom *states, int nn){
-	int i;
+static void WMState(Atom *states, short nn){
+	short i;
 	noXSS1 = False;
 	for(i=0; i<nn; i++) {
 		if (states[i] == aFullScreen) {
