@@ -1,5 +1,5 @@
 /*
-	xkbdd v1.6 - per-window keyboard layout switcher [+ XSS suspend].
+	xkbdd v1.7 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -124,7 +124,7 @@ static void printGrp(){
 static void WMState(Atom *states, int nn){
 	int i;
 	noXSS1 = False;
-	for(i=0; i<n; i++) {
+	for(i=0; i<nn; i++) {
 		if (states[i] == aFullScreen) {
 			noXSS1 = True;
 			break;
