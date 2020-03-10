@@ -180,9 +180,10 @@ static int stopped = 0;
 static void _reset(int sig){
 	if (!stopped) {
 		stopped = sig;
+		// some dangerous flags combinations are buggy. reset
 		XkbLockModifiers(display,XkbUseCoreKbd,0xffff,0);
 		XkbLatchModifiers(display,XkbUseCoreKbd,0xffff,0);
-		XkbLockGroup(display,XkbUseCoreKbd,0);
+//		XkbLockGroup(display,XkbUseCoreKbd,0);
 		//XFlush(display);
 	}
 	if (stopped) exit(1);
@@ -210,6 +211,12 @@ static void _propAtom32(char *prop, char *data){
 
 static int inbound(int x,int xin,int x1,int x2){
 	return (xin>x1 && xin<x2)?xin:x;
+}
+
+static void reset2(){
+	XkbStateRec s;
+	XkbGetState(display,XkbUseCoreKbd,&s);
+	kb_sync_state(kb,s.mods,s.locked_mods,s.group);
 }
 
 int main(int argc, char **argv)
@@ -671,6 +678,7 @@ re_crts:
 
 
       XSetErrorHandler(xerrh);
+      reset2();
       XSync(display, False);
 
 //#define SERIAL(s) static unsigned long serial = 0; if (serial==(serial=ev.xmotion.serial))
