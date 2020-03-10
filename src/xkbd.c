@@ -216,7 +216,7 @@ static int inbound(int x,int xin,int x1,int x2){
 static void reset2(){
 	XkbStateRec s;
 	XkbGetState(display,XkbUseCoreKbd,&s);
-	kb_sync_state(kb,s.mods,s.locked_mods,s.group);
+	if(!kb_sync_state(kb,s.mods,s.locked_mods,s.group)) kb_repaint(kb);
 }
 
 int main(int argc, char **argv)
@@ -678,7 +678,6 @@ re_crts:
 
 
       XSetErrorHandler(xerrh);
-      reset2();
       XSync(display, False);
 
 //#define SERIAL(s) static unsigned long serial = 0; if (serial==(serial=ev.xmotion.serial))
@@ -783,7 +782,7 @@ re_crts:
 			//8: top_start_x, top_end_x, bottom_start_x, bottom_end_x
 			_prop(32,"_NET_WM_STRUT_PARTIAL",XA_CARDINAL,&prop,12,PropModeReplace);
 		}
-		kb_repaint(kb);
+		reset2();
 		break;
 	    case VisibilityNotify: if (dock & 32) {
 		Window rw, pw, *wins;
