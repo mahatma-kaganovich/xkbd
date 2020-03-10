@@ -215,8 +215,10 @@ static int inbound(int x,int xin,int x1,int x2){
 
 static void reset2(){
 	XkbStateRec s;
+	int g = kb->group;
 	XkbGetState(display,XkbUseCoreKbd,&s);
-	if(!kb_sync_state(kb,s.mods,s.locked_mods,s.group)) kb_repaint(kb);
+	kb_sync_state(kb,s.mods,s.locked_mods,s.group);
+	if (g==s.group) kb_repaint(kb);
 }
 
 int main(int argc, char **argv)
