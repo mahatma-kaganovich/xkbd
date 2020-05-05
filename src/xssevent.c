@@ -7,7 +7,7 @@
 */
 
 #include <unistd.h>
-#include <wait.h>
+#include <signal.h>
 #include <X11/Xlib.h>
 #include <X11/extensions/scrnsaver.h>
 
@@ -22,6 +22,7 @@ int main(int argc, char **argv) {
 	XScreenSaverSelectInput(dpy, XDefaultRootWindow(dpy), ScreenSaverNotifyMask|ScreenSaverCycleMask);
 	for(i=1; i<argc; i++) argv[i-1]=argv[i];
 	msg = &argv[argc-1];
+	signal(SIGCHLD,SIG_IGN);
 	while (1) {
 		XNextEvent(dpy, &ev);
 		if (ev.type == xssevent) {
@@ -33,7 +34,6 @@ int main(int argc, char **argv) {
 			default: m="unknown";
 			}
 			*msg=m;
-			while(waitpid(-1,NULL,WNOHANG)>0);
 			if (!fork()){
 				execvp(argv[0], argv);
 				return 1;
