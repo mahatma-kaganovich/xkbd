@@ -11,7 +11,6 @@
 #include <X11/Xlib.h>
 #include <X11/extensions/scrnsaver.h>
 
-#include <stdio.h>
 int main(int argc, char **argv) {
 	XEvent ev;
 	char **msg, *m;
