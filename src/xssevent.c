@@ -24,18 +24,15 @@ int main(int argc, char **argv) {
 	XScreenSaverSelectInput(dpy, XDefaultRootWindow(dpy), ScreenSaverNotifyMask|ScreenSaverCycleMask);
 	for(i=1; i<argc; i++) argv[i-1]=argv[i];
 	msg = &argv[argc-1];
-	while (1) {
+	do {
 		XNextEvent(dpy, &ev);
-		if (ev.type == xssevent) {
-			switch (((XScreenSaverNotifyEvent*)&ev)->state) {
-			case ScreenSaverOff: m="off";break;
-			case ScreenSaverOn: m="on";break;
-			case ScreenSaverCycle: m="cycle";break;
-			case ScreenSaverDisabled: m="disabled";break;
-			default: m="unknown";
-			}
-			if (!fork()) break;
-		}
+	} while (ev.type != xssevent || fork());
+	switch (((XScreenSaverNotifyEvent*)&ev)->state) {
+	case ScreenSaverOff: m="off";break;
+	case ScreenSaverOn: m="on";break;
+	case ScreenSaverCycle: m="cycle";break;
+	case ScreenSaverDisabled: m="disabled";break;
+	default: m="unknown";
 	}
 	*msg=m;
 	execvp(argv[0], argv);
