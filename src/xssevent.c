@@ -11,18 +11,19 @@
 #include <X11/Xlib.h>
 #include <X11/extensions/scrnsaver.h>
 
+#include <stdio.h>
 int main(int argc, char **argv) {
 	XEvent ev;
 	char **msg, *m;
 	int xssevent, i;
 	Display *dpy = XOpenDisplay(NULL);
 
-	if (!dpy || !XScreenSaverQueryExtension(dpy, &xssevent, &i)) return 1;
+    if (dpy && XScreenSaverQueryExtension(dpy, &xssevent, &i) && argc>1) {
+	signal(SIGCHLD,SIG_IGN);
 	xssevent+=ScreenSaverNotify;
 	XScreenSaverSelectInput(dpy, XDefaultRootWindow(dpy), ScreenSaverNotifyMask|ScreenSaverCycleMask);
 	for(i=1; i<argc; i++) argv[i-1]=argv[i];
 	msg = &argv[argc-1];
-	signal(SIGCHLD,SIG_IGN);
 	while (1) {
 		XNextEvent(dpy, &ev);
 		if (ev.type == xssevent) {
@@ -33,11 +34,11 @@ int main(int argc, char **argv) {
 			case ScreenSaverDisabled: m="disabled";break;
 			default: m="unknown";
 			}
-			*msg=m;
-			if (!fork()){
-				execvp(argv[0], argv);
-				return 1;
-			}
+			if (!fork()) break;
 		}
 	}
+	*msg=m;
+	execvp(argv[0], argv);
+    }
+    return 1;
 }
