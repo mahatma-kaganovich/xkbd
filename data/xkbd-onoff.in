@@ -101,7 +101,7 @@ _dpms(){
 	xset dpms "$x1" "$x2" "$x3"
 }
 
-_setkbmap(){
+_setxkbmap(){
 	setxkbmap
 	[[ -e ~/.Xmodmap ]] && xmodmap ~/.Xmodmap
 }
