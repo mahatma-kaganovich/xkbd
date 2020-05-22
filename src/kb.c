@@ -349,6 +349,7 @@ unsigned int kb_sync_state(keyboard *kb, unsigned int mods, unsigned int locked_
 	return ch;
 }
 
+
 #ifdef USE_XFT
 #define _set_color_fg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,xc)
 static void __set_color_fg(keyboard *kb, char *txt,GC *gc, XftColor *xc){
@@ -357,11 +358,33 @@ static void __set_color_fg(keyboard *kb, char *txt,GC *gc, XftColor *xc){
 #define _set_color_fg(kb,c,gc,xc)  __set_color_fg(kb,c,gc)
 static void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
 #endif
-	XColor col;
+	XColor col = {};
 	Display *dpy = kb->display;
-	if (_XColorFromStr(dpy, kb->colormap, &col, txt) == 0) {
+	const char delim[] = ",:";
+	char *txt1;
+	XColor exact;
+	int r = 0;
+
+	txt1 = strsep(&txt,"=|");
+	if (txt) r=XAllocNamedColor(dpy,  kb->colormap, txt1, &col, &exact);
+	else txt = txt1;
+	if (!r) {
+		txt1=strsep(&txt, delim);
+		if (txt) {
+			col.red =(atoi(txt1) * 65535) / 255; // *65535/255
+			txt1 = strsep(&txt, delim);
+			if (txt) {
+				col.green = (atoi(txt1) * 65535) / 255;
+				txt1 = strsep(&txt, delim);
+				col.blue = (atoi(txt1) * 65535) / 255;
+				r=XAllocColor(dpy, kb->colormap, &col);
+			}
+		}
+	}
+	if (!r && !XAllocNamedColor(dpy,  kb->colormap, txt, &col, &exact)) {
 		perror("color allocation failed\n"); exit(1);
 	}
+
 #ifdef USE_XFT
 	if (xc) {
 		colortmp.red   = col.red;

@@ -43,34 +43,6 @@ GC _createGC(keyboard *kb, int rev)
 	return XCreateGC(dpy, kb->win, GCGraphicsExposures|GCBackground|GCForeground|GCFillStyle, &values);
 }
 
-int _XColorFromStr(Display *display, Colormap colormap, XColor *col, const char *defstr)
-{
-  char *str;
-  const char delim[] = ",:";
-  char *token;
-  XColor exact;
-  str = strdup(defstr);
-
-  if ((strchr(defstr, delim[0]) != NULL)
-      || (strchr(defstr, delim[1]) != NULL) )
-  {
-     token = strsep (&str, delim);
-     col->red = ( atoi(token) * 65535 ) / 255;
-     token = strsep (&str, delim);
-     col->green = ( atoi(token) * 65535 ) / 255;
-     token = strsep (&str, delim);
-     col->blue = ( atoi(token) * 65535 ) / 255;
-
-     return XAllocColor(display,
-			colormap,
-			col);
-  } else {
-          return XAllocNamedColor(display,
-			     colormap,
-			     defstr, col, &exact);
-  }
-}
-
 #ifdef USE_XPM
 void button_set_pixmap(button *b, char *filename)
 {

@@ -24,8 +24,6 @@ int _max3( int a, int b, int c );
 
 GC _createGC(keyboard *kb, int rev);
 
-int _XColorFromStr(Display *display, Colormap colormap, XColor *col, const char *defstr);
-
 KeySym button_ks(char *txt);
 
 void button_set_pixmap(button *b, char *txt);
