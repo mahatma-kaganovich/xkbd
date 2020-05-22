@@ -371,12 +371,12 @@ static void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
 	if (!r) {
 		txt1=strsep(&txt, delim);
 		if (txt) {
-			col.red =(atoi(txt1) * 65535) / 255; // *65535/255
+			col.red =atoi(txt1) * 257; // *65535/255
 			txt1 = strsep(&txt, delim);
 			if (txt) {
-				col.green = (atoi(txt1) * 65535) / 255;
+				col.green = atoi(txt1) * 257;
 				txt1 = strsep(&txt, delim);
-				col.blue = (atoi(txt1) * 65535) / 255;
+				col.blue = atoi(txt1) * 257;
 				r=XAllocColor(dpy, kb->colormap, &col);
 			}
 		}
