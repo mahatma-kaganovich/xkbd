@@ -369,7 +369,7 @@ static void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
 		colortmp.blue  = col.blue;
 		colortmp.alpha = 0xFFFF;
 		XftColorAllocValue(dpy,
-			DefaultVisual(dpy,kb->screen),
+			kb->visual,
 			kb->colormap,
 			&colortmp, xc);
 	}
@@ -461,9 +461,9 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
   kb = calloc(1,sizeof(keyboard));
   kb->win = win;
   kb->display = display;
-
   kb->screen = screen;
-  kb->colormap = DefaultColormap(display,  screen);
+  kb->visual = DefaultVisual(display, screen);
+  kb->colormap = DefaultColormap(display, screen);
 
   /* create lots and lots of gc's */
   kb->gc=_createGC(kb,0);
@@ -484,7 +484,7 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
   colortmp.blue  = 0xFFFF;
   colortmp.alpha = 0xFFFF;
   XftColorAllocValue(display,
-		     DefaultVisual(display, screen),
+		     kb->visual,
 		     kb->colormap,
 		     &colortmp,
 		     &kb->color_rev);
@@ -494,7 +494,7 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
   colortmp.blue  = 0x0000;
   colortmp.alpha = 0xFFFF;
   XftColorAllocValue(display,
-		     DefaultVisual(display, screen),
+		     kb->visual,
 		     kb->colormap,
 		     &colortmp,
 		     &kb->color);
@@ -948,9 +948,7 @@ void kb_size(keyboard *kb) {
 
 
 	kb->xftdraw = XftDrawCreate(kb->display, (Drawable) kb->backing,
-			       DefaultVisual(kb->display,
-					     kb->screen),
-					     kb->colormap);
+					    kb->visual, kb->colormap);
 #endif
 
 
