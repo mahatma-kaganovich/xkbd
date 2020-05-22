@@ -65,7 +65,7 @@ static int kb_switch_layout(keyboard *kb, int kbd_layout_num, int shift);
 static int load_a_single_font(keyboard *kb, char *fontname, FNTYPE *f) {
 #ifdef USE_XFT
   if (*f) XftFontClose(kb->display, *f);
-  return ((*f = XftFontOpenName(kb->display, DefaultScreen(kb->display), fontname)) != NULL);
+  return ((*f = XftFontOpenName(kb->display, kb->screen, fontname)) != NULL);
 #else
   if (*f) XUnloadFont((*f)->fid);
   if ((*f = XLoadQueryFont(kb->display, fontname)) == NULL) return 0;
@@ -359,7 +359,7 @@ static void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
 #endif
 	XColor col;
 	Display *dpy = kb->display;
-	if (_XColorFromStr(dpy, &col, txt) == 0) {
+	if (_XColorFromStr(dpy, kb->colormap, &col, txt) == 0) {
 		perror("color allocation failed\n"); exit(1);
 	}
 #ifdef USE_XFT
@@ -369,8 +369,8 @@ static void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
 		colortmp.blue  = col.blue;
 		colortmp.alpha = 0xFFFF;
 		XftColorAllocValue(dpy,
-			DefaultVisual(dpy,DefaultScreen(dpy)),
-			DefaultColormap(dpy,DefaultScreen(dpy)),
+			DefaultVisual(dpy,kb->screen),
+			kb->colormap,
 			&colortmp, xc);
 	}
 	//else
@@ -430,7 +430,7 @@ static box *clone_box(Display *dpy, box *vbox, int group){
 	return bx;
 }
 
-keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
+keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 		 int kb_width, int kb_height, char *conf_file,
 		 char *font_name, char *font_name1)
 {
@@ -450,8 +450,6 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
   int line_no = 0;
   enum { none, kbddef, rowdef, keydef } context;
 
-  Colormap cmp;
-
 #ifdef USE_XFT
   XRenderColor colortmp;
 #endif
@@ -464,7 +462,8 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
   kb->win = win;
   kb->display = display;
 
-  cmp = DefaultColormap(display, DefaultScreen(display));
+  kb->screen = screen;
+  kb->colormap = DefaultColormap(display,  screen);
 
   /* create lots and lots of gc's */
   kb->gc=_createGC(kb,0);
@@ -485,8 +484,8 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
   colortmp.blue  = 0xFFFF;
   colortmp.alpha = 0xFFFF;
   XftColorAllocValue(display,
-		     DefaultVisual(display, DefaultScreen(display)),
-		     DefaultColormap(display,DefaultScreen(display)),
+		     DefaultVisual(display, screen),
+		     kb->colormap,
 		     &colortmp,
 		     &kb->color_rev);
 
@@ -495,8 +494,8 @@ keyboard* kb_new(Window win, Display *display, int kb_x, int kb_y,
   colortmp.blue  = 0x0000;
   colortmp.alpha = 0xFFFF;
   XftColorAllocValue(display,
-		     DefaultVisual(display, DefaultScreen(display)),
-		     DefaultColormap(display,DefaultScreen(display)),
+		     DefaultVisual(display, screen),
+		     kb->colormap,
 		     &colortmp,
 		     &kb->color);
 
@@ -940,7 +939,7 @@ void kb_size(keyboard *kb) {
 
 	    kb->backing = XCreatePixmap(kb->display, kb->win,
 		kb->vbox->act_width, kb->vbox->act_height,
-		DefaultDepth(kb->display, DefaultScreen(kb->display)) );
+		DefaultDepth(kb->display, kb->screen) );
 	// runtime disabling cache -> direct rendering
 	} else kb->backing = kb->win;
 
@@ -950,9 +949,8 @@ void kb_size(keyboard *kb) {
 
 	kb->xftdraw = XftDrawCreate(kb->display, (Drawable) kb->backing,
 			       DefaultVisual(kb->display,
-					     DefaultScreen(kb->display)),
-			       DefaultColormap(kb->display,
-					       DefaultScreen(kb->display)));
+					     kb->screen),
+					     kb->colormap);
 #endif
 
 

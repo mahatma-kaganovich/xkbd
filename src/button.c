@@ -30,8 +30,8 @@
 GC _createGC(keyboard *kb, int rev)
 {
 	Display *dpy = kb->display;
-	unsigned long b = BlackPixel(dpy, DefaultScreen(dpy));
-	unsigned long w = WhitePixel(dpy, DefaultScreen(dpy));
+	unsigned long b = BlackPixel(dpy, kb->screen);
+	unsigned long w = WhitePixel(dpy, kb->screen);
 
 	XGCValues values = {
 		.foreground=rev?w:b,
@@ -43,7 +43,7 @@ GC _createGC(keyboard *kb, int rev)
 	return XCreateGC(dpy, kb->win, GCGraphicsExposures|GCBackground|GCForeground|GCFillStyle, &values);
 }
 
-int _XColorFromStr(Display *display, XColor *col, const char *defstr)
+int _XColorFromStr(Display *display, Colormap colormap, XColor *col, const char *defstr)
 {
   char *str;
   const char delim[] = ",:";
@@ -62,11 +62,11 @@ int _XColorFromStr(Display *display, XColor *col, const char *defstr)
      col->blue = ( atoi(token) * 65535 ) / 255;
 
      return XAllocColor(display,
-			DefaultColormap(display, DefaultScreen(display)),
+			colormap,
 			col);
   } else {
           return XAllocNamedColor(display,
-			     DefaultColormap(display, DefaultScreen(display)),
+			     colormap,
 			     defstr, col, &exact);
   }
 }
@@ -290,7 +290,7 @@ int button_render(button *b, int mode)
 	kb->win,
 //	backing,
 	aw, ah,
-	DefaultDepth(kb->display, DefaultScreen(kb->display)) );
+	DefaultDepth(kb->display, kb->screen) );
 //   if (cache_pix==3) backing=pix;
   }
     // pixmap must pass too as txt[]=0

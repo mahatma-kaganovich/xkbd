@@ -273,11 +273,11 @@ int main(int argc, char **argv)
 	{ 'k', IAM ".conf_file", 0, 0, &conf_file, "keyboard definition file\n\
 	other than from ~/." IAM " or " DEFAULTCONFIG },
 	{ 'D', IAM ".dock", 1, 0, &dock, "Dock/options bitmask:\n\
-	1=dock, 2=strut, 4=_NET_WM_WINDOW_TYPE_DOCK,\n\
+	1=dock (all desktops), 2=strut, 4=_NET_WM_WINDOW_TYPE_DOCK,\n\
 	8=_NET_WM_WINDOW_TYPE_TOOLBAR, 16=_NET_WM_STATE_STICKY,\n\
 	32=resize (slock), 64=strut horizontal, 128=_NET_WM_STATE_SKIP_TASKBAR,\n\
 	256=_NET_WM_STATE_ABOVE + RaiseWindow().\n\
-	For OpenBox I use 434 = $[2+16+32+128+256]." },
+	For OpenBox I use 435 = $[1+2+16+32+128+256]." },
 	{ 'i', IAM ".fake_touch", 2, 0, &fake_touch,
 #ifdef USE_XI
 		"fake touch device / no XI2 (2=both types over XI2)"
@@ -570,7 +570,7 @@ re_crts:
       _reset(0);
       signal(SIGTERM, _reset);
 
-      kb = kb_new(win, display, 0, 0, width, height, conf_file, font_name, font_name1);
+      kb = kb_new(win, display, screen, 0, 0, width, height, conf_file, font_name, font_name1);
       kb_size(kb);
       i=kb->vbox->act_width;
       j=kb->vbox->act_height;

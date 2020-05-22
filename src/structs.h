@@ -177,6 +177,8 @@ typedef struct _keyboard
 
   Window win;
   Display *display;
+  int screen;
+  Colormap colormap;
 #ifdef CACHE_PIX
   Pixmap backing;
 #else
