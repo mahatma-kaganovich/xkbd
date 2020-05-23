@@ -622,17 +622,27 @@ re_crts:
 #ifdef USE_XI
       int xiopcode, xievent = 0, xierror, xi = 0;
       int ximajor = 2, ximinor = 2;
+      // keep it constant to compile-out unused event filtering
+#define DeviceIdMask XIAllMasterDevices
       if(fake_touch!=1 && XQueryExtension(display, "XInputExtension", &xiopcode, &xievent, &xierror) &&
 		XIQueryVersion(display, &ximajor, &ximinor) != BadRequest) {
 
 	static unsigned char mask_[XIMaskLen(XI_TouchEnd)] = {};
-	static XIEventMask mask = { .deviceid = XIAllDevices, .mask_len = sizeof(mask_), .mask = (unsigned char *)&mask_ };
+	static XIEventMask mask = { .deviceid = DeviceIdMask, .mask_len = sizeof(mask_), .mask = (unsigned char *)&mask_ };
 
-	if (fake_touch==2) {
+	if (DeviceIdMask == XIAllMasterDevices) {
+		if (fake_touch==2) {
+			XISetMask(mask.mask, XI_Motion);
+		}
 		XISetMask(mask.mask, XI_ButtonPress);
-		XISetMask(mask.mask, XI_Motion);
+		XISetMask(mask.mask, XI_ButtonRelease);
+	} else {
+		if (fake_touch==2) {
+			XISetMask(mask.mask, XI_ButtonPress);
+			XISetMask(mask.mask, XI_Motion);
+		}
+		XISetMask(mask.mask, XI_ButtonRelease);
 	}
-	XISetMask(mask.mask, XI_ButtonRelease);
 
 	XISetMask(mask.mask, XI_TouchBegin);
 	XISetMask(mask.mask, XI_TouchUpdate);
@@ -709,17 +719,22 @@ re_crts:
 			    case XI_ButtonRelease: type++;
 			    case XI_Motion: type++;
 			    case XI_ButtonPress:
-				if (lastid == e->sourceid) break;
-				if (!fake_touch) { // only release -> press+release
+				// XIAllMasterDevices looks always correct
+				if (DeviceIdMask != XIAllMasterDevices) {
+				    if (lastid == e->sourceid) break;
+				    if (!fake_touch) { // only release -> press+release
 					SERIAL(ev.xmotion.serial) break;
 					active_but = kb_handle_events(kb, 0, ex, ey, 0, e->sourceid, e->time);
+				    }
 				}
 				active_but = kb_handle_events(kb, type, ex, ey, 0, e->sourceid, e->time);
 				break;
 			    case XI_TouchEnd: type++;
 			    case XI_TouchUpdate: type++;
 			    case XI_TouchBegin:
-				active_but = kb_handle_events(kb, type, ex, ey, e->detail, lastid = e->sourceid, e->time);
+				// XIAllMasterDevices looks always correct
+				if (DeviceIdMask != XIAllMasterDevices) lastid = e->sourceid;
+				active_but = kb_handle_events(kb, type, ex, ey, e->detail, e->sourceid, e->time);
 			}
 			XFreeEventData(display, &ev.xcookie);
 		}
