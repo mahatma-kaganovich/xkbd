@@ -630,19 +630,11 @@ re_crts:
 	static unsigned char mask_[XIMaskLen(XI_TouchEnd)] = {};
 	static XIEventMask mask = { .deviceid = DeviceIdMask, .mask_len = sizeof(mask_), .mask = (unsigned char *)&mask_ };
 
-	if (DeviceIdMask == XIAllMasterDevices) {
-		if (fake_touch==2) {
-			XISetMask(mask.mask, XI_Motion);
-		}
+	if (fake_touch==2)
+		XISetMask(mask.mask, XI_Motion);
+	if (DeviceIdMask != XIAllDevices || fake_touch==2)
 		XISetMask(mask.mask, XI_ButtonPress);
-		XISetMask(mask.mask, XI_ButtonRelease);
-	} else {
-		if (fake_touch==2) {
-			XISetMask(mask.mask, XI_ButtonPress);
-			XISetMask(mask.mask, XI_Motion);
-		}
-		XISetMask(mask.mask, XI_ButtonRelease);
-	}
+	XISetMask(mask.mask, XI_ButtonRelease);
 
 	XISetMask(mask.mask, XI_TouchBegin);
 	XISetMask(mask.mask, XI_TouchUpdate);
@@ -711,16 +703,11 @@ re_crts:
 			static int lastid = -1;
 			int ex = e->event_x + .5;
 			int ey = e->event_y + .5;
-			// in this place serial looks nice,
-			// but multitouch control work better
-			//SERIAL(e->serial); else
-//			switch(e->evtype) {
 			switch(ev.xcookie.evtype) {
 			    case XI_ButtonRelease: type++;
 			    case XI_Motion: type++;
 			    case XI_ButtonPress:
-				// XIAllMasterDevices looks always correct
-				if (DeviceIdMask != XIAllMasterDevices) {
+				if (DeviceIdMask == XIAllDevices) {
 				    if (lastid == e->sourceid) break;
 				    if (!fake_touch) { // only release -> press+release
 					SERIAL(ev.xmotion.serial) break;
@@ -732,8 +719,7 @@ re_crts:
 			    case XI_TouchEnd: type++;
 			    case XI_TouchUpdate: type++;
 			    case XI_TouchBegin:
-				// XIAllMasterDevices looks always correct
-				if (DeviceIdMask != XIAllMasterDevices) lastid = e->sourceid;
+				if (DeviceIdMask == XIAllDevices) lastid = e->sourceid;
 				active_but = kb_handle_events(kb, type, ex, ey, e->detail, e->sourceid, e->time);
 			}
 			XFreeEventData(display, &ev.xcookie);
