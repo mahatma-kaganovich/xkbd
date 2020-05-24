@@ -623,7 +623,8 @@ re_crts:
       int xiopcode, xievent = 0, xierror, xi = 0;
       int ximajor = 2, ximinor = 2;
       // keep it constant to compile-out unused event filtering
-#define DeviceIdMask XIAllMasterDevices
+//#define DeviceIdMask XIAllMasterDevices
+#define DeviceIdMask XIAllDevices
       if(fake_touch!=1 && XQueryExtension(display, "XInputExtension", &xiopcode, &xievent, &xierror) &&
 		XIQueryVersion(display, &ximajor, &ximinor) != BadRequest) {
 
@@ -700,7 +701,8 @@ re_crts:
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
 			// protect from fusion button/touch events
-			static int lastid = -1;
+//			static int lastid = -1;
+			if (DeviceIdMask == XIAllDevices && e->sourceid != e->deviceid) break;
 			int ex = e->event_x + .5;
 			int ey = e->event_y + .5;
 			switch(ev.xcookie.evtype) {
@@ -708,7 +710,7 @@ re_crts:
 			    case XI_Motion: type++;
 			    case XI_ButtonPress:
 				if (DeviceIdMask == XIAllDevices) {
-				    if (lastid == e->sourceid) break;
+//				    if (lastid == e->sourceid) break;
 				    if (!fake_touch) { // only release -> press+release
 					SERIAL(ev.xmotion.serial) break;
 					active_but = kb_handle_events(kb, 0, ex, ey, 0, e->sourceid, e->time);
@@ -719,7 +721,7 @@ re_crts:
 			    case XI_TouchEnd: type++;
 			    case XI_TouchUpdate: type++;
 			    case XI_TouchBegin:
-				if (DeviceIdMask == XIAllDevices) lastid = e->sourceid;
+//				if (DeviceIdMask == XIAllDevices) lastid = e->sourceid;
 				active_but = kb_handle_events(kb, type, ex, ey, e->detail, e->sourceid, e->time);
 			}
 			XFreeEventData(display, &ev.xcookie);
