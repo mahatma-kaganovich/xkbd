@@ -280,7 +280,8 @@ int main(int argc, char **argv)
 	For OpenBox I use 435 = $[1+2+16+32+128+256]." },
 	{ 'i', IAM ".fake_touch", 2, 0, &fake_touch,"event type bitmask: "
 #ifdef USE_XI
-		"1=Xkb vs. XI2, 2-XIAllMasterDevices vs. XIAllDevices\n	"
+		"1=Xkb vs. XI2,\n\
+	2-XIAllMasterDevices vs. XIAllDevices, "
 #endif
 		"4-disable motion events"
 	},
