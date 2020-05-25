@@ -31,7 +31,7 @@
 #include <X11/Xresource.h>
 
 #ifdef USE_XI
-#include <X11/extensions/XInput.h>
+//#include <X11/extensions/XInput.h>
 #include <X11/extensions/XInput2.h>
 #endif
 
@@ -708,22 +708,24 @@ re_crts:
 			    case XI_Motion: type++;
 			    case XI_ButtonPress:
 				if (lastid == e->sourceid) break;
-				active_but = kb_handle_events(kb, type, ex, ey, ev.xmotion.serial, e->sourceid, e->time);
+				active_but = kb_handle_events(kb, type, ex, ey, e->detail, e->sourceid, e->time,e->buttons.mask,e->buttons.mask_len);
 				break;
 			    case XI_TouchEnd: type++;
 			    case XI_TouchUpdate: type++;
 			    case XI_TouchBegin:
-				active_but = kb_handle_events(kb, type, ex, ey, e->detail, lastid = e->sourceid, e->time);
+				active_but = kb_handle_events(kb, type, ex, ey, e->detail, lastid = e->sourceid, e->time, NULL, 0);
 			}
 			XFreeEventData(display, &ev.xcookie);
 		}
 		break;
 #endif
-	    case ButtonRelease: type++;
-	    case MotionNotify: type++;
+	    case ButtonRelease: type = 2;
 	    case ButtonPress:
-		active_but = kb_handle_events(kb, type, ev.xmotion.x, ev.xmotion.y, 0, 0, ev.xmotion.time);
+		active_but = kb_handle_events(kb, type, ev.xbutton.x, ev.xbutton.y, ev.xbutton.button, 0, ev.xbutton.time, &ev.xbutton.state, sizeof(ev.xbutton.state));
 		break;
+//	    case MotionNotify:
+//		active_but = kb_handle_events(kb, 1, ev.xmotion.x, ev.xmotion.y, 0, 0, ev.xmotion.time, &ev.xmotion.state, sizeof(ev.xmotion.state));
+//		break;
 	    case ClientMessage:
 		if ((ev.xclient.message_type == wm_protocols[1])
 		      && (ev.xclient.data.l[0] == wm_protocols[0]))

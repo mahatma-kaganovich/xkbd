@@ -32,7 +32,6 @@
 #include "box.h"
 #include "button.h"
 
-
 #ifndef MINIMAL
 #include "ks2unicode.h"
 #else
@@ -1192,7 +1191,7 @@ static void _press(button *b, unsigned int flags){
 #define TOUCH_DEC(x) (x=(x+(MAX_TOUCH-1))%MAX_TOUCH)
 #endif
 
-button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int dev, Time time)
+button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int dev, Time time, unsigned char *mask, int mask_len)
 {
 	button *b, *b1, *b2;
 	int i,j;
@@ -1214,13 +1213,43 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 	int t=-1;
 
 	// find touch
+find:
 	for (i=P; i!=N; TOUCH_INC(i)) {
-		if (touchid[i] == ptr && devid[i] == dev) {
-			// duplicate (I got BEGIN!)
-//			if (time==times[i] && x==X[i] && y==Y[i]) return but[i];
-			if (time<=times[i] && type!=2) return but[i];
-			t=i;
-			break;
+		if (devid[i] == dev) {
+			j = touchid[i];
+			if (mask && j<(mask_len<<3) && !(mask[j>>3] & (1 << (j & 7)))) {
+				// if known buttons state - clean silently dead buttons
+				// suitable for XTest events or other buggy drivers
+				if (!ptr && type==1) {
+					type = 2;
+					j = ptr;
+				} else if (j != ptr) {
+					TOUCH_DEC(N);
+#ifdef SIBLINGS
+					_release(but[i]);
+					nsib[i]=-1;
+#endif
+					if (i!=N) {
+						but[i] = but[N];
+						touchid[i] = touchid[N];
+						devid[i] = devid[N];
+						times[i] = times[N];
+#ifdef SIBLINGS	
+						n = nsib[i] = nsib[N];
+						for(j=0;j<n;j++) sib[i][j]=sib[N][j];
+#endif
+					}
+					goto find;
+				}
+			}
+			if (j == ptr) {
+				// duplicate (I got BEGIN!)
+//				if (time==times[i] && x==X[i] && y==Y[i]) return but[i];
+//
+				if (time<=times[i] && type!=2) return but[i];
+				t=i;
+				break;
+			}
 		}
 	}
 	if (type && t<0) {
