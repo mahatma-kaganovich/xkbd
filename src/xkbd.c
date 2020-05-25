@@ -278,10 +278,11 @@ int main(int argc, char **argv)
 	32=resize (slock), 64=strut horizontal, 128=_NET_WM_STATE_SKIP_TASKBAR,\n\
 	256=_NET_WM_STATE_ABOVE + RaiseWindow().\n\
 	For OpenBox I use 435 = $[1+2+16+32+128+256]." },
-	{ 'i', IAM ".fake_touch", 2, 0, &fake_touch,
+	{ 'i', IAM ".fake_touch", 2, 0, &fake_touch,"event type bitmask: "
 #ifdef USE_XI
-		"fake touch device / no XI2 (2=both types over XI2)"
+		"1=Xkb vs. XI2, 2-XIAllMasterDevices vs. XIAllDevices\n	"
 #endif
+		"4-disable motion events"
 	},
 	{ 'X', IAM ".sync", 2, 0, &Xkb_sync, 
 #ifndef MINIMAL
@@ -623,18 +624,16 @@ re_crts:
       int xiopcode, xievent = 0, xierror, xi = 0;
       int ximajor = 2, ximinor = 2;
       // keep it constant to compile-out unused event filtering
-//#define DeviceIdMask XIAllMasterDevices
-#define DeviceIdMask XIAllDevices
-      if(fake_touch!=1 && XQueryExtension(display, "XInputExtension", &xiopcode, &xievent, &xierror) &&
+      int DeviceIdMask = (fake_touch&2) ? XIAllMasterDevices : XIAllDevices;
+      if(!(fake_touch&1) && XQueryExtension(display, "XInputExtension", &xiopcode, &xievent, &xierror) &&
 		XIQueryVersion(display, &ximajor, &ximinor) != BadRequest) {
 
 	static unsigned char mask_[XIMaskLen(XI_TouchEnd)] = {};
-	static XIEventMask mask = { .deviceid = DeviceIdMask, .mask_len = sizeof(mask_), .mask = (unsigned char *)&mask_ };
+	static XIEventMask mask = { .mask_len = sizeof(mask_), .mask = (unsigned char *)&mask_ };
+	mask.deviceid = DeviceIdMask;
 
-	if (fake_touch==2)
-		XISetMask(mask.mask, XI_Motion);
-	if (DeviceIdMask != XIAllDevices || fake_touch==2)
-		XISetMask(mask.mask, XI_ButtonPress);
+	if (!(fake_touch&4)) XISetMask(mask.mask, XI_Motion);
+	XISetMask(mask.mask, XI_ButtonPress);
 	XISetMask(mask.mask, XI_ButtonRelease);
 
 	XISetMask(mask.mask, XI_TouchBegin);
@@ -649,7 +648,7 @@ re_crts:
 	// probably need all motions or nothing
 	// button events required for mouse only or if XI not used
 //	Button1MotionMask |
-      evmask|=ButtonPressMask|ButtonMotionMask|ButtonReleaseMask;
+      evmask|=ButtonPressMask|ButtonReleaseMask|((fake_touch&4)?0:ButtonMotionMask);
 
       XSelectInput(display, win, evmask);
 
@@ -685,8 +684,6 @@ re_crts:
       XSetErrorHandler(xerrh);
       XSync(display, False);
 
-//#define SERIAL(s) static unsigned long serial = 0; if (serial==(serial=ev.xmotion.serial))
-#define SERIAL(s) static unsigned long serial = 0; if ((long)(serial-(serial=ev.xmotion.serial-serial))>0)
       while (1)
       {
 	    int type = 0;
@@ -700,29 +697,22 @@ re_crts:
 		    ) {
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
-			// protect from fusion button/touch events
-//			static int lastid = -1;
 			if (DeviceIdMask == XIAllDevices && e->sourceid != e->deviceid) break;
+			// protect from fusion button/touch events
+			static int lastid = -1;
 			int ex = e->event_x + .5;
 			int ey = e->event_y + .5;
 			switch(ev.xcookie.evtype) {
 			    case XI_ButtonRelease: type++;
 			    case XI_Motion: type++;
 			    case XI_ButtonPress:
-				if (DeviceIdMask == XIAllDevices) {
-//				    if (lastid == e->sourceid) break;
-				    if (!fake_touch) { // only release -> press+release
-					SERIAL(ev.xmotion.serial) break;
-					active_but = kb_handle_events(kb, 0, ex, ey, 0, e->sourceid, e->time);
-				    }
-				}
-				active_but = kb_handle_events(kb, type, ex, ey, 0, e->sourceid, e->time);
+				if (lastid == e->sourceid) break;
+				active_but = kb_handle_events(kb, type, ex, ey, ev.xmotion.serial, e->sourceid, e->time);
 				break;
 			    case XI_TouchEnd: type++;
 			    case XI_TouchUpdate: type++;
 			    case XI_TouchBegin:
-//				if (DeviceIdMask == XIAllDevices) lastid = e->sourceid;
-				active_but = kb_handle_events(kb, type, ex, ey, e->detail, e->sourceid, e->time);
+				active_but = kb_handle_events(kb, type, ex, ey, e->detail, lastid = e->sourceid, e->time);
 			}
 			XFreeEventData(display, &ev.xcookie);
 		}
