@@ -1191,7 +1191,7 @@ static void _press(button *b, unsigned int flags){
 #define TOUCH_DEC(x) (x=(x+(MAX_TOUCH-1))%MAX_TOUCH)
 #endif
 
-button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int dev, Time time, unsigned char *mask, int mask_len)
+button *kb_handle_events(keyboard *kb, int type, const int x, const int y, uint32_t ptr, int dev, Time time, unsigned char *mask, int mask_len)
 {
 	button *b, *b1, *b2;
 	int i,j;
@@ -1210,45 +1210,44 @@ button *kb_handle_events(keyboard *kb, int type, int x, int y, uint32_t ptr, int
 #ifdef MULTITOUCH
 	static unsigned int N=0;
 	static unsigned int P=0;
-	int t=-1;
+	int t;
+	int type1;
 
 	// find touch
+	type1 = type;
 find:
+	if (type && P==N) return NULL;
+	t = -1;
 	for (i=P; i!=N; TOUCH_INC(i)) {
 		if (devid[i] == dev) {
 			j = touchid[i];
-			if (mask && j<(mask_len<<3) && !(mask[j>>3] & (1 << (j & 7)))) {
+			if (mask && j<(mask_len<<3) && !(mask[j>>3] & (1 << (j & 7)) && time>=times[i])) {
 				// if known buttons state - clean silently dead buttons
 				// suitable for XTest events or other buggy drivers
+				// ... and against XSync(dpy,True)
 				if (!ptr && type==1) {
-					type = 2;
-					j = ptr;
-				} else if (j != ptr) {
-					TOUCH_DEC(N);
-#ifdef SIBLINGS
-					_release(but[i]);
-					nsib[i]=-1;
-#endif
-					if (i!=N) {
-						but[i] = but[N];
-						touchid[i] = touchid[N];
-						devid[i] = devid[N];
-						times[i] = times[N];
-#ifdef SIBLINGS	
-						n = nsib[i] = nsib[N];
-						for(j=0;j<n;j++) sib[i][j]=sib[N][j];
-#endif
+					if (t == -1){
+						t = i;
+						type = 2;
 					}
-					goto find;
+					continue;
 				}
+				if (j == ptr) {
+					type = 2;
+				} else {
+					// end prev first
+					type = 3;
+					b = but[t = i];
+				}
+				goto found;
 			}
 			if (j == ptr) {
 				// duplicate (I got BEGIN!)
 //				if (time==times[i] && x==X[i] && y==Y[i]) return but[i];
 //
 				if (time<=times[i] && type!=2) return but[i];
-				t=i;
-				break;
+				t = i;
+				type = type1;
 			}
 		}
 	}
@@ -1260,7 +1259,7 @@ find:
 	const int t=0;
 #endif
 	b = kb_find_button(kb,x,y);
-
+found:
 	if (!type) { // BEGIN/press
 		if (!b) return NULL;
 #ifdef MULTITOUCH
@@ -1389,7 +1388,7 @@ find:
 	}
 #endif // SIBLINGS
 
-	if (type!=2){ // motion/to be continued
+	if (type==1){ // motion/to be continued
 		times[t] = time;
 		return b;
 	}
@@ -1421,41 +1420,47 @@ find:
 		N=P=0;
 #endif
 		kb_process_keypress(b,0,0);
-		return NULL;
-	}
-	kb_process_keypress(b,0,0);
-	if (b->modifier) {
-		b->cnt--;
-		but[t] = NULL;
-	}
+	} else {
+		kb_process_keypress(b,0,0);
+		if (b->modifier) {
+			b->cnt--;
+			but[t] = NULL;
+		}
 drop:
-	if (b=but[t]) {
-		but[t] = NULL;
-		if (!--b->cnt)
-			_release(b);
+		if (b=but[t]) {
+			but[t] = NULL;
+			if (!--b->cnt)
+				_release(b);
 #ifdef SLIDES
-		b->slide = 0;
+			b->slide = 0;
 #endif
-	}
+		}
 #ifdef MULTITOUCH
-	TOUCH_DEC(N);
+		TOUCH_DEC(N);
 #ifdef SIBLINGS
-	n = nsib[t];
-	for(i=0;i<n;i++) if ((b1=sib[t][i])!=b) _release(b1);
-	nsib[t]=-1;
+		n = nsib[t];
+		for(i=0;i<n;i++) if ((b1=sib[t][i])!=b) _release(b1);
+		nsib[t]=-1;
 #endif
-	if (t!=N) {
-		but[t] = but[N];
-		touchid[t] = touchid[N];
-		devid[t] = devid[N];
-		times[t] = times[N];
+		if (t!=N) {
+			but[t] = but[N];
+			touchid[t] = touchid[N];
+			devid[t] = devid[N];
+			times[t] = times[N];
 #ifdef SIBLINGS
-		n = nsib[t] = nsib[N];
-		for(i=0;i<n;i++) sib[t][i]=sib[N][i];
+			n = nsib[t] = nsib[N];
+			for(i=0;i<n;i++) sib[t][i]=sib[N][i];
 #endif
+		}
 	}
-#endif
+	if (type != 3) return NULL;
+	type=type1;
+	XSync(kb->display,False);
+	goto find;
+#else
+	}
 	return NULL;
+#endif
 }
 
 #ifdef SLIDES
@@ -1590,7 +1595,7 @@ static void kb_process_keypress(button *b, int repeat, unsigned int flags)
 		if (st != kb->state_locked & KB_STATE_KNOWN) XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,st);
 //		if ((state^kb->state ^ state)&KB_STATE_KNOWN) XkbLatchModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,state & KB_STATE_KNOWN);
 //		if ((lock^kb->state_locked ^ lock)&KB_STATE_KNOWN) XkbLockModifiers(dpy,XkbUseCoreKbd,KB_STATE_KNOWN,lock & KB_STATE_KNOWN);
-		XSync(dpy,True); // reduce events
+//		XSync(dpy,True); // reduce events
 	}
 #endif
 	kb->state = state;
@@ -1604,7 +1609,8 @@ static void kb_process_keypress(button *b, int repeat, unsigned int flags)
 	if (Xkb_sync) {
 		XSync(dpy,False);
 		XkbLockGroup(dpy, XkbUseCoreKbd, b->layout_switch);
-		XSync(dpy,True);
+		//XSync(dpy,True);
+		XSync(dpy,False);
 	}
 #endif
     } else {

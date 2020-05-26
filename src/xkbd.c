@@ -692,13 +692,13 @@ re_crts:
 //	    if (ev.type<36) fprintf(stderr,"+%i ",ev.type);
 	    switch (ev.type) {
 #ifdef USE_XI
-		case GenericEvent: if (xi && ev.xcookie.extension == xiopcode
+		case GenericEvent: if (ev.xcookie.extension == xiopcode
 //		    && ev.xgeneric.extension == 131
 		    && XGetEventData(display, &ev.xcookie)
 		    ) {
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
-			if (DeviceIdMask == XIAllDevices && e->sourceid != e->deviceid) break;
+			if (e->sourceid != e->deviceid && DeviceIdMask == XIAllDevices) break;
 			// protect from fusion button/touch events
 			static int lastid = -1;
 			int ex = e->event_x + .5;
