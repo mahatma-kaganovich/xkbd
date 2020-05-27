@@ -1212,13 +1212,13 @@ button *kb_handle_events(keyboard *kb, int type, const int x, const int y, unsig
 	static unsigned int P=0;
 	int t;
 	int type1 = type;
-	int dead = -1;
-	Time deadTime = 0;
+	int dead;
+	Time deadTime;
 
 	// find touch
 find:
 	if (type && P==N) return NULL;
-	t = -1;
+	dead = t = -1;
 	for (i=P; i!=N; TOUCH_INC(i)) {
 		if (devid[i] == dev) {
 			j = touchid[i];
