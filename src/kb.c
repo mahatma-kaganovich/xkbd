@@ -1191,14 +1191,14 @@ static void _press(button *b, unsigned int flags){
 #define TOUCH_DEC(x) (x=(x+(MAX_TOUCH-1))%MAX_TOUCH)
 #endif
 
-button *kb_handle_events(keyboard *kb, int type, const int x, const int y, uint32_t ptr, int dev, Time time, unsigned char *mask, int mask_len)
+button *kb_handle_events(keyboard *kb, int type, const int x, const int y, unsigned int ptr, int dev, Time time, unsigned char *mask, int mask_len)
 {
 	button *b, *b1, *b2;
 	int i,j;
 	int n;
 	Time T;
 
-	static uint32_t touchid[MAX_TOUCH];
+	static unsigned int touchid[MAX_TOUCH];
 	static int devid[MAX_TOUCH];
 	static Time times[MAX_TOUCH];
 	static button *but[MAX_TOUCH];
@@ -1211,45 +1211,36 @@ button *kb_handle_events(keyboard *kb, int type, const int x, const int y, uint3
 	static unsigned int N=0;
 	static unsigned int P=0;
 	int t;
-	int type1;
+	int type1 = type;
+	int dead = -1;
+	Time deadTime = 0;
 
 	// find touch
-	type1 = type;
 find:
 	if (type && P==N) return NULL;
 	t = -1;
 	for (i=P; i!=N; TOUCH_INC(i)) {
 		if (devid[i] == dev) {
 			j = touchid[i];
-			if (mask && j<(mask_len<<3) && !(mask[j>>3] & (1 << (j & 7)) && time>=times[i])) {
-				// if known buttons state - clean silently dead buttons
-				// suitable for XTest events or other buggy drivers
-				// ... and against XSync(dpy,True)
-				if (!ptr && type==1) {
-					if (t == -1){
-						t = i;
-						type = 2;
-					}
-					continue;
-				}
-				if (j == ptr) {
-					type = 2;
-				} else {
-					// end prev first
-					type = 3;
-					b = but[t = i];
-				}
-				goto found;
-			}
-			if (j == ptr) {
+			if (j == ptr || (!ptr && type == 1 && t < 0)) {
+				t = i;
+				if (type == 2) break;
 				// duplicate (I got BEGIN!)
 //				if (time==times[i] && x==X[i] && y==Y[i]) return but[i];
-//
-				if (time<=times[i] && type!=2) return but[i];
-				t = i;
-				type = type1;
+				if (time<=times[i]) return but[i];
 			}
+			if (mask && j<(mask_len<<3) && !(mask[j>>3] & (1 << (j & 7)))
+			    && (dead < 0 || times[i]<deadTime))
+				deadTime = times[dead = i];
 		}
+	}
+	if (dead >= 0) {
+		if (dead != t) {
+			type = 3;
+			b = but[t = dead];
+			goto found;
+		}
+		type = 2;
 	}
 	if (type && t<0) {
 //		fprintf(stderr,"untracked touch on state %i\n",type);

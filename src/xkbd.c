@@ -705,10 +705,13 @@ re_crts:
 			int ey = e->event_y + .5;
 			switch(ev.xcookie.evtype) {
 			    case XI_ButtonRelease: type++;
-			    case XI_Motion: type++;
+			    case XI_Motion: type++; // always detail==0
 			    case XI_ButtonPress:
 				if (lastid == e->sourceid) break;
 				active_but = kb_handle_events(kb, type, ex, ey, e->detail, e->sourceid, e->time,e->buttons.mask,e->buttons.mask_len);
+				break;
+				if (lastid == e->sourceid) break;
+				active_but = kb_handle_events(kb, 1, ex, ey, 0, e->sourceid, e->time,e->buttons.mask,e->buttons.mask_len);
 				break;
 			    case XI_TouchEnd: type++;
 			    case XI_TouchUpdate: type++;
@@ -723,9 +726,9 @@ re_crts:
 	    case ButtonPress:
 		active_but = kb_handle_events(kb, type, ev.xbutton.x, ev.xbutton.y, ev.xbutton.button, 0, ev.xbutton.time, &ev.xbutton.state, sizeof(ev.xbutton.state));
 		break;
-//	    case MotionNotify:
-//		active_but = kb_handle_events(kb, 1, ev.xmotion.x, ev.xmotion.y, 0, 0, ev.xmotion.time, &ev.xmotion.state, sizeof(ev.xmotion.state));
-//		break;
+	    case MotionNotify:
+		active_but = kb_handle_events(kb, 1, ev.xmotion.x, ev.xmotion.y, 0, 0, ev.xmotion.time, &ev.xmotion.state, sizeof(ev.xmotion.state));
+		break;
 	    case ClientMessage:
 		if ((ev.xclient.message_type == wm_protocols[1])
 		      && (ev.xclient.data.l[0] == wm_protocols[0]))
