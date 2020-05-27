@@ -176,7 +176,7 @@ for conf in {~/.config,/etc}/xkbd{,-config}.conf @pkgdatadir@/xkbd-std-15x6.conf
 	[ -e $conf ] && break
 done
 
-opt="-l -D 435 -k $conf -e $0 --nokill"
+opt="-l -D 946 -k $conf -e $0 --nokill"
 
 if _deflock lock; then
     [ -v xss ] && case "$xss" in

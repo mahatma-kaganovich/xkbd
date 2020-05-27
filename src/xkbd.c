@@ -21,6 +21,7 @@
 #include <unistd.h>
 #include <signal.h>
 
+#include <X11/Xproto.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/Xatom.h>
@@ -273,11 +274,11 @@ int main(int argc, char **argv)
 	{ 'k', IAM ".conf_file", 0, 0, &conf_file, "keyboard definition file\n\
 	other than from ~/." IAM " or " DEFAULTCONFIG },
 	{ 'D', IAM ".dock", 1, 0, &dock, "Dock/options bitmask:\n\
-	1=dock (all desktops), 2=strut, 4=_NET_WM_WINDOW_TYPE_DOCK,\n\
+	1=dock, 2=strut, 4=_NET_WM_WINDOW_TYPE_DOCK,\n\
 	8=_NET_WM_WINDOW_TYPE_TOOLBAR, 16=_NET_WM_STATE_STICKY,\n\
 	32=resize (slock), 64=strut horizontal, 128=_NET_WM_STATE_SKIP_TASKBAR,\n\
-	256=_NET_WM_STATE_ABOVE + RaiseWindow().\n\
-	For OpenBox I use 435 = $[1+2+16+32+128+256]." },
+	256=_NET_WM_STATE_ABOVE + RaiseWindow(), 512=_NET_WM_DESKTOP=0xffffffff.\n\
+	For OpenBox I use 946 = $[2+16+32+128+256+512}," },
 	{ 'i', IAM ".fake_touch", 2, 0, &fake_touch,"event type bitmask: "
 #ifdef USE_XI
 		"1=Xkb vs. XI2,\n\
@@ -653,7 +654,7 @@ re_crts:
 
       XSelectInput(display, win, evmask);
 
-      long prop[12] = {2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+      CARD32 prop[12] = {2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
       XChangeProperty(display,win, mwm_atom, mwm_atom,32,PropModeReplace,(unsigned char *)&prop,5);
       prop[0] = 0;
       if(dock & 4)
@@ -669,6 +670,10 @@ re_crts:
 //      _propAtom32("_NET_WM_STATE","_NET_WM_STATE_FOCUSED");
 //      Atom version = 4;
 //      _prop(32,"XdndAware",XA_ATOM,&version,1);
+      if (dock&512) {
+	CARD32 dsks = 0xffffffff;
+	_prop(32,"_NET_WM_DESKTOP",XA_CARDINAL,&dsks,1,PropModeReplace);
+      }
 
 
 
