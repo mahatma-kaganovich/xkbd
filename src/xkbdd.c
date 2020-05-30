@@ -67,7 +67,7 @@ static CARD32 grp, grp1;
 static unsigned char *rul, *rul2;
 static unsigned long rulLen, n;
 static int xkbEventType, xkbError, n1, revert;
-static XEvent ev = {};
+static XEvent ev;
 static unsigned char *ret;
 #ifdef XTG
 static int xiopcode, ndevs2;
@@ -224,11 +224,11 @@ static void setShowCursor(){
 				d2 = info2;
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
-				if (e) {
+//				if (e) {
 //					XWarpPointer(dpy, None, wa.root, 0, 0, 0, 0, e->root_x+0.5, e->root_y+0.5);
 					if (showPtr) XFixesShowCursor(dpy, wa.root);
 					else XFixesHideCursor(dpy, wa.root);
-				}
+//				}
 			} else if (showPtr != oldShowPtr) {
 				ximask.deviceid = d2->deviceid;
 				ximask.mask = (unsigned char *)((show^showPtr)?&ximaskButton:&ximask0);
@@ -243,6 +243,7 @@ static void setShowCursor(){
 void getHierarchy(){
 	if(info2) XIFreeDeviceInfo(info2);
 	info2 = XIQueryDevice(dpy, XIAllDevices, &ndevs2);
+//	ev.xcookie.data = NULL;
 	setShowCursor();
 }
 #endif
