@@ -78,7 +78,7 @@ static XIDeviceInfo *info2 = NULL;
 typedef unsigned char xiMask[XIMaskLen(XI_LASTEVENT)];
 static xiMask ximask0 = {};
 static xiMask ximaskButton = {};
-//static xiMask ximaskTouch = {};
+static xiMask ximaskTouch = {};
 static XIEventMask ximask = { .deviceid = XIAllDevices, .mask_len =  XIMaskLen(XI_LASTEVENT), .mask = ximaskButton };
 #endif
 
@@ -198,47 +198,34 @@ static int _isAbs(XIDeviceInfo *d2) {
 	return 0;
 }
 
+static short showPtr = 1, oldShowPtr = 0;
 static void setShowCursor(){
-	int i,j;
+	int i;
 	XIDeviceInfo *d2 = info2;
-	xiMask *mask;
-	short show;
-	static short showPtr = 1, oldShowPtr = 0;
+	short t;
 
 	for(i=0; i<ndevs2; i++) {
 		if (d2->enabled) switch (d2->use) {
 		    case XIFloatingSlave:
 		    case XISlavePointer:
-//			if (!strcmp(d2->name,"Virtual core XTEST pointer")) break;
-			show = !_isTouch(d2);
-#if 0
-			// Hide absolute pointers is bad idea as pen has inertia
-			// May be other pointer 2do
-			show ||= !_isAbs(d2);
-#endif
-			if (d2->deviceid == lastid && show != showPtr) {
-				showPtr = show;
-				i = 0;
-				d2 = info2;
-#undef e
-#define e ((XIDeviceEvent*)ev.xcookie.data)
-//				if (e) {
-//					XWarpPointer(dpy, None, wa.root, 0, 0, 0, 0, e->root_x+0.5, e->root_y+0.5);
-					if (showPtr) XFixesShowCursor(dpy, wa.root);
-					else XFixesHideCursor(dpy, wa.root);
-//				}
-			} else if (showPtr != oldShowPtr) {
-				ximask.deviceid = d2->deviceid;
-				ximask.mask = (unsigned char *)((show^showPtr)?&ximaskButton:&ximask0);
-				XISelectEvents(dpy, wa.root, &ximask, 1);
-			}
+			t = !_isTouch(d2);
+			ximask.mask = (unsigned char *)((t^showPtr)?t?&ximaskButton:&ximaskTouch:&ximask0);
+			ximask.deviceid = d2->deviceid;
+			XISelectEvents(dpy, wa.root, &ximask, 1);
 		}
 		d2++;
 	}
+#undef e
+#define e ((XIDeviceEvent*)ev.xcookie.data)
 	if (showPtr != oldShowPtr) {
-		XFlush(dpy);
+//	if (e) {
+//		XWarpPointer(dpy, None, wa.root, 0, 0, 0, 0, e->root_x+0.5, e->root_y+0.5);
+		if (showPtr) XFixesShowCursor(dpy, wa.root);
+		else XFixesHideCursor(dpy, wa.root);
 		oldShowPtr = showPtr;
+//	}
 	}
+	XFlush(dpy);
 }
 
 void getHierarchy(){
@@ -311,19 +298,21 @@ static void init(){
 	XkbSelectEventDetails(dpy,XkbUseCoreKbd,XkbStateNotify,
 		XkbAllStateComponentsMask,XkbGroupStateMask);
 #ifdef XTG
+	XISetMask(ximaskButton, XI_DeviceChanged);
+	XISetMask(ximaskTouch, XI_DeviceChanged);
+	XISetMask(ximask0, XI_DeviceChanged);
+
 	XISetMask(ximask.mask, XI_HierarchyChanged); // only AllDevices!
-	XISetMask(ximask.mask, XI_DeviceChanged);
 	XISelectEvents(dpy, wa.root, &ximask, 1);
 	XIClearMask(ximask.mask, XI_HierarchyChanged);
-	XIClearMask(ximask.mask, XI_DeviceChanged);
 
 	XISetMask(ximaskButton, XI_ButtonPress);
 	XISetMask(ximaskButton, XI_ButtonRelease);
 	XISetMask(ximaskButton, XI_Motion);
 
-	//XISetMask(ximaskTouch, XI_TouchBegin);
-	//XISetMask(ximaskTouch, XI_TouchUpdate);
-	//XISetMask(ximaskTouch, XI_TouchEnd);
+	XISetMask(ximaskTouch, XI_TouchBegin);
+	XISetMask(ximaskTouch, XI_TouchUpdate);
+	XISetMask(ximaskTouch, XI_TouchEnd);
 #endif
 	XSelectInput(dpy, wa.root, evmask);
 	oldxerrh = XSetErrorHandler(xerrh);
@@ -340,6 +329,7 @@ int main(){
 	printGrp();
 	getPropWin1();
 #ifdef XTG
+	XFixesHideCursor(dpy, wa.root);
 	getHierarchy();
 #endif
 	while (1) {
@@ -351,22 +341,29 @@ int main(){
 #ifdef XTG
 		    case GenericEvent:
 			if (ev.xcookie.extension == xiopcode) {
-#undef e
-#define e ((XIDeviceEvent*)ev.xcookie.data)
+				if (!XGetEventData(dpy, &ev.xcookie)) continue;
+				if (e->deviceid != e->sourceid) goto evfree;
 				switch (ev.xcookie.evtype) {
 				    case XI_HierarchyChanged:
 				    case XI_DeviceChanged:
 					getHierarchy();
-					continue;
+					goto evfree;
+#undef e
+#define e ((XIDeviceEvent*)ev.xcookie.data)
+				    case XI_TouchEnd:
+				    case XI_TouchUpdate:
+				    case XI_TouchBegin:
+					showPtr = 0;
+					break;
 				    default:
-					if (!XGetEventData(dpy, &ev.xcookie)) continue;
-					//if (e->deviceid != e->sourceid) break;
-
-					if (e->sourceid == lastid) break;
-					lastid = e->sourceid;
-					setShowCursor();
+					showPtr = 1;
 					break;
 				}
+				if (e->sourceid != lastid) {
+					lastid = e->sourceid;
+					if (showPtr != oldShowPtr) setShowCursor();
+				}
+evfree:
 				XFreeEventData(dpy, &ev.xcookie);
 			}
 			break;
