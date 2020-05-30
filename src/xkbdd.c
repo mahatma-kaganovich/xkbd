@@ -1,5 +1,5 @@
 /*
-	xkbdd v1.7 - per-window keyboard layout switcher [+ XSS suspend].
+	xkbdd v1.8 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -15,13 +15,25 @@
 	Default layout always 0: respect single point = layout config order.
 
 
+	As soon it use root events & current window tracking, code
+	reused for other features. Default changed to compile all of them.
+
+	Use -DNO_ALL to keep simple keyboard layout tracking.
+
 	XSS suspend (-DXSS):
 	Disable XScreenSaver if fullscreen window focused.
 	Added to xkbdd as massive code utilization.
 
+	Touchscreen extensions (-DXTG):
+	Auto hide/show mouse cursor on touchscreen.
+	May be +gestures in future.
 
 	(C) 2019-2020 Denis Kaganovich, Anarchy license
 */
+#ifndef NO_ALL
+#define XSS
+#define XTG
+#endif
 
 #include <stdio.h>
 
@@ -34,10 +46,17 @@
 #include <X11/extensions/scrnsaver.h>
 #endif
 
+#ifdef XTG
+#include <X11/extensions/XInput.h>
+#include <X11/extensions/XInput2.h>
+//#include <string.h>
+#endif
+
 #define NO_GRP 99
 
 static Display *dpy;
 static Window win, win1;
+static int screen;
 static XWindowAttributes wa;
 static Atom aActWin, aKbdGrp, aXkbRules;
 #ifdef XSS
@@ -48,9 +67,31 @@ static CARD32 grp, grp1;
 static unsigned char *rul, *rul2;
 static unsigned long rulLen, n;
 static int xkbEventType, xkbError, n1, revert;
-static XEvent ev;
+static XEvent ev = {};
 static unsigned char *ret;
+#ifdef XTG
+static int xiopcode, ndevs2;
+static XDevice *dev2;
+static int ndevs2, lastid = 0;
+static XIDeviceInfo *info2 = NULL;
+#define MASK_LEN = XIMaskLen(XI_LASTEVENT)
+typedef unsigned char xiMask[XIMaskLen(XI_LASTEVENT)];
+static xiMask ximask0 = {};
+static xiMask ximaskButton = {};
+//static xiMask ximaskTouch = {};
+static XIEventMask ximask = { .deviceid = XIAllDevices, .mask_len =  XIMaskLen(XI_LASTEVENT), .mask = ximaskButton };
+#endif
 
+static void opendpy() {
+	int reason_rtrn, xkbmjr = XkbMajorVersion, xkbmnr = XkbMinorVersion;
+	dpy = XkbOpenDisplay(NULL,&xkbEventType,&xkbError,&xkbmjr,&xkbmnr,&reason_rtrn);
+#ifdef XTG
+	int xievent = 0, xierror, xi = 0;
+	xiopcode = 0;
+	dev2 = NULL;
+	XQueryExtension(dpy, "XInputExtension", &xiopcode, &xievent, &xierror);
+#endif
+}
 
 static Bool getRules(){
 	Atom t;
@@ -134,6 +175,78 @@ static void WMState(Atom *states, short nn){
 }
 #endif
 
+#ifdef XTG
+static XIAddMasterInfo cm = {.type = XIAddMaster, .name = "Absolute", .send_core = 1, .enable = 1};
+static XIRemoveMasterInfo cr = {.type = XIRemoveMaster, .return_mode = XIAttachToMaster};
+static XIDetachSlaveInfo cf = {.type=XIDetachSlave};
+static XIAttachSlaveInfo ca = {.type=XIAttachSlave};
+
+static int _isTouch(XIDeviceInfo *d2) {
+	int i;
+	for (i=0; i<d2->num_classes; i++)
+		if (d2->classes[i]->type == XITouchClass)
+			return 1;
+	return 0;
+}
+
+static int _isAbs(XIDeviceInfo *d2) {
+	int i;
+	for (i=0; i<d2->num_classes; i++)
+		if (d2->classes[i]->type == XIValuatorClass
+		    && ((XIValuatorClassInfo*)d2->classes[i])->mode==Absolute)
+			return 1;
+	return 0;
+}
+
+static void setShowCursor(){
+	int i,j;
+	XIDeviceInfo *d2 = info2;
+	xiMask *mask;
+	short show;
+	static short showPtr = 1, oldShowPtr = 0;
+
+	for(i=0; i<ndevs2; i++) {
+		if (d2->enabled) switch (d2->use) {
+		    case XIFloatingSlave:
+		    case XISlavePointer:
+//			if (!strcmp(d2->name,"Virtual core XTEST pointer")) break;
+			if (_isTouch(d2)) show = 0;
+#if 0
+			// Hide absolute pointers is bad idea as pen has inertia
+			// May be other pointer 2do
+			else if (_isAbs(d2)) show = 0;
+#endif
+			else show = 1;
+			if (d2->deviceid == lastid && show != showPtr) {
+				oldShowPtr = showPtr;
+				showPtr = show;
+				i = 0;
+				d2 = info2;
+#undef e
+#define e ((XIDeviceEvent*)ev.xcookie.data)
+				if (e) {
+//					XWarpPointer(dpy, None, wa.root, 0, 0, 0, 0, e->root_x+0.5, e->root_y+0.5);
+					if (showPtr) XFixesShowCursor(dpy, wa.root);
+					else XFixesHideCursor(dpy, wa.root);
+				}
+			} else if (showPtr != oldShowPtr) {
+				ximask.deviceid = d2->deviceid;
+				ximask.mask = (unsigned char *)((show^showPtr)?&ximaskButton:&ximask0);
+				XISelectEvents(dpy, wa.root, &ximask, 1);
+			}
+		}
+		d2++;
+	}
+	if (showPtr != oldShowPtr) XFlush(dpy);
+}
+
+void getHierarchy(){
+	if(info2) XIFreeDeviceInfo(info2);
+	info2 = XIQueryDevice(dpy, XIAllDevices, &ndevs2);
+	setShowCursor();
+}
+#endif
+
 static void getWinGrp(){
 	if (win1==None) {
 		XGetInputFocus(dpy, &win1, &revert);
@@ -174,10 +287,10 @@ static int xerrh(Display *dpy, XErrorEvent *err){
 }
 
 static void init(){
-	int reason_rtrn, xkbmjr = XkbMajorVersion, xkbmnr = XkbMinorVersion,
-		evmask = PropertyChangeMask;
+	int evmask = PropertyChangeMask;
 
-	dpy = XkbOpenDisplay(NULL,&xkbEventType,&xkbError,&xkbmjr,&xkbmnr,&reason_rtrn);
+	opendpy();
+	screen = DefaultScreen(dpy);
 	XGetWindowAttributes(dpy, DefaultRootWindow(dpy), &wa);
 	aActWin = XInternAtom(dpy, "_NET_ACTIVE_WINDOW", False);
 	aKbdGrp = XInternAtom(dpy, "_KBD_ACTIVE_GROUP", False);
@@ -195,6 +308,21 @@ static void init(){
 		);
 	XkbSelectEventDetails(dpy,XkbUseCoreKbd,XkbStateNotify,
 		XkbAllStateComponentsMask,XkbGroupStateMask);
+#ifdef XTG
+	XISetMask(ximask.mask, XI_HierarchyChanged); // only AllDevices!
+	XISetMask(ximask.mask, XI_DeviceChanged);
+	XISelectEvents(dpy, wa.root, &ximask, 1);
+	XIClearMask(ximask.mask, XI_HierarchyChanged);
+	XIClearMask(ximask.mask, XI_DeviceChanged);
+
+	XISetMask(ximaskButton, XI_ButtonPress);
+	XISetMask(ximaskButton, XI_ButtonRelease);
+	XISetMask(ximaskButton, XI_Motion);
+
+	//XISetMask(ximaskTouch, XI_TouchBegin);
+	//XISetMask(ximaskTouch, XI_TouchUpdate);
+	//XISetMask(ximaskTouch, XI_TouchEnd);
+#endif
 	XSelectInput(dpy, wa.root, evmask);
 	oldxerrh = XSetErrorHandler(xerrh);
 	win = wa.root;
@@ -205,17 +333,42 @@ static void init(){
 	rul2 =NULL;
 	ret = NULL;
 }
-
 int main(){
 	init();
 	printGrp();
 	getPropWin1();
+#ifdef XTG
+	getHierarchy();
+#endif
 	while (1) {
 		if (win1 != win) getWinGrp();
 		else if (grp1 != grp) setWinGrp();
 		if (win1 != win) continue; // error handled
 		XNextEvent(dpy, &ev);
 		switch (ev.type) {
+#ifdef XTG
+		    case GenericEvent:
+			if (ev.xcookie.extension == xiopcode) {
+#undef e
+#define e ((XIDeviceEvent*)ev.xcookie.data)
+				switch (ev.xcookie.evtype) {
+				    case XI_HierarchyChanged:
+				    case XI_DeviceChanged:
+					getHierarchy();
+					continue;
+				    default:
+					if (!XGetEventData(dpy, &ev.xcookie)) continue;
+					//if (e->deviceid != e->sourceid) break;
+
+					if (e->sourceid == lastid) break;
+					lastid = e->sourceid;
+					setShowCursor();
+					break;
+				}
+				XFreeEventData(dpy, &ev.xcookie);
+			}
+			break;
+#endif
 #ifdef XSS
 #undef e
 #define e (ev.xclient)
@@ -229,6 +382,7 @@ int main(){
 #undef e
 #define e (ev.xproperty)
 		    case PropertyNotify:
+			//fprintf(stderr,"Prop %s\n",XGetAtomName(dpy,e.atom));
 			//if (e.window!=wa.root) break;
 			if (e.atom==aActWin) {
 				win1 = None;
