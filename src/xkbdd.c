@@ -210,15 +210,13 @@ static void setShowCursor(){
 		    case XIFloatingSlave:
 		    case XISlavePointer:
 //			if (!strcmp(d2->name,"Virtual core XTEST pointer")) break;
-			if (_isTouch(d2)) show = 0;
+			show = !_isTouch(d2);
 #if 0
 			// Hide absolute pointers is bad idea as pen has inertia
 			// May be other pointer 2do
-			else if (_isAbs(d2)) show = 0;
+			show ||= !_isAbs(d2);
 #endif
-			else show = 1;
 			if (d2->deviceid == lastid && show != showPtr) {
-				oldShowPtr = showPtr;
 				showPtr = show;
 				i = 0;
 				d2 = info2;
@@ -237,7 +235,10 @@ static void setShowCursor(){
 		}
 		d2++;
 	}
-	if (showPtr != oldShowPtr) XFlush(dpy);
+	if (showPtr != oldShowPtr) {
+		XFlush(dpy);
+		oldShowPtr = showPtr;
+	}
 }
 
 void getHierarchy(){
