@@ -185,11 +185,6 @@ static void WMState(Atom *states, short nn){
 #endif
 
 #ifdef XTG
-static XIAddMasterInfo cm = {.type = XIAddMaster, .name = "Absolute", .send_core = 1, .enable = 1};
-static XIRemoveMasterInfo cr = {.type = XIRemoveMaster, .return_mode = XIAttachToMaster};
-static XIDetachSlaveInfo cf = {.type=XIDetachSlave};
-static XIAttachSlaveInfo ca = {.type=XIAttachSlave};
-
 static Bool _isTouch(XIDeviceInfo *d2) {
 	int i;
 	for (i=0; i<d2->num_classes; i++)
@@ -325,10 +320,6 @@ static void init(){
 	XkbSelectEventDetails(dpy,XkbUseCoreKbd,XkbStateNotify,
 		XkbAllStateComponentsMask,XkbGroupStateMask);
 #ifdef XTG
-	XISetMask(ximaskButton, XI_DeviceChanged);
-	XISetMask(ximaskTouch, XI_DeviceChanged);
-	XISetMask(ximask0, XI_DeviceChanged);
-
 	XISetMask(ximask.mask, XI_HierarchyChanged); // only AllDevices!
 	XISelectEvents(dpy, wa.root, &ximask, 1);
 	XIClearMask(ximask.mask, XI_HierarchyChanged);
@@ -369,13 +360,14 @@ int main(){
 		    case GenericEvent:
 			if (ev.xcookie.extension == xiopcode) {
 				XIDeviceInfo *d2;
+				switch (ev.xcookie.evtype) {
+				    case XI_HierarchyChanged:
+					getHierarchy();
+					continue;
+				}
 				if (!XGetEventData(dpy, &ev.xcookie)) continue;
 				if (e->deviceid != e->sourceid) goto evfree;
 				switch (ev.xcookie.evtype) {
-				    case XI_HierarchyChanged:
-				    case XI_DeviceChanged:
-					getHierarchy();
-					goto evfree;
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
 #ifdef TOUCH_EVENTS_SLAVE
@@ -390,7 +382,6 @@ int main(){
 #else
 					showPtr = 1;
 #endif
-					break;
 #else
 				    default:
 #ifdef HIDE_ABS
@@ -399,6 +390,7 @@ int main(){
 					showPtr = (d2=_getDevice(e->sourceid)) && !_isTouch(d2);
 #endif
 #endif
+					break;
 				}
 				if (e->sourceid != lastid) {
 					lastid = e->sourceid;
