@@ -35,6 +35,15 @@
 #define XTG
 #endif
 
+// listen XI_Touch* events directly from device cannot twice:
+// second run can kill us (BadAccess).
+// while I believe this is bug and this code is better, keep.
+//#define TOUCH_EVENTS_SLAVE
+
+// hiding absolute pointers is bad idea, as pen have inertia & buttons.
+// but keep it here
+//#define HIDE_ABS
+
 #include <stdio.h>
 
 #include <X11/Xproto.h>
@@ -73,7 +82,7 @@ static unsigned char *ret;
 static int xiopcode, ndevs2;
 static XDevice *dev2;
 static int ndevs2, lastid = 0;
-static XIDeviceInfo *info2 = NULL;
+static XIDeviceInfo *info2;
 #define MASK_LEN = XIMaskLen(XI_LASTEVENT)
 typedef unsigned char xiMask[XIMaskLen(XI_LASTEVENT)];
 static xiMask ximask0 = {};
@@ -181,7 +190,7 @@ static XIRemoveMasterInfo cr = {.type = XIRemoveMaster, .return_mode = XIAttachT
 static XIDetachSlaveInfo cf = {.type=XIDetachSlave};
 static XIAttachSlaveInfo ca = {.type=XIAttachSlave};
 
-static int _isTouch(XIDeviceInfo *d2) {
+static Bool _isTouch(XIDeviceInfo *d2) {
 	int i;
 	for (i=0; i<d2->num_classes; i++)
 		if (d2->classes[i]->type == XITouchClass)
@@ -189,7 +198,7 @@ static int _isTouch(XIDeviceInfo *d2) {
 	return 0;
 }
 
-static int _isAbs(XIDeviceInfo *d2) {
+static Bool _isAbs(XIDeviceInfo *d2) {
 	int i;
 	for (i=0; i<d2->num_classes; i++)
 		if (d2->classes[i]->type == XIValuatorClass
@@ -198,18 +207,36 @@ static int _isAbs(XIDeviceInfo *d2) {
 	return 0;
 }
 
+static XIDeviceInfo *_getDevice(int id){
+	int i;
+	XIDeviceInfo *d2 = info2;
+	for(i=0; i<ndevs2; i++) {
+		if (d2->deviceid == id) return d2;
+		d2++;
+	}
+	return NULL;
+}
+
 static short showPtr = 1, oldShowPtr = 0;
 static void setShowCursor(){
 	int i;
 	XIDeviceInfo *d2 = info2;
-	short t;
-
+	Bool show,t;
 	for(i=0; i<ndevs2; i++) {
 		if (d2->enabled) switch (d2->use) {
 		    case XIFloatingSlave:
 		    case XISlavePointer:
-			t = !_isTouch(d2);
-			ximask.mask = (unsigned char *)((t^showPtr)?t?&ximaskButton:&ximaskTouch:&ximask0);
+			t = _isTouch(d2);
+#ifdef HIDE_ABS
+			show = !(t || _isAbs(d2));
+#else
+			show = !t;
+#endif
+#ifdef TOUCH_EVENTS_SLAVE
+			ximask.mask = (unsigned char *)((show^showPtr)?t?&ximaskTouch:&ximaskButton:&ximask0);
+#else
+			ximask.mask = (unsigned char *)((show^showPtr)?&ximaskButton:&ximask0);
+#endif
 			ximask.deviceid = d2->deviceid;
 			XISelectEvents(dpy, wa.root, &ximask, 1);
 		}
@@ -341,6 +368,7 @@ int main(){
 #ifdef XTG
 		    case GenericEvent:
 			if (ev.xcookie.extension == xiopcode) {
+				XIDeviceInfo *d2;
 				if (!XGetEventData(dpy, &ev.xcookie)) continue;
 				if (e->deviceid != e->sourceid) goto evfree;
 				switch (ev.xcookie.evtype) {
@@ -350,14 +378,27 @@ int main(){
 					goto evfree;
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
+#ifdef TOUCH_EVENTS_SLAVE
 				    case XI_TouchEnd:
 				    case XI_TouchUpdate:
 				    case XI_TouchBegin:
 					showPtr = 0;
 					break;
 				    default:
+#ifdef HIDE_ABS
+					showPtr = (d2=_getDevice(e->sourceid)) && !_isAbs(d2);
+#else
 					showPtr = 1;
+#endif
 					break;
+#else
+				    default:
+#ifdef HIDE_ABS
+					showPtr = (d2=_getDevice(e->sourceid)) && !(_isTouch(d2) || _isAbs(d2));
+#else
+					showPtr = (d2=_getDevice(e->sourceid)) && !_isTouch(d2);
+#endif
+#endif
 				}
 				if (e->sourceid != lastid) {
 					lastid = e->sourceid;
