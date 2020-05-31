@@ -209,7 +209,7 @@ static XIDeviceInfo *_getDevice(int id){
 	return NULL;
 }
 
-static short showPtr = 1, oldShowPtr = 0;
+static short showPtr = 1, oldShowPtr = 1;
 static void setShowCursor(){
 	int i,t,show;
 	XIDeviceInfo *d2 = info2;
@@ -229,6 +229,7 @@ static void setShowCursor(){
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
 	if (showPtr != oldShowPtr) {
+	// "Hide" must be first!
 //	if (e) {
 //		XWarpPointer(dpy, None, wa.root, 0, 0, 0, 0, e->root_x+0.5, e->root_y+0.5);
 		if (showPtr) XFixesShowCursor(dpy, wa.root);
@@ -340,7 +341,6 @@ int main(){
 	printGrp();
 	getPropWin1();
 #ifdef XTG
-	XFixesHideCursor(dpy, wa.root);
 	getHierarchy();
 #endif
 	while (1) {
