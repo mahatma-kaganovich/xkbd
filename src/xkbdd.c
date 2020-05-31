@@ -1,5 +1,5 @@
 /*
-	xkbdd v1.8 - per-window keyboard layout switcher [+ XSS suspend].
+	xkbdd v1.9 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -81,11 +81,12 @@ static unsigned char *ret;
 #ifdef XTG
 static int xiopcode, ndevs2;
 static XDevice *dev2;
-static int ndevs2, lastid = 0;
+static int ndevs2;
 static XIDeviceInfo *info2;
 #define MASK_LEN = XIMaskLen(XI_LASTEVENT)
 typedef unsigned char xiMask[XIMaskLen(XI_LASTEVENT)];
 static xiMask ximask0 = {};
+static xiMask ximask0a = {};
 static xiMask ximaskButton = {};
 static xiMask ximaskTouch = {};
 static XIEventMask ximask = { .deviceid = XIAllDevices, .mask_len =  XIMaskLen(XI_LASTEVENT), .mask = ximaskButton };
@@ -216,27 +217,21 @@ static short showPtr = 1, oldShowPtr = 0;
 static void setShowCursor(){
 	int i;
 	XIDeviceInfo *d2 = info2;
-	Bool show,t;
 	for(i=0; i<ndevs2; i++) {
-		if (d2->enabled) switch (d2->use) {
+		switch (d2->use) {
 		    case XIFloatingSlave:
+			if (_isTouch(d2)) break;
 		    case XISlavePointer:
-			t = _isTouch(d2);
-#ifdef HIDE_ABS
-			show = !(t || _isAbs(d2));
-#else
-			show = !t;
-#endif
-#ifdef TOUCH_EVENTS_SLAVE
-			ximask.mask = (unsigned char *)((show^showPtr)?t?&ximaskTouch:&ximaskButton:&ximask0);
-#else
-			ximask.mask = (unsigned char *)((show^showPtr)?&ximaskButton:&ximask0);
-#endif
 			ximask.deviceid = d2->deviceid;
+			ximask.mask = (void*) (showPtr?&ximask0:&ximaskButton);
 			XISelectEvents(dpy, wa.root, &ximask, 1);
+			break;
 		}
 		d2++;
 	}
+	ximask.deviceid = XIAllDevices;
+	ximask.mask = (void*) (showPtr?&ximaskTouch:&ximask0a);
+	XISelectEvents(dpy, wa.root, &ximask, 1);
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
 	if (showPtr != oldShowPtr) {
@@ -320,17 +315,19 @@ static void init(){
 	XkbSelectEventDetails(dpy,XkbUseCoreKbd,XkbStateNotify,
 		XkbAllStateComponentsMask,XkbGroupStateMask);
 #ifdef XTG
-	XISetMask(ximask.mask, XI_HierarchyChanged); // only AllDevices!
-	XISelectEvents(dpy, wa.root, &ximask, 1);
-	XIClearMask(ximask.mask, XI_HierarchyChanged);
+	XISetMask(ximaskTouch, XI_TouchBegin);
+	XISetMask(ximaskTouch, XI_TouchUpdate);
+	XISetMask(ximaskTouch, XI_TouchEnd);
 
 	XISetMask(ximaskButton, XI_ButtonPress);
 	XISetMask(ximaskButton, XI_ButtonRelease);
 	XISetMask(ximaskButton, XI_Motion);
 
-	XISetMask(ximaskTouch, XI_TouchBegin);
-	XISetMask(ximaskTouch, XI_TouchUpdate);
-	XISetMask(ximaskTouch, XI_TouchEnd);
+	XISetMask(ximaskTouch, XI_HierarchyChanged); // only AllDevices!
+	XISetMask(ximask0a, XI_HierarchyChanged);
+
+	ximask.mask = (void*) &ximaskTouch;
+	XISelectEvents(dpy, wa.root, &ximask, 1);
 #endif
 	XSelectInput(dpy, wa.root, evmask);
 	oldxerrh = XSetErrorHandler(xerrh);
@@ -360,43 +357,17 @@ int main(){
 		    case GenericEvent:
 			if (ev.xcookie.extension == xiopcode) {
 				XIDeviceInfo *d2;
-				switch (ev.xcookie.evtype) {
-				    case XI_HierarchyChanged:
+				if (ev.xcookie.evtype == XI_HierarchyChanged) {
 					getHierarchy();
 					continue;
 				}
 				if (!XGetEventData(dpy, &ev.xcookie)) continue;
-				if (e->deviceid != e->sourceid) goto evfree;
-				switch (ev.xcookie.evtype) {
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
-#ifdef TOUCH_EVENTS_SLAVE
-				    case XI_TouchEnd:
-				    case XI_TouchUpdate:
-				    case XI_TouchBegin:
-					showPtr = 0;
-					break;
-				    default:
-#ifdef HIDE_ABS
-					showPtr = (d2=_getDevice(e->sourceid)) && !_isAbs(d2);
-#else
-					showPtr = 1;
-#endif
-#else
-				    default:
-#ifdef HIDE_ABS
-					showPtr = (d2=_getDevice(e->sourceid)) && !(_isTouch(d2) || _isAbs(d2));
-#else
-					showPtr = (d2=_getDevice(e->sourceid)) && !_isTouch(d2);
-#endif
-#endif
-					break;
-				}
-				if (e->sourceid != lastid) {
-					lastid = e->sourceid;
+				if (e->deviceid == e->sourceid) {
+					showPtr = (ev.xcookie.evtype < XI_TouchBegin);
 					if (showPtr != oldShowPtr) setShowCursor();
 				}
-evfree:
 				XFreeEventData(dpy, &ev.xcookie);
 			}
 			break;
