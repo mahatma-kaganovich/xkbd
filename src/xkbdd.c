@@ -217,13 +217,13 @@ static short showPtr = 1, oldShowPtr = 0;
 static void setShowCursor(){
 	int i;
 	XIDeviceInfo *d2 = info2;
+	ximask.mask = (void*) (showPtr?&ximask0:&ximaskButton);
 	for(i=0; i<ndevs2; i++) {
 		switch (d2->use) {
 		    case XIFloatingSlave:
 		    case XISlavePointer:
 			if (_isTouch(d2)) break;
 			ximask.deviceid = d2->deviceid;
-			ximask.mask = (void*) (showPtr?&ximask0:&ximaskButton);
 			XISelectEvents(dpy, wa.root, &ximask, 1);
 			break;
 		}
