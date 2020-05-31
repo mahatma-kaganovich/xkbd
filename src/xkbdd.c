@@ -35,14 +35,10 @@
 #define XTG
 #endif
 
-// listen XI_Touch* events directly from device cannot twice:
+// listen XI_Touch* events from root window cannot twice:
 // second run can kill us (BadAccess).
 // while I believe this is bug and this code is better, keep.
-//#define TOUCH_EVENTS_SLAVE
-
-// hiding absolute pointers is bad idea, as pen have inertia & buttons.
-// but keep it here
-//#define HIDE_ABS
+//#define TOUCH_EVENTS
 
 #include <stdio.h>
 
@@ -215,23 +211,21 @@ static XIDeviceInfo *_getDevice(int id){
 
 static short showPtr = 1, oldShowPtr = 0;
 static void setShowCursor(){
-	int i;
+	int i,t,show;
 	XIDeviceInfo *d2 = info2;
-	ximask.mask = (void*) (showPtr?&ximask0:&ximaskButton);
 	for(i=0; i<ndevs2; i++) {
 		switch (d2->use) {
 		    case XIFloatingSlave:
 		    case XISlavePointer:
-			if (_isTouch(d2)) break;
+			t = _isTouch(d2);
+			show = !t;
+			ximask.mask = (void*)((show^showPtr)?t?&ximaskTouch:&ximaskButton:&ximask0);
 			ximask.deviceid = d2->deviceid;
 			XISelectEvents(dpy, wa.root, &ximask, 1);
 			break;
 		}
 		d2++;
 	}
-	ximask.deviceid = XIAllDevices;
-	ximask.mask = (void*) (showPtr?&ximaskTouch:&ximask0a);
-	XISelectEvents(dpy, wa.root, &ximask, 1);
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
 	if (showPtr != oldShowPtr) {
@@ -315,18 +309,20 @@ static void init(){
 	XkbSelectEventDetails(dpy,XkbUseCoreKbd,XkbStateNotify,
 		XkbAllStateComponentsMask,XkbGroupStateMask);
 #ifdef XTG
-	XISetMask(ximaskTouch, XI_TouchBegin);
-	XISetMask(ximaskTouch, XI_TouchUpdate);
-	XISetMask(ximaskTouch, XI_TouchEnd);
-
 	XISetMask(ximaskButton, XI_ButtonPress);
 	XISetMask(ximaskButton, XI_ButtonRelease);
 	XISetMask(ximaskButton, XI_Motion);
-
-	XISetMask(ximaskTouch, XI_HierarchyChanged); // only AllDevices!
-	XISetMask(ximask0a, XI_HierarchyChanged);
-
-	ximask.mask = (void*) &ximaskTouch;
+#ifdef TOUCH_EVENTS
+	XISetMask(ximaskTouch, XI_TouchBegin);
+	XISetMask(ximaskTouch, XI_TouchUpdate);
+	XISetMask(ximaskTouch, XI_TouchEnd);
+	XISetMask(ximaskTouch, XI_HierarchyChanged);
+#else
+	XISetMask(ximaskTouch, XI_ButtonPress);
+	XISetMask(ximaskTouch, XI_ButtonRelease);
+#endif
+	XISetMask(ximask0a, XI_HierarchyChanged);  // only AllDevices!
+	ximask.mask = (void*) &ximask0a;
 	XISelectEvents(dpy, wa.root, &ximask, 1);
 #endif
 	XSelectInput(dpy, wa.root, evmask);
@@ -365,8 +361,17 @@ int main(){
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
 				if (e->deviceid == e->sourceid) {
+#ifdef TOUCH_EVENTS
 					showPtr = (ev.xcookie.evtype < XI_TouchBegin);
 					if (showPtr != oldShowPtr) setShowCursor();
+#else
+					static int lastid = 0;
+					if (lastid != e->sourceid) {
+						lastid = e->sourceid;
+						showPtr = (d2 = _getDevice(lastid)) && !_isTouch(d2);
+						if (showPtr != oldShowPtr) setShowCursor();
+					}
+#endif
 				}
 				XFreeEventData(dpy, &ev.xcookie);
 			}
