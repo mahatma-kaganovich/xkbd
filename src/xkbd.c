@@ -169,6 +169,7 @@ static void handle_sig(int sig)
 static void restart(){
 	// display will be closed anymore, but prefer to ignore exec failures
 	XFlush(display);
+	XSync(display,False);
 //	XCloseDisplay(display);
 //	xkbd_destroy(kb);
 	execvp(exec_cmd[0], exec_cmd);
