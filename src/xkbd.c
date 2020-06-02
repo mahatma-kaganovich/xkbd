@@ -62,6 +62,7 @@ Window rootWin;
 Atom mwm_atom;
 int screen;
 XWindowAttributes wa0;
+char *display_name = NULL;
 
 keyboard *kb = NULL;
 button *active_but = NULL;
@@ -167,6 +168,7 @@ static void handle_sig(int sig)
 
 static void restart(){
 	// display will be closed anymore, but prefer to ignore exec failures
+	XFlush(display);
 //	XCloseDisplay(display);
 //	xkbd_destroy(kb);
 	execvp(exec_cmd[0], exec_cmd);
@@ -177,17 +179,28 @@ static void _restart(int sig){
 	restart();
 }
 
-static int stopped = 0;
-static void _reset(int sig){
-	if (!stopped) {
-		stopped = sig;
-		// some dangerous flags combinations are buggy. reset
-		XkbLockModifiers(display,XkbUseCoreKbd,0xffff,0);
-		XkbLatchModifiers(display,XkbUseCoreKbd,0xffff,0);
-//		XkbLockGroup(display,XkbUseCoreKbd,0);
-		//XFlush(display);
+static void _reset(){
+	// some dangerous flags combinations are buggy. reset
+	XkbLockModifiers(display,XkbUseCoreKbd,0xffff,0);
+	XkbLatchModifiers(display,XkbUseCoreKbd,0xffff,0);
+//	XkbLockGroup(display,XkbUseCoreKbd,0);
+	//XFlush(display);
+}
+
+static void _signals(void *f){
+	signal(SIGINT,f);
+	signal(SIGABRT,f);
+	signal(SIGQUIT,f);
+}
+
+static void signal_exit(int sig){
+	_signals(SIG_DFL);
+	if (display && (display = XOpenDisplay(display_name))) {
+		_reset();
+		XFlush(display);
+		XCloseDisplay(display);
 	}
-	if (stopped) exit(1);
+	exit(1);
 }
 
 void version()
@@ -230,7 +243,6 @@ int main(int argc, char **argv)
    XSizeHints size_hints;
    XWMHints *wm_hints;
    
-   char *display_name = NULL;
 
 //   char *wm_name;
 //   int wm_type = WM_UNKNOWN;
@@ -570,8 +582,8 @@ re_crts:
       }
 #endif
 
-      _reset(0);
-      signal(SIGTERM, _reset);
+      _reset();
+      _signals(signal_exit);
 
       kb = kb_new(win, display, screen, 0, 0, width, height, conf_file, font_name, font_name1);
       kb_size(kb);
@@ -688,7 +700,7 @@ re_crts:
 
 
       XSetErrorHandler(xerrh);
-      XSync(display, False);
+      XFlush(display);
 
       while (1)
       {
