@@ -75,7 +75,7 @@ static int xkbEventType, xkbError, n1, revert;
 static XEvent ev;
 static unsigned char *ret;
 #ifdef XTG
-static int xiopcode, ndevs2;
+static int xiopcode, xierror, ndevs2;
 static XDevice *dev2;
 static int ndevs2;
 static XIDeviceInfo *info2;
@@ -92,7 +92,7 @@ static void opendpy() {
 	int reason_rtrn, xkbmjr = XkbMajorVersion, xkbmnr = XkbMinorVersion;
 	dpy = XkbOpenDisplay(NULL,&xkbEventType,&xkbError,&xkbmjr,&xkbmnr,&reason_rtrn);
 #ifdef XTG
-	int xievent = 0, xierror, xi = 0;
+	int xievent = 0, xi = 0;
 	xiopcode = 0;
 	dev2 = NULL;
 	XQueryExtension(dpy, "XInputExtension", &xiopcode, &xievent, &xierror);
@@ -209,6 +209,11 @@ static XIDeviceInfo *_getDevice(int id){
 	return NULL;
 }
 
+void getHierarchy(){
+	if(info2) XIFreeDeviceInfo(info2);
+	info2 = XIQueryDevice(dpy, XIAllDevices, &ndevs2);
+}
+
 static short showPtr = 1, oldShowPtr = 1;
 static void setShowCursor(){
 	int i,t,show;
@@ -238,14 +243,10 @@ static void setShowCursor(){
 //	}
 	}
 	XFlush(dpy);
+	XSync(dpy,False);
+	if (win1 == None) getHierarchy();
 }
 
-void getHierarchy(){
-	if(info2) XIFreeDeviceInfo(info2);
-	info2 = XIQueryDevice(dpy, XIAllDevices, &ndevs2);
-//	ev.xcookie.data = NULL;
-	setShowCursor();
-}
 #endif
 
 static void getWinGrp(){
@@ -281,9 +282,16 @@ static void getPropWin1(){
 
 static int (*oldxerrh) (Display *, XErrorEvent *);
 static int xerrh(Display *dpy, XErrorEvent *err){
-	if (err->error_code!=BadWindow || !XFlush(dpy) || !XSync(dpy,False)) oldxerrh(dpy,err);
-	//fprintf(stderr,"BadWindow ev=%x %s\n",ev.type,ev.type==28?XGetAtomName(dpy,ev.xproperty.atom):"");
 	win1 = None;
+#ifdef XTG
+	fprintf(stderr, "XError: type=%i XID=0x%lx serial=%lu error_code=%i%s request_code=%i minor_code=%i xierror=%i\n",err->type,err->resourceid,err->serial,err->error_code,err->error_code == xierror ? "=XI": "",err->request_code,err->minor_code,xierror);
+#endif
+	if (!(
+		err->error_code==BadWindow
+#ifdef XTG
+		|| err->error_code==xierror
+#endif
+	)) oldxerrh(dpy,err);
 	return 0;
 }
 
@@ -341,7 +349,9 @@ int main(){
 	printGrp();
 	getPropWin1();
 #ifdef XTG
+//	ev.xcookie.data = NULL;
 	getHierarchy();
+	setShowCursor();
 #endif
 	while (1) {
 		if (win1 != win) getWinGrp();
@@ -355,6 +365,7 @@ int main(){
 				XIDeviceInfo *d2;
 				if (ev.xcookie.evtype == XI_HierarchyChanged) {
 					getHierarchy();
+					setShowCursor();
 					continue;
 				}
 				if (!XGetEventData(dpy, &ev.xcookie)) continue;
