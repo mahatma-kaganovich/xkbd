@@ -53,6 +53,10 @@
 #define WIN_OVERIDE_AWAYS_TOP 0
 #define WIN_OVERIDE_NOT_AWAYS_TOP 1
 
+#define SIG_HIDE SIGUSR2
+#define SIG_SHOW SIGHUP
+#define HIDE_GESTURES
+
 #define IAM "xkbd"
 char *iam = IAM;
 
@@ -63,6 +67,11 @@ Atom mwm_atom;
 int screen;
 XWindowAttributes wa0;
 char *display_name = NULL;
+
+CARD32 prop[12] = {2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+int crts=0, X1,Y1,X2,Y2, top=0, left=0;
+unsigned int dock = 0;
+int resized = 0;
 
 keyboard *kb = NULL;
 button *active_but = NULL;
@@ -236,6 +245,52 @@ static void reset2(){
 	if (g==s.group) kb_repaint(kb);
 }
 
+static void setSize(int x, int y, int width, int height, int resize){
+	if (dock & 2) {
+		if (top) {
+			if (resize) height = resize;
+			prop[2] = y + height; // +Y1
+			prop[8] = x;
+			prop[9] = x + width - 1;
+		} else {
+			if (resize) y = y + height - resize;
+			prop[3] = Y2 - y + 1;
+			prop[10] = x;
+			prop[11] = x + width - 1;
+		}
+	}
+	if (dock & 64) {
+		if (left) {
+			if (resize) width = resize;
+			prop[0] = x + width; // +X1
+			prop[4] = y;
+			prop[5] = y + height - 1;
+		} else {
+			if (resize) y = y + width - resize;
+			prop[1] = X2 - x + 1;
+			prop[6] = y;
+			prop[7] = y + height - 1;
+		}
+	}
+	if (resized != resize) XMoveResizeWindow(display,win,x,y,width,height);
+	resized = resize;
+	if (dock & (2|64)) {
+//		for(i=0;i<12;i++) fprintf(stderr," %li",prop[i]);fprintf(stderr," crts=%i\n",crts);
+		//0: left, right, top, bottom,
+		// don't strut global on xrandr multihead
+		if (crts<2) _prop(32,"_NET_WM_STRUT",XA_CARDINAL,&prop,4,PropModeReplace);
+		//4: left_start_y, left_end_y, right_start_y, right_end_y,
+		//8: top_start_x, top_end_x, bottom_start_x, bottom_end_x
+		_prop(32,"_NET_WM_STRUT_PARTIAL",XA_CARDINAL,&prop,12,PropModeReplace);
+	}
+}
+
+int x=0, y=0, width=0, height=0;
+static void _hide(int sig) {
+	setSize(x,y,width,height,sig == SIG_HIDE);
+	XFlush(display);
+}
+
 int main(int argc, char **argv)
 {
    char *window_name = iam;
@@ -250,15 +305,11 @@ int main(int argc, char **argv)
 
    static char *geometry = NULL;
    static char *output = NULL;
-   int x=0, y=0, width=0, height=0;
-   int top=0, left=0;
-   int crts=0;
    static int fake_touch = 0;
    static char *conf_file = NULL;
    static char *font_name = NULL;
    static char *font_name1 = NULL;
    int embed = 0;
-   static unsigned int dock = 0;
    XrmDatabase xrm;
    Window win1;
 
@@ -402,7 +453,7 @@ stop_argv:
    scr_mheight=DisplayHeightMM(display, screen);
    XGetWindowAttributes(display,rootWin,&wa0);
 
-   int X1=wa0.x,Y1=wa0.y,X2=wa0.x+wa0.width-1,Y2=wa0.y+wa0.height-1;
+   X1=wa0.x; Y1=wa0.y; X2=wa0.x+wa0.width-1; Y2=wa0.y+wa0.height-1;
    char *rs;
 
    if ((rs = XResourceManagerString(display)) && (xrm = XrmGetStringDatabase(rs))) {
@@ -667,7 +718,6 @@ re_crts:
 
       XSelectInput(display, win, evmask);
 
-      CARD32 prop[12] = {2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
       XChangeProperty(display,win, mwm_atom, mwm_atom,32,PropModeReplace,(unsigned char *)&prop,5);
       prop[0] = 0;
       if(dock & 4)
@@ -699,6 +749,8 @@ re_crts:
       }
       signal(SIGUSR1, handle_sig); /* for extenal mapping / unmapping */
 
+      signal(SIG_HIDE,_hide);
+      signal(SIG_SHOW, _hide);
 
       XSetErrorHandler(xerrh);
       XFlush(display);
@@ -726,23 +778,46 @@ re_crts:
 			    case XI_Motion: type++; // always detail==0
 			    case XI_ButtonPress:
 				if (lastid == e->sourceid) break;
-				active_but = kb_handle_events(kb, type, ex, ey, e->detail, e->sourceid, e->time,e->buttons.mask,e->buttons.mask_len);
-				break;
-				if (lastid == e->sourceid) break;
-				active_but = kb_handle_events(kb, 1, ex, ey, 0, e->sourceid, e->time,e->buttons.mask,e->buttons.mask_len);
+#ifndef HIDE_GESTURES
+				{
+#else
+				switch (e->detail) {
+				    // todo: emulate at least fake button 5
+				    case 5: _hide(SIG_HIDE); break;
+				    case 4: _hide(0); break;
+				    default: if (!resized)
+#endif
+					active_but = kb_handle_events(kb, type, ex, ey, e->detail, e->sourceid, e->time,e->buttons.mask,e->buttons.mask_len);
+				}
 				break;
 			    case XI_TouchEnd: type++;
 			    case XI_TouchUpdate: type++;
 			    case XI_TouchBegin:
+#ifdef HIDE_GESTURES
+				if (resized) {
+					if (!type) _hide(0);
+					break;
+				}
+#endif
 				active_but = kb_handle_events(kb, type, ex, ey, e->detail, lastid = e->sourceid, e->time, NULL, 0);
 			}
 			XFreeEventData(display, &ev.xcookie);
 		}
 		break;
 #endif
-	    case ButtonRelease: type = 2;
+	    case ButtonRelease: type=2;
 	    case ButtonPress:
-		active_but = kb_handle_events(kb, type, ev.xbutton.x, ev.xbutton.y, ev.xbutton.button, 0, ev.xbutton.time, &ev.xbutton.state, sizeof(ev.xbutton.state));
+#ifndef HIDE_GESTURES
+		{
+#else
+		switch (e->detail) {
+		// todo: emulate at least fake button 5
+		    case 5: _hide(SIG_HIDE); break;
+		    case 4: _hide(0); break;
+		    default: if (!resized)
+#endif
+			active_but = kb_handle_events(kb, type, ev.xbutton.x, ev.xbutton.y, ev.xbutton.button, 0, ev.xbutton.time, &ev.xbutton.state, sizeof(ev.xbutton.state));
+		}
 		break;
 	    case MotionNotify:
 		active_but = kb_handle_events(kb, 1, ev.xmotion.x, ev.xmotion.y, 0, 0, ev.xmotion.time, &ev.xmotion.state, sizeof(ev.xmotion.state));
@@ -757,7 +832,8 @@ re_crts:
 		}
 		break;
 	    case ConfigureNotify:
-		if ( ev.xconfigure.width != kb->vbox->act_width
+		if (resized) break;
+		if (ev.xconfigure.width != kb->vbox->act_width
 		    || ev.xconfigure.height != kb->vbox->act_height)
 		{
 			kb_resize(kb,
@@ -770,41 +846,11 @@ re_crts:
 		if (wa0.x!=wa.x || wa0.y!=wa.y || wa0.width!=wa.width || wa0.height!=wa.height) restart();
 		wa0=wa;
 		XTranslateCoordinates(display,win,rootWin,0,0,&x,&y,&win1);
-		if (dock & 2) {
-			if (top) {
-				prop[2] = y + height; // +Y1
-				prop[8] = x;
-				prop[9] = x + width - 1;
-			} else {
-				prop[3] = Y2 - y + 1;
-				prop[10] = x;
-				prop[11] = x + width - 1;
-			}
-		}
-		if (dock & 64) {
-			if (left) {
-				prop[0] = x + width; // +X1
-				prop[4] = y;
-				prop[5] = y + height - 1;
-			} else {
-				prop[1] = X2 - x + 1;
-				prop[6] = y;
-				prop[7] = y + height - 1;
-			}
-		}
-		if (dock & (2|64)) {
-//			for(i=0;i<12;i++) fprintf(stderr," %li",prop[i]);fprintf(stderr," crts=%i\n",crts);
-			//0: left, right, top, bottom,
-			// don't strut global on xrandr multihead
-			if (crts<2) _prop(32,"_NET_WM_STRUT",XA_CARDINAL,&prop,4,PropModeReplace);
-			//4: left_start_y, left_end_y, right_start_y, right_end_y,
-			//8: top_start_x, top_end_x, bottom_start_x, bottom_end_x
-			_prop(32,"_NET_WM_STRUT_PARTIAL",XA_CARDINAL,&prop,12,PropModeReplace);
-		}
+		setSize(x, y, width, height, resized);
 		reset2();
 		break;
 	    case VisibilityNotify: if (dock & 32) {
-		Window rw, pw, *wins;
+		Window rw, pw, *wins, *ww;
 		unsigned int nw;
 		static int lock_cnt = 0;
 
@@ -813,13 +859,14 @@ re_crts:
 			win!=ev.xvisibility.window ||
 			!XQueryTree(display, rootWin, &rw, &pw, &wins, &nw)
 			) break;
+		ww = wins;
 		while (nw--) {
-			// BUG! can fail on OpenBox menu (async?)
-			if (XGetWindowAttributes(display, wins[nw],&wa) &&
+			if (XGetWindowAttributes(display, *ww,&wa) &&
 				wa.screen == wa0.screen &&
 				wa.x<=x && wa.y<y && wa.width>=width && wa.height>height &&
 				wa.x+wa.width>x && wa.y+wa.height>y
-				) XResizeWindow(display, wins[nw], wa.width, y-wa.y);
+				) XResizeWindow(display, *ww, wa.width, y-wa.y);
+			ww++;
 		}
 		XFree(wins);
 		// first lock: fork (to realize init-lock safe wait)
