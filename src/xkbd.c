@@ -79,6 +79,7 @@ char **exec_cmd;
 
 int Xkb_sync = 2;
 int no_lock = 0;
+int swipe_fingers = 2;
 #ifdef CACHE_PIX
 int cache_pix = 3;
 #endif
@@ -360,6 +361,15 @@ int main(int argc, char **argv)
 #endif
 		"4-disable motion events"
 	},
+	{ 'G', IAM ".gestures", 1, 0, &swipe_fingers, ""
+#ifdef GESTURES_EMULATE
+	"swipe 0=no, 1=1-finger"
+#ifdef MULTITOUCH
+	", 2=2-fingers"
+#endif
+#endif
+	},
+	
 	{ 'X', IAM ".sync", 2, 0, &Xkb_sync, 
 #ifndef MINIMAL
 		"Xkb state interaction: 0=none, 1=sync, 2-semi-sync"

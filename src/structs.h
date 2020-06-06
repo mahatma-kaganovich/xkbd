@@ -315,6 +315,7 @@ typedef struct _button
 
 extern int Xkb_sync;
 extern int no_lock;
+extern int swipe_fingers;
 // todo: width/height in mm
 extern unsigned long int scr_width;
 extern unsigned long int scr_height;

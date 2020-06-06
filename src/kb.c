@@ -1202,7 +1202,11 @@ typedef struct _touch {
 	button *but;
 #ifdef GESTURES_EMULATE
 	int x, y;
+	short gesture;
+#ifdef MULTITOUCH
 	unsigned short n;
+	int gestureid;
+#endif
 #endif
 #ifdef SIBLINGS
 	button *sib[MAX_SIBLINGS];
@@ -1268,14 +1272,11 @@ find:
 	b = kb_find_button(kb,x,y);
 found:
 	if (!type) { // BEGIN/press
+#ifndef GESTURES_EMULATE
 		if (!b) return NULL;
+#endif
 #ifdef MULTITOUCH
 		to = &touch[t = N];
-#ifdef GESTURES_EMULATE
-		int nt = ((N-P)&TOUCH_MASK)+1;
-		to->n = nt;
-		if (!mask) for (i=P; i!=N; TOUCH_INC(i)) touch[i].n = max(touch[i].n,nt);
-#endif
 		TOUCH_INC(N);
 		if (N==P) TOUCH_INC(P);
 #endif
@@ -1285,6 +1286,20 @@ found:
 #ifdef GESTURES_EMULATE
 		to->x = x;
 		to->y = y;
+		to->gesture = !b && swipe_fingers;
+#ifdef MULTITOUCH
+		to->n = 0;
+		if (!mask && swipe_fingers) {
+			unsigned short nt = ((N-P)&TOUCH_MASK);
+			for (i=P; i!=N; TOUCH_INC(i)) {
+				Touch *t1 = &touch[i];
+				if (t1->deviceid == dev && t1->n < nt) {
+					t1->n = nt;
+					t1->gestureid = ptr;
+				}
+			}
+		}
+#endif
 #endif
 		if (b!=(b1=to->but)) {
 			to->but = b;
@@ -1303,6 +1318,9 @@ found:
 		return b;
 	}
 
+#ifdef GESTURES_EMULATE
+	if (to->gesture) goto gesture;
+#endif
 	b1 = to->but;
 #ifndef SIBLINGS
 	if (b != b1 && b1) goto drop;
@@ -1444,11 +1462,13 @@ found:
 		}
 drop:
 #ifdef GESTURES_EMULATE
-		if (!mask && b != b1
 #ifdef MULTITOUCH
-			&& to->n < 2
+		if (to->n && b != b1) {
+#else
+		if (!mask && b != b1 && swipe_fingers) {
 #endif
-		) {
+			to->gesture = 1;
+gesture:		if (type != 2) return NULL;
 			int xx = x - to->x;
 			int yy = y - to->y;
 			int bx = 0, by = 0;
@@ -1456,8 +1476,17 @@ drop:
 			else if (xx>0) bx = 7;
 			if (yy<0) {yy=-yy;by = 4;}
 			else if (yy>0) by = 5;
-			if (xx!=yy) {
-				if (xx<yy) bx = by;
+			if (xx<yy) bx = by;
+			else if (xx==yy) bx = 1;
+			to->gesture = bx;
+			if (type != 2) return NULL;
+#ifdef MULTITOUCH
+			if (to->n>1) for (i=P; i!=N; TOUCH_INC(i)) {
+				Touch *t1 = &touch[i];
+				if (t1->gestureid == to->gestureid && t1->gesture != to->gesture) bx = 0;
+			}
+#endif
+			if (bx > 1 && to->n == swipe_fingers) {
 				Display *dpy = kb->display;
 				XTestFakeButtonEvent(dpy,bx,1,0);
 				XTestFakeButtonEvent(dpy,bx,0,0);
