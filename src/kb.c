@@ -1186,7 +1186,7 @@ static void _press(button *b, unsigned int flags){
 #define MAX_TOUCH (1<<TOUCH_SHIFT)
 #define TOUCH_MASK (MAX_TOUCH-1)
 #define TOUCH_INC(x) (x=(x+1)&TOUCH_MASK)
-#define TOUCH_DEC(x) (x=(x+15)&TOUCH_MASK)
+#define TOUCH_DEC(x) (x=(x+TOUCH_MASK)&TOUCH_MASK)
 
 button *kb_handle_events(keyboard *kb, int type, const int x, const int y, unsigned int ptr, int dev, Time time, unsigned char *mask, int mask_len)
 {
