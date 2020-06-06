@@ -1197,7 +1197,7 @@ button *kb_handle_events(keyboard *kb, int type, const int x, const int y, unsig
 
 typedef struct _touch {
 	unsigned int touchid;
-	int devid;
+	int deviceid;
 	Time time;
 	button *but;
 #ifdef GESTURES_EMULATE
@@ -1230,20 +1230,21 @@ find:
 	if (type && P==N) return NULL;
 	dead = t = -1;
 	for (i=P; i!=N; TOUCH_INC(i)) {
-		to = &touch[i];
-		if (to->devid == dev) {
-			j = to->touchid;
+		Touch *t1 = &touch[i];
+		if (t1->deviceid == dev) {
+			j = t1->touchid;
 			if (j == ptr || (!ptr && type == 1 && t < 0)) {
 				t = i;
+				to = t1;
 				if (type == 2) break;
 				// duplicate (I got BEGIN!)
 //				if (time==times[i] && x==X[i] && y==Y[i]) return but[i];
-				if (time<=to->time) return to->but;
+				if (time<=t1->time) return t1->but;
 			}
 			if (mask && j<(mask_len<<3) && !(mask[j>>3] & (1 << (j & 7)))
-			    && (dead < 0 || to->time<deadTime)) {
+			    && (dead < 0 || t1->time<deadTime)) {
 				dead = i;
-				deadTime = to->time;
+				deadTime = t1->time;
 			}
 		}
 	}
@@ -1271,16 +1272,16 @@ found:
 #ifdef MULTITOUCH
 		to = &touch[t = N];
 #ifdef GESTURES_EMULATE
-		int nt = (N-P)&TOUCH_MASK;
-		if (!mask) for (i=P; i!=N; TOUCH_INC(i)) touch[i].n = max(touch[i].n,nt);
+		int nt = ((N-P)&TOUCH_MASK)+1;
 		to->n = nt;
+		if (!mask) for (i=P; i!=N; TOUCH_INC(i)) touch[i].n = max(touch[i].n,nt);
 #endif
 		TOUCH_INC(N);
 		if (N==P) TOUCH_INC(P);
 #endif
 		to->time = time;
 		to->touchid = ptr;
-		to->devid = dev;
+		to->deviceid = dev;
 #ifdef GESTURES_EMULATE
 		to->x = x;
 		to->y = y;
