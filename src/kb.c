@@ -1182,13 +1182,11 @@ static void _press(button *b, unsigned int flags){
 	bdraw(b,flags);
 }
 
-#if MAX_TOUCH == 16
-#define TOUCH_INC(x) (x=(x+1)&15)
-#define TOUCH_DEC(x) (x=(x+15)&15)
-#else
-#define TOUCH_INC(x) (x=(x+1)%MAX_TOUCH)
-#define TOUCH_DEC(x) (x=(x+(MAX_TOUCH-1))%MAX_TOUCH)
-#endif
+
+#define MAX_TOUCH (1<<TOUCH_SHIFT)
+#define TOUCH_MASK (MAX_TOUCH-1)
+#define TOUCH_INC(x) (x=(x+1)&TOUCH_MASK)
+#define TOUCH_DEC(x) (x=(x+15)&TOUCH_MASK)
 
 button *kb_handle_events(keyboard *kb, int type, const int x, const int y, unsigned int ptr, int dev, Time time, unsigned char *mask, int mask_len)
 {
@@ -1202,6 +1200,10 @@ typedef struct _touch {
 	int devid;
 	Time time;
 	button *but;
+#ifdef GESTURES_EMULATE
+	int x, y;
+	unsigned short n;
+#endif
 #ifdef SIBLINGS
 	button *sib[MAX_SIBLINGS];
 	short nsib;
@@ -1211,13 +1213,18 @@ typedef struct _touch {
 	Touch *to;
 
 #ifdef MULTITOUCH
-	static unsigned int N=0;
-	static unsigned int P=0;
+	static unsigned short N=0;
+	static unsigned short P=0;
 	int t;
 	int type1 = type;
 	int dead;
 	Time deadTime;
 
+//	if (x >= kb->act_width || y >= kb->act_height) {
+//		fprintf(stderr,"border\n");
+//		fprintf(stderr,"height %i/%i %i",kb->act_height,kb->vbox->act_height,y);
+//		fprintf(stderr,"	width %i/%i\n",kb->act_width,x);
+//	}
 	// find touch
 find:
 	if (type && P==N) return NULL;
@@ -1255,7 +1262,7 @@ find:
 	}
 #else
 	const int t=0;
-	to = &touch[0]
+	to = &touch[0];
 #endif
 	b = kb_find_button(kb,x,y);
 found:
@@ -1263,12 +1270,21 @@ found:
 		if (!b) return NULL;
 #ifdef MULTITOUCH
 		to = &touch[t = N];
+#ifdef GESTURES_EMULATE
+		int nt = (N-P)&TOUCH_MASK;
+		if (!mask) for (i=P; i!=N; TOUCH_INC(i)) touch[i].n = max(touch[i].n,nt);
+		to->n = nt;
+#endif
 		TOUCH_INC(N);
 		if (N==P) TOUCH_INC(P);
 #endif
 		to->time = time;
 		to->touchid = ptr;
 		to->devid = dev;
+#ifdef GESTURES_EMULATE
+		to->x = x;
+		to->y = y;
+#endif
 		if (b!=(b1=to->but)) {
 			to->but = b;
 			if (b1) {
@@ -1426,6 +1442,29 @@ found:
 			to->but = NULL;
 		}
 drop:
+#ifdef GESTURES_EMULATE
+		if (!mask && b != b1
+#ifdef MULTITOUCH
+			&& to->n < 2
+#endif
+		) {
+			int xx = x - to->x;
+			int yy = y - to->y;
+			int bx = 0, by = 0;
+			if (xx<0) {xx=-xx;bx = 6;}
+			else if (xx>0) bx = 7;
+			if (yy<0) {yy=-yy;by = 4;}
+			else if (yy>0) by = 5;
+			if (xx!=yy) {
+				if (xx<yy) bx = by;
+				Display *dpy = kb->display;
+				XTestFakeButtonEvent(dpy,bx,1,0);
+				XTestFakeButtonEvent(dpy,bx,0,0);
+				XFlush(dpy);
+				XSync(dpy,False);
+			}
+		}
+#endif
 		if (b=to->but) {
 			to->but = NULL;
 			if (!--b->cnt)

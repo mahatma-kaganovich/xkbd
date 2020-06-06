@@ -55,7 +55,6 @@
 
 #define SIG_HIDE SIGUSR2
 #define SIG_SHOW SIGHUP
-#define HIDE_GESTURES
 
 #define IAM "xkbd"
 char *iam = IAM;
@@ -245,6 +244,7 @@ static void reset2(){
 	if (g==s.group) kb_repaint(kb);
 }
 
+int sig[8] = {};
 static void setSize(int x, int y, int width, int height, int resize){
 	if (dock & 2) {
 		if (top) {
@@ -252,11 +252,15 @@ static void setSize(int x, int y, int width, int height, int resize){
 			prop[2] = y + height; // +Y1
 			prop[8] = x;
 			prop[9] = x + width - 1;
+			sig[4] = SIG_HIDE;
+			sig[5] = SIG_SHOW;
 		} else {
 			if (resize) y = y + height - resize;
 			prop[3] = Y2 - y + 1;
 			prop[10] = x;
 			prop[11] = x + width - 1;
+			sig[4] = SIG_SHOW;
+			sig[5] = SIG_HIDE;
 		}
 	}
 	if (dock & 64) {
@@ -265,11 +269,15 @@ static void setSize(int x, int y, int width, int height, int resize){
 			prop[0] = x + width; // +X1
 			prop[4] = y;
 			prop[5] = y + height - 1;
+			sig[6] = SIG_HIDE;
+			sig[7] = SIG_SHOW;
 		} else {
 			if (resize) y = y + width - resize;
 			prop[1] = X2 - x + 1;
 			prop[6] = y;
 			prop[7] = y + height - 1;
+			sig[6] = SIG_SHOW;
+			sig[7] = SIG_HIDE;
 		}
 	}
 	if (resized != resize) XMoveResizeWindow(display,win,x,y,width,height);
@@ -287,8 +295,10 @@ static void setSize(int x, int y, int width, int height, int resize){
 
 int x=0, y=0, width=0, height=0;
 static void _hide(int sig) {
-	setSize(x,y,width,height,sig == SIG_HIDE);
-	XFlush(display);
+	if (sig) {
+		setSize(x,y,width,height,sig == SIG_HIDE);
+		XFlush(display);
+	}
 }
 
 int main(int argc, char **argv)
@@ -749,7 +759,7 @@ re_crts:
       }
       signal(SIGUSR1, handle_sig); /* for extenal mapping / unmapping */
 
-      signal(SIG_HIDE,_hide);
+      signal(SIG_HIDE, _hide);
       signal(SIG_SHOW, _hide);
 
       XSetErrorHandler(xerrh);
@@ -778,25 +788,27 @@ re_crts:
 			    case XI_Motion: type++; // always detail==0
 			    case XI_ButtonPress:
 				if (lastid == e->sourceid) break;
-#ifndef HIDE_GESTURES
+#ifndef GESTURES_USE
 				{
 #else
 				switch (e->detail) {
-				    // todo: emulate at least fake button 5
-				    case 5: _hide(SIG_HIDE); break;
-				    case 4: _hide(0); break;
+				    case 7: //XkbLockModifiers(display,XkbUseCoreKbd,STATE(KBIT_CAPS),kb->state ^ STATE(KBIT_CAPS));break;
+				    case 6: //XkbLockGroup(display,XkbUseCoreKbd,kb->group+1); break;
+				    case 5:
+				    case 4:
+					_hide(sig[e->detail]);
+					break;
 				    default: if (!resized)
 #endif
 					active_but = kb_handle_events(kb, type, ex, ey, e->detail, e->sourceid, e->time,e->buttons.mask,e->buttons.mask_len);
 				}
 				break;
 			    case XI_TouchEnd: type++;
-				fprintf(stderr,"xy=%i,%i\n",ex,ey);
 			    case XI_TouchUpdate: type++;
 			    case XI_TouchBegin:
-#ifdef HIDE_GESTURES
+#ifdef GESTURES_USE
 				if (resized) {
-					if (!type) _hide(0);
+					if (!type) _hide(SIG_SHOW);
 					break;
 				}
 #endif
@@ -808,13 +820,16 @@ re_crts:
 #endif
 	    case ButtonRelease: type=2;
 	    case ButtonPress:
-#ifndef HIDE_GESTURES
+#ifndef GESTURES_USE
 		{
 #else
 		switch (e->detail) {
-		// todo: emulate at least fake button 5
-		    case 5: _hide(SIG_HIDE); break;
-		    case 4: _hide(0); break;
+		    case 7: //XkbLockModifiers(display,XkbUseCoreKbd,STATE(KBIT_CAPS),kb->state ^ STATE(KBIT_CAPS));break;
+		    case 6: //XkbLockGroup(display,XkbUseCoreKbd,kb->group+1); break;
+		    case 5:
+		    case 4:
+			_hide(sig[e->detail]);
+			break;
 		    default: if (!resized)
 #endif
 			active_but = kb_handle_events(kb, type, ev.xbutton.x, ev.xbutton.y, ev.xbutton.button, 0, ev.xbutton.time, &ev.xbutton.state, sizeof(ev.xbutton.state));
@@ -833,6 +848,8 @@ re_crts:
 		}
 		break;
 	    case ConfigureNotify:
+		kb->act_width = ev.xconfigure.width;
+		kb->act_height = ev.xconfigure.height;
 		if (resized) break;
 		if (ev.xconfigure.width != kb->vbox->act_width
 		    || ev.xconfigure.height != kb->vbox->act_height)

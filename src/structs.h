@@ -96,6 +96,8 @@ static inline unsigned int MODS(unsigned int l){
 #ifndef MINIMAL
 //#define SLIDES
 #define SIBLINGS
+#define GESTURES_EMULATE
+#define GESTURES_USE
 #endif
 
 #ifdef USE_XI
@@ -105,9 +107,9 @@ static inline unsigned int MODS(unsigned int l){
 #endif
 
 #ifdef MULTITOUCH
-#define MAX_TOUCH 16
+#define TOUCH_SHIFT 5
 #else
-#define MAX_TOUCH 1
+#define TOUCH_SHIFT 0
 #undef SIBLINGS
 #endif
 
