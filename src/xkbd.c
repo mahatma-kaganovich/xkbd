@@ -791,6 +791,7 @@ re_crts:
 				}
 				break;
 			    case XI_TouchEnd: type++;
+				fprintf(stderr,"xy=%i,%i\n",ex,ey);
 			    case XI_TouchUpdate: type++;
 			    case XI_TouchBegin:
 #ifdef HIDE_GESTURES

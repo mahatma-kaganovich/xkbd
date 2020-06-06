@@ -169,6 +169,8 @@ typedef struct _keyboard
 
   long width, height; // mm|relative
 
+  int act_width, act_height; // ConfigureNotify - touch control only
+
   int vheight;
   int vheight1;
 

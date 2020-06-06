@@ -1084,7 +1084,6 @@ void kb_size(keyboard *kb) {
 
 	/* TODO: copy all temp vboxs  */
 
-
 #ifdef SIBLINGS
     kb_update(kb);
 #endif
@@ -1198,14 +1197,18 @@ button *kb_handle_events(keyboard *kb, int type, const int x, const int y, unsig
 	int n;
 	Time T;
 
-	static unsigned int touchid[MAX_TOUCH];
-	static int devid[MAX_TOUCH];
-	static Time times[MAX_TOUCH];
-	static button *but[MAX_TOUCH];
+typedef struct _touch {
+	unsigned int touchid;
+	int devid;
+	Time time;
+	button *but;
 #ifdef SIBLINGS
-	static button *sib[MAX_TOUCH][MAX_SIBLINGS];
-	static short nsib[MAX_TOUCH] = {};
+	button *sib[MAX_SIBLINGS];
+	short nsib;
 #endif
+} Touch;
+	static Touch touch[MAX_TOUCH];
+	Touch *to;
 
 #ifdef MULTITOUCH
 	static unsigned int N=0;
@@ -1220,24 +1223,28 @@ find:
 	if (type && P==N) return NULL;
 	dead = t = -1;
 	for (i=P; i!=N; TOUCH_INC(i)) {
-		if (devid[i] == dev) {
-			j = touchid[i];
+		to = &touch[i];
+		if (to->devid == dev) {
+			j = to->touchid;
 			if (j == ptr || (!ptr && type == 1 && t < 0)) {
 				t = i;
 				if (type == 2) break;
 				// duplicate (I got BEGIN!)
 //				if (time==times[i] && x==X[i] && y==Y[i]) return but[i];
-				if (time<=times[i]) return but[i];
+				if (time<=to->time) return to->but;
 			}
 			if (mask && j<(mask_len<<3) && !(mask[j>>3] & (1 << (j & 7)))
-			    && (dead < 0 || times[i]<deadTime))
-				deadTime = times[dead = i];
+			    && (dead < 0 || to->time<deadTime)) {
+				dead = i;
+				deadTime = to->time;
+			}
 		}
 	}
 	if (dead >= 0) {
 		if (dead != t) {
 			type = 3;
-			b = but[t = dead];
+			to = &touch[t = dead];
+			b = to->but;
 			goto found;
 		}
 		type = 2;
@@ -1248,29 +1255,30 @@ find:
 	}
 #else
 	const int t=0;
+	to = &touch[0]
 #endif
 	b = kb_find_button(kb,x,y);
 found:
 	if (!type) { // BEGIN/press
 		if (!b) return NULL;
 #ifdef MULTITOUCH
-		t=N;
+		to = &touch[t = N];
 		TOUCH_INC(N);
 		if (N==P) TOUCH_INC(P);
 #endif
-		times[t] = time;
-		touchid[t] = ptr;
-		devid[t] = dev;
-		if (b!=(b1=but[t])) {
-			but[t] = b;
+		to->time = time;
+		to->touchid = ptr;
+		to->devid = dev;
+		if (b!=(b1=to->but)) {
+			to->but = b;
 			if (b1) {
 				if (!--b1->cnt)
 					_release(b1);
 #ifdef SIBLINGS
-				n = nsib[t];
+				n = to->nsib;
 				// if (!b1->cnt)
-					for(i=0;i<n;i++) if ((b2=sib[t][i])!=b1) _release(b2);
-				nsib[t] = -1;
+					for(i=0;i<n;i++) if ((b2=to->sib[i])!=b1) _release(b2);
+				to->nsib = -1;
 #endif
 			}
 			if (!(b->cnt++)) _press(b,0);
@@ -1278,7 +1286,7 @@ found:
 		return b;
 	}
 
-	b1 = but[t];
+	b1 = to->but;
 #ifndef SIBLINGS
 	if (b != b1 && b1) goto drop;
 #else
@@ -1288,19 +1296,19 @@ found:
 		if set size is 1 - this is result of touch.
 		else must do other selections.
 	*/
-	n=nsib[t];
+	n=to->nsib;
 	if (!b) {
 	} else if (!b1) { // NULL -> button: new siblings base list
 		// probably never, but keep case visible
-		for(i=0;i<n;i++) _release(sib[t][i]);
-		nsib[t]=-1;
+		for(i=0;i<n;i++) _release(to->sib[i]);
+		to->nsib=-1;
 		_press(b,STATE(OBIT_UGLY));
-		but[t] = b;
+		to->but = b;
 		b->cnt++;
 	} else if (b1==b) { // first/main button - reset motions
-		for(i=0;i<n;i++) if (sib[t][i]!=b) _release(sib[t][i]);
-		//nsib[t]=1; sib[t][0]=b;
-		nsib[t]=-1;
+		for(i=0;i<n;i++) if (to->sib[i]!=b) _release(to->sib[i]);
+		//to->nsib=1; to->sib[0]=b;
+		to->nsib=-1;
 	} else if (b1->flags & STATE(OBIT_PRESSED)) { // slide from pressed
 		b=b1;
 	} else if (b->flags & STATE(OBIT_PRESSED)) { // pressed somewere
@@ -1318,7 +1326,7 @@ found:
 				b2=s[i];
 				for(j=0; j<ns1; j++) {
 					if (b2==s1[j]) {
-						sib[t][n++]=b2;
+						to->sib[n++]=b2;
 //						if (!b2->cnt)
 						    _press(b2,STATE(OBIT_UGLY));
 						break;
@@ -1329,10 +1337,10 @@ found:
 			ns = n;
 			n = 0;
 			for(i=0; i<ns; i++) {
-				b2=sib[t][i];
+				b2=to->sib[i];
 				for(j=0; j<ns1; j++) {
 					if (b2==s1[j]) {
-						sib[t][n++]=b2;
+						to->sib[n++]=b2;
 						b2=NULL;
 						break;
 					}
@@ -1342,36 +1350,36 @@ found:
 					_release(b2);
 			}
 		}
-		nsib[t]=n;
+		to->nsib=n;
 		if (n==0) { // no siblings, drop touch
 			goto drop;
 		} else if (n==1) { // 1 intersection: found button
 			b1->cnt--;
-			but[t] = b = sib[t][0];
+			to->but = b = to->sib[0];
 			b->cnt++;
 		} else { // multiple, need to calculate or touch more
 #if 0
 			if (type==2) goto drop;
 #else
 			// check set of 2 buttons (first & last)
-			button *s2[2] = { but[t], b };
+			button *s2[2] = { to->but, b };
 			int n1=0;
 			for(j=0; j<2; j++) {
 				b2=s2[j];
-				for(i=0; i<n; i++) if (sib[t][i]==b2) {
+				for(i=0; i<n; i++) if (to->sib[i]==b2) {
 					s2[n1++]=b2;
 					break;
 				}
 			}
 			if (n1==1) {
 				b1->cnt--;
-				but[t] = b = s2[0];
+				to->but = b = s2[0];
 				b->cnt++;
 				// in this place we can select single button, but no preview is wrong
 #if 0
 				// 2do? keep all set, but highlite or "press" (release)
 				else if (type==1) _press(b,STATE(OBIT_UGLY)|STATE(OBIT_SELECT));
-				if (type==2) nsib[t]=1;
+				if (type==2) to->nsib=1;
 #endif
 			} else b = n1 ? b1 : NULL;
 #endif
@@ -1380,7 +1388,7 @@ found:
 #endif // SIBLINGS
 
 	if (type==1){ // motion/to be continued
-		times[t] = time;
+		to->time = time;
 		return b;
 	}
 
@@ -1391,7 +1399,7 @@ found:
 
 	if (b->cnt > 1) goto drop;
 #ifdef SIBLINGS
-	n = nsib[t];
+	n = to->nsib;
 	// on any logic, don't press without preview
 	if (n > 1) goto drop;
 #endif
@@ -1401,12 +1409,12 @@ found:
 	if (b->layout_switch != -1) {
 		b->flags &= ~(STATE(OBIT_PRESSED)|STATE(OBIT_UGLY));
 #ifdef SIBLINGS
-		for(i=0;i<n;i++) sib[t][i]->flags &= ~(STATE(OBIT_PRESSED)|STATE(OBIT_UGLY));
+		for(i=0;i<n;i++) to->sib[i]->flags &= ~(STATE(OBIT_PRESSED)|STATE(OBIT_UGLY));
 #endif
 #ifdef MULTITOUCH
 		for (i=P; i!=N; TOUCH_INC(i)) {
-			but[i]->cnt=0;
-			but[i]=NULL;
+			touch[i].but->cnt=0;
+			touch[i].but=NULL;
 		}
 		N=P=0;
 #endif
@@ -1415,11 +1423,11 @@ found:
 		kb_process_keypress(b,0,0);
 		if (b->modifier) {
 			b->cnt--;
-			but[t] = NULL;
+			to->but = NULL;
 		}
 drop:
-		if (b=but[t]) {
-			but[t] = NULL;
+		if (b=to->but) {
+			to->but = NULL;
 			if (!--b->cnt)
 				_release(b);
 #ifdef SLIDES
@@ -1429,20 +1437,11 @@ drop:
 #ifdef MULTITOUCH
 		TOUCH_DEC(N);
 #ifdef SIBLINGS
-		n = nsib[t];
-		for(i=0;i<n;i++) if ((b1=sib[t][i])!=b) _release(b1);
-		nsib[t]=-1;
+		n = to->nsib;
+		for(i=0;i<n;i++) if ((b1=to->sib[i])!=b) _release(b1);
+		to->nsib=-1;
 #endif
-		if (t!=N) {
-			but[t] = but[N];
-			touchid[t] = touchid[N];
-			devid[t] = devid[N];
-			times[t] = times[N];
-#ifdef SIBLINGS
-			n = nsib[t] = nsib[N];
-			for(i=0;i<n;i++) sib[t][i]=sib[N][i];
-#endif
-		}
+		if (t!=N) touch[t] = touch[N];
 	}
 	if (type != 3) return NULL;
 	type=type1;

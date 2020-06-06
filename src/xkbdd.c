@@ -59,33 +59,29 @@
 
 #define NO_GRP 99
 
-static Display *dpy;
-static Window win, win1;
-static int screen;
-static XWindowAttributes wa;
-static Atom aActWin, aKbdGrp, aXkbRules;
+Display *dpy;
+Window win, win1;
+int screen;
+XWindowAttributes wa;
+Atom aActWin, aKbdGrp, aXkbRules;
 #ifdef XSS
-static Atom aWMState, aFullScreen;
-static Bool noXSS, noXSS1;
+Atom aWMState, aFullScreen;
+Bool noXSS, noXSS1;
 #endif
-static CARD32 grp, grp1;
-static unsigned char *rul, *rul2;
-static unsigned long rulLen, n;
-static int xkbEventType, xkbError, n1, revert;
-static XEvent ev;
-static unsigned char *ret;
+CARD32 grp, grp1;
+unsigned char *rul, *rul2;
+unsigned long rulLen, n;
+int xkbEventType, xkbError, n1, revert;
+XEvent ev;
+unsigned char *ret;
 #ifdef XTG
-static int xiopcode, xierror, ndevs2;
-static XDevice *dev2;
-static int ndevs2;
-static XIDeviceInfo *info2;
+int xiopcode, xierror, ndevs2, hierarchy;
+XDevice *dev2;
+XIDeviceInfo *info2;
 #define MASK_LEN = XIMaskLen(XI_LASTEVENT)
 typedef unsigned char xiMask[XIMaskLen(XI_LASTEVENT)];
-static xiMask ximask0 = {};
-static xiMask ximask0a = {};
-static xiMask ximaskButton = {};
-static xiMask ximaskTouch = {};
-static XIEventMask ximask = { .deviceid = XIAllDevices, .mask_len =  XIMaskLen(XI_LASTEVENT), .mask = ximaskButton };
+xiMask ximask0 = {}, ximask0a = {}, ximaskButton = {}, ximaskTouch = {};
+XIEventMask ximask = { .deviceid = XIAllDevices, .mask_len =  XIMaskLen(XI_LASTEVENT), .mask = (void *)&ximask0a };
 #endif
 
 static void opendpy() {
@@ -209,15 +205,18 @@ static XIDeviceInfo *_getDevice(int id){
 	return NULL;
 }
 
-void getHierarchy(){
+static void getHierarchy(){
 	if(info2) XIFreeDeviceInfo(info2);
 	info2 = XIQueryDevice(dpy, XIAllDevices, &ndevs2);
+	hierarchy = 0;
 }
 
-static short showPtr = 1, oldShowPtr = 1;
+short showPtr = 1, oldShowPtr = 1;
 static void setShowCursor(){
 	int i,t,show;
-	XIDeviceInfo *d2 = info2;
+	XIDeviceInfo *d2;
+	if (hierarchy) getHierarchy();
+	d2 = info2;
 	for(i=0; i<ndevs2; i++) {
 		switch (d2->use) {
 		    case XIFloatingSlave:
@@ -243,10 +242,8 @@ static void setShowCursor(){
 //	}
 	}
 	XFlush(dpy);
-	XSync(dpy,False);
-	if (win1 == None) getHierarchy();
+	//XSync(dpy,False);
 }
-
 #endif
 
 static void getWinGrp(){
@@ -280,18 +277,16 @@ static void getPropWin1(){
 		win1 = *(Window*)ret;
 }
 
-static int (*oldxerrh) (Display *, XErrorEvent *);
+int (*oldxerrh) (Display *, XErrorEvent *);
 static int xerrh(Display *dpy, XErrorEvent *err){
-	win1 = None;
 #ifdef XTG
 	fprintf(stderr, "XError: type=%i XID=0x%lx serial=%lu error_code=%i%s request_code=%i minor_code=%i xierror=%i\n",err->type,err->resourceid,err->serial,err->error_code,err->error_code == xierror ? "=XI": "",err->request_code,err->minor_code,xierror);
 #endif
-	if (!(
-		err->error_code==BadWindow
+	if (err->error_code==BadWindow) win1 = None;
 #ifdef XTG
-		|| err->error_code==xierror
+	else if (err->error_code==xierror) hierarchy = 1;
 #endif
-	)) oldxerrh(dpy,err);
+	else oldxerrh(dpy,err);
 	return 0;
 }
 
@@ -331,8 +326,8 @@ static void init(){
 	XISetMask(ximaskTouch, XI_ButtonRelease);
 #endif
 	XISetMask(ximask0a, XI_HierarchyChanged);  // only AllDevices!
-	ximask.mask = (void*) &ximask0a;
 	XISelectEvents(dpy, wa.root, &ximask, 1);
+	hierarchy = 1;
 #endif
 	XSelectInput(dpy, wa.root, evmask);
 	oldxerrh = XSetErrorHandler(xerrh);
@@ -350,13 +345,14 @@ int main(){
 	getPropWin1();
 #ifdef XTG
 //	ev.xcookie.data = NULL;
-	getHierarchy();
 	setShowCursor();
 #endif
 	while (1) {
-		if (win1 != win) getWinGrp();
-		else if (grp1 != grp) setWinGrp();
-		if (win1 != win) continue; // error handled
+		do {
+			if (win1 != win) getWinGrp();
+			else if (grp1 != grp) setWinGrp();
+		} while (win1 != win); // error handled
+ev:
 		XNextEvent(dpy, &ev);
 		switch (ev.type) {
 #ifdef XTG
@@ -364,11 +360,11 @@ int main(){
 			if (ev.xcookie.extension == xiopcode) {
 				XIDeviceInfo *d2;
 				if (ev.xcookie.evtype == XI_HierarchyChanged) {
-					getHierarchy();
+					hierarchy = 1;
 					setShowCursor();
-					continue;
+					goto ev;
 				}
-				if (!XGetEventData(dpy, &ev.xcookie)) continue;
+				if (!XGetEventData(dpy, &ev.xcookie)) goto ev;
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
 				if (e->deviceid == e->sourceid) {
@@ -386,7 +382,7 @@ int main(){
 				}
 				XFreeEventData(dpy, &ev.xcookie);
 			}
-			break;
+			goto ev;
 #endif
 #ifdef XSS
 #undef e
@@ -396,7 +392,7 @@ int main(){
 				if (e.window==win)
 					WMState(&e.data.l[1],e.data.l[0]);
 			}
-			break;
+			goto ev;
 #endif
 #undef e
 #define e (ev.xproperty)
