@@ -1224,11 +1224,6 @@ typedef struct _touch {
 	int dead;
 	Time deadTime;
 
-//	if (x >= kb->act_width || y >= kb->act_height) {
-//		fprintf(stderr,"border\n");
-//		fprintf(stderr,"height %i/%i %i",kb->act_height,kb->vbox->act_height,y);
-//		fprintf(stderr,"	width %i/%i\n",kb->act_width,x);
-//	}
 	// find touch
 find:
 	if (type && P==N) return NULL;
@@ -1471,29 +1466,48 @@ drop:
 #endif
 			to->gesture = 1;
 gesture:		if (type != 2) return NULL;
-			int xx = x - to->x;
-			int yy = y - to->y;
-			int bx = 0, by = 0;
-			if (xx<0) {xx=-xx;bx = 6;}
-			else if (xx>0) bx = 7;
-			if (yy<0) {yy=-yy;by = 4;}
-			else if (yy>0) by = 5;
-			if (xx<yy) bx = by;
-			else if (xx==yy) bx = 1;
-			to->gesture = bx;
-			if (type != 2) return NULL;
-#ifdef MULTITOUCH
-			if (to->n>1) for (i=P; i!=N; TOUCH_INC(i)) {
-				Touch *t1 = &touch[i];
-				if (t1->gestureid == to->gestureid && t1->gesture != to->gesture) bx = 0;
+			int bx = 99;
+			if (to->gesture != 99) {
+				int xx = x - to->x;
+				int yy = y - to->y;
+				int by = 99;
+				if (xx<0) {xx=-xx;bx = 6;}
+				else if (xx>0) bx = 7;
+				else bx = 0;
+				if (yy<0) {yy=-yy;by = 4;}
+				else if (yy>0) by = 5;
+				if (xx<yy) bx = by;
+				else if (xx==yy) bx = 1;
+				if (to->gesture > 1 && to->gesture != bx) bx = 99;
 			}
+#ifdef MULTITOUCH
+			int nt = 0;
+			if (to->n>1 && to->gesture != 99) for (i=P; i!=N; TOUCH_INC(i)) {
+				Touch *t1 = &touch[i];
+				if (t1->gestureid == to->gestureid && t1 != to) {
+					t1->gesture = bx;
+					nt++;
+				}
+			}
+			if (!nt)
 #endif
-			if (bx > 1 && to->n == swipe_fingers) {
+			if (bx > 1 && bx != 99 && to->n == swipe_fingers) {
 				Display *dpy = kb->display;
 				XTestFakeButtonEvent(dpy,bx,1,0);
 				XTestFakeButtonEvent(dpy,bx,0,0);
 				XFlush(dpy);
 				XSync(dpy,False);
+				// after gesture recognition release all
+				// as possible resize & other lost touches
+				for (j=P; j!=N; TOUCH_INC(j)) {
+					to = &touch[j];
+					_release(b=to->but);
+					n = to->nsib;
+					for(i=0;i<n;i++) if ((b1=to->sib[i])!=b) _release(b1);
+					to->nsib=-1;
+				}
+				N=P=0;
+				return NULL;
 			}
 		}
 #endif
