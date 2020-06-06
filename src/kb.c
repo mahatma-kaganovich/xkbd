@@ -1272,7 +1272,9 @@ find:
 	b = kb_find_button(kb,x,y);
 found:
 	if (!type) { // BEGIN/press
-#ifndef GESTURES_EMULATE
+#ifdef GESTURES_EMULATE
+		if (!b && !(!mask && swipe_fingers)) return NULL;
+#else
 		if (!b) return NULL;
 #endif
 #ifdef MULTITOUCH
@@ -1286,7 +1288,7 @@ found:
 #ifdef GESTURES_EMULATE
 		to->x = x;
 		to->y = y;
-		to->gesture = !b && swipe_fingers;
+		to->gesture = !b;
 #ifdef MULTITOUCH
 		to->n = 0;
 		if (!mask && swipe_fingers) {
