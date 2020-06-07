@@ -83,6 +83,7 @@ static void opendpy() {
 	int reason_rtrn, xkbmjr = XkbMajorVersion, xkbmnr = XkbMinorVersion;
 	dpy = XkbOpenDisplay(NULL,&xkbEventType,&xkbError,&xkbmjr,&xkbmnr,&reason_rtrn);
 #ifdef XTG
+	if (!dpy) return;
 	int xievent = 0, xi = 0;
 	xiopcode = 0;
 	XQueryExtension(dpy, "XInputExtension", &xiopcode, &xievent, &xierror);
@@ -251,7 +252,6 @@ static int xerrh(Display *dpy, XErrorEvent *err){
 static void init(){
 	int evmask = PropertyChangeMask;
 
-	opendpy();
 	screen = DefaultScreen(dpy);
 	XGetWindowAttributes(dpy, DefaultRootWindow(dpy), &wa);
 	aActWin = XInternAtom(dpy, "_NET_ACTIVE_WINDOW", False);
@@ -290,6 +290,8 @@ static void init(){
 	ret = NULL;
 }
 int main(){
+	opendpy();
+	if (!dpy) return 1;
 	init();
 	printGrp();
 	getPropWin1();

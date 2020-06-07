@@ -113,6 +113,10 @@ static int xerrh(Display *dsp, XErrorEvent *ev) {
 	return 0;
 }
 
+static Atom _atom(char *a){
+	return XInternAtom(display, a, False);
+}
+
 /*
 static unsigned char*
 get_current_window_manager_name (void)
@@ -223,13 +227,17 @@ void version()
 #endif
 }
 
-static void _prop(int i, char *prop, Atom type, void *data, int n, int mode){
-	XChangeProperty(display,win,XInternAtom(display,prop,False),type,i,mode,(unsigned char *)data,n); 
+static void _prop(int i, Atom prop, Atom type, void *data, int n, int mode){
+	XChangeProperty(display,win,prop,type,i,mode,(unsigned char *)data,n); 
 }
 
 static void _propAtom32(Atom prop, char *data){
-	Atom a=XInternAtom(display,data,False);
-	XChangeProperty(display,win,prop,XA_ATOM,32,PropModeAppend,(unsigned char *)&a,1); 
+	Atom a=_atom(data);
+	_prop(32,prop,XA_ATOM,&a,1,PropModeAppend);
+}
+
+static void _propCard32(Atom prop, void *data, int n){
+	_prop(32,prop,XA_CARDINAL,data,n,PropModeReplace);
 }
 
 static int inbound(int x,int xin,int x1,int x2){
@@ -260,6 +268,7 @@ static void _move(int x, int y, int width, int height){
 }
 
 int sig[8] = {};
+Atom aStrut,aStrutPartial;
 static void setSize(int x, int y, int width, int height, int resize){
 	if (dock & 2) {
 		if (top) {
@@ -301,10 +310,10 @@ static void setSize(int x, int y, int width, int height, int resize){
 //		for(i=0;i<12;i++) fprintf(stderr," %li",prop[i]);fprintf(stderr," crts=%i\n",crts);
 		//0: left, right, top, bottom,
 		// don't strut global on xrandr multihead
-		if (crts<2) _prop(32,"_NET_WM_STRUT",XA_CARDINAL,&prop,4,PropModeReplace);
+		if (crts<2) _propCard32(aStrut,&prop,4);
 		//4: left_start_y, left_end_y, right_start_y, right_end_y,
 		//8: top_start_x, top_end_x, bottom_start_x, bottom_end_x
-		_prop(32,"_NET_WM_STRUT_PARTIAL",XA_CARDINAL,&prop,12,PropModeReplace);
+		_propCard32(aStrutPartial,&prop,12);
 	}
 }
 
@@ -682,8 +691,10 @@ re_crts:
 	_move(x,y,width,height); // +hints
 //      if (cache_pix) kb_repaint(kb); // reduce blinking on start
 
-      Atom atype = XInternAtom(display,"_NET_WM_WINDOW_TYPE",False);
-      Atom astate = XInternAtom(display,"_NET_WM_STATE",False);
+      Atom atype = _atom("_NET_WM_WINDOW_TYPE");
+      Atom astate = _atom("_NET_WM_STATE");
+      aStrut = _atom("_NET_WM_STRUT");
+      aStrutPartial = _atom("_NET_WM_STRUT_PARTIAL");
 
       if(dock & 4)
 	_propAtom32(atype,"_NET_WM_WINDOW_TYPE_DOCK");
@@ -700,12 +711,12 @@ re_crts:
 //      __prop(32,"XdndAware",XA_ATOM,&version,1);
       if (dock&512) {
 	CARD32 dsks = 0xffffffff;
-	_prop(32,"_NET_WM_DESKTOP",XA_CARDINAL,&dsks,1,PropModeReplace);
+	_propCard32(_atom("_NET_WM_DESKTOP"),&dsks,1);
       }
       if (dock&1024)
 	_propAtom32(astate,"_NET_WM_STATE_SKIP_PAGER");
 
-      Atom mwm_atom = XInternAtom(display, "_MOTIF_WM_HINTS",False);
+      Atom mwm_atom = _atom("_MOTIF_WM_HINTS");
       XChangeProperty(display,win, mwm_atom, mwm_atom,32,PropModeReplace,(unsigned char *)&prop,5);
       prop[0] = 0;
 
@@ -718,9 +729,9 @@ re_crts:
       XSetWMHints(display, win, &wm_hints);
 
       Atom wm_protocols[]={
-	XInternAtom(display, "WM_DELETE_WINDOW",False),
-	XInternAtom(display, "WM_PROTOCOLS",False),
-	XInternAtom(display, "WM_NORMAL_HINTS", False),
+	_atom("WM_DELETE_WINDOW"),
+	_atom("WM_PROTOCOLS"),
+	_atom("WM_NORMAL_HINTS"),
       };
       XSetWMProtocols(display, win, wm_protocols, sizeof(wm_protocols) /
 		      sizeof(Atom));
