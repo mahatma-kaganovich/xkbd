@@ -48,7 +48,7 @@
 #endif
 
 #ifdef XTG
-#include <X11/extensions/XInput.h>
+//#include <X11/extensions/XInput.h>
 #include <X11/extensions/XInput2.h>
 //#include <string.h>
 #endif
@@ -73,10 +73,10 @@ XEvent ev;
 unsigned char *ret;
 #ifdef XTG
 int xiopcode, xierror;
-#define MASK_LEN = XIMaskLen(XI_LASTEVENT)
-typedef unsigned char xiMask[XIMaskLen(XI_LASTEVENT)];
+#define MASK_LEN XIMaskLen(XI_LASTEVENT)
+typedef unsigned char xiMask[MASK_LEN];
 xiMask ximaskButton = {}, ximaskTouch = {};
-XIEventMask ximask = { .deviceid = XIAllDevices, .mask_len =  XIMaskLen(XI_LASTEVENT), };
+XIEventMask ximask = { .deviceid = XIAllDevices, .mask_len = MASK_LEN, };
 #endif
 
 static void opendpy() {
@@ -228,11 +228,15 @@ static int xerrh(Display *dpy, XErrorEvent *err){
 #ifdef XTG
 	fprintf(stderr, "XError: type=%i XID=0x%lx serial=%lu error_code=%i%s request_code=%i minor_code=%i xierror=%i\n",err->type,err->resourceid,err->serial,err->error_code,err->error_code == xierror ? "=XI": "",err->request_code,err->minor_code,xierror);
 #endif
-	if (err->error_code==BadWindow) win1 = None;
+	switch (err->error_code) {
+	    case BadWindow: win1 = None; break;
+	    case BadAccess: break;
+	    default:
 #ifdef XTG
-	else if (err->error_code==xierror);
+		if (err->error_code==xierror) break;
 #endif
-	else oldxerrh(dpy,err);
+		oldxerrh(dpy,err);
+	}
 	return 0;
 }
 
