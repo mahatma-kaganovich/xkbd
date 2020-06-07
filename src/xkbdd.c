@@ -172,23 +172,24 @@ static void WMState(Atom *states, short nn){
 #endif
 
 #ifdef XTG
-short showPtr = 1, oldShowPtr = 1;
-static void setShowCursor(){
-	ximask.mask = (void*)(showPtr?&ximaskTouch:&ximaskButton);
-	XISelectEvents(dpy, wa.root, &ximask, 1);
+short showPtr = 1, oldShowPtr = 1, oldShowEv=0;
+static inline void setShowCursor(){
+	if (showPtr != oldShowEv) {
+		oldShowEv = showPtr;
+		ximask.mask = (void*)(showPtr?&ximaskTouch:&ximaskButton);
+		XISelectEvents(dpy, wa.root, &ximask, 1);
+	}
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
 	if (showPtr != oldShowPtr) {
+		oldShowPtr = showPtr;
 	// "Hide" must be first!
 //	if (e) {
 //		XWarpPointer(dpy, None, wa.root, 0, 0, 0, 0, e->root_x+0.5, e->root_y+0.5);
 		if (showPtr) XFixesShowCursor(dpy, wa.root);
 		else XFixesHideCursor(dpy, wa.root);
-		oldShowPtr = showPtr;
 //	}
 	}
-	XFlush(dpy);
-	//XSync(dpy,False);
 }
 #endif
 
@@ -225,18 +226,25 @@ static void getPropWin1(){
 
 int (*oldxerrh) (Display *, XErrorEvent *);
 static int xerrh(Display *dpy, XErrorEvent *err){
-#ifdef XTG
-	fprintf(stderr, "XError: type=%i XID=0x%lx serial=%lu error_code=%i%s request_code=%i minor_code=%i xierror=%i\n",err->type,err->resourceid,err->serial,err->error_code,err->error_code == xierror ? "=XI": "",err->request_code,err->minor_code,xierror);
-#endif
 	switch (err->error_code) {
 	    case BadWindow: win1 = None; break;
-	    case BadAccess: break;
+#ifdef XTG
+	    case BadAccess: oldShowEv=2; break; // second XI_Touch* root listener
+//	    case BadMatch: oldShowPtr=2; break; // XShowCursor() before XHideCursor()
+#endif
 	    default:
 #ifdef XTG
-		if (err->error_code==xierror) break;
+//		if (err->error_code==xierror) break; // changes on device list
 #endif
 		oldxerrh(dpy,err);
 	}
+#ifdef XTG
+	static int oldErr = 0;
+	if (oldErr != err->error_code) {
+		oldErr=err->error_code;
+		fprintf(stderr, "XError: type=%i XID=0x%lx serial=%lu error_code=%i%s request_code=%i minor_code=%i xierror=%i\n",err->type,err->resourceid,err->serial,err->error_code,err->error_code == xierror ? "=XI": "",err->request_code,err->minor_code,xierror);
+	}
+#endif
 	return 0;
 }
 
@@ -285,16 +293,17 @@ int main(){
 	init();
 	printGrp();
 	getPropWin1();
-#ifdef XTG
 //	ev.xcookie.data = NULL;
-	setShowCursor();
-#endif
 	while (1) {
 		do {
 			if (win1 != win) getWinGrp();
 			else if (grp1 != grp) setWinGrp();
 		} while (win1 != win); // error handled
 ev:
+#ifdef XTG
+		// aggressive retry
+		setShowCursor();
+#endif
 		XNextEvent(dpy, &ev);
 		switch (ev.type) {
 #ifdef XTG
@@ -307,7 +316,6 @@ ev:
 				if (e->deviceid == e->sourceid && lastid != e->sourceid) {
 					showPtr = (ev.xcookie.evtype < XI_TouchBegin);
 					if (!showPtr) lastid = e->sourceid;
-					if (showPtr != oldShowPtr) setShowCursor();
 				}
 				XFreeEventData(dpy, &ev.xcookie);
 			}
