@@ -1,5 +1,5 @@
 /*
-	xkbdd v1.9 - per-window keyboard layout switcher [+ XSS suspend].
+	xkbdd v1.10 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -27,6 +27,7 @@
 	Touchscreen extensions (-DXTG):
 	Auto hide/show mouse cursor on touchscreen.
 	May be +gestures in future.
+	WARNING: root touch events listener currently run ones per time.
 
 	(C) 2019-2020 Denis Kaganovich, Anarchy license
 */
@@ -34,11 +35,6 @@
 #define XSS
 #define XTG
 #endif
-
-// listen XI_Touch* events from root window cannot twice:
-// second run can kill us (BadAccess).
-// while I believe this is bug and this code is better, keep.
-//#define TOUCH_EVENTS
 
 #include <stdio.h>
 
@@ -59,6 +55,7 @@
 
 #define NO_GRP 99
 
+
 Display *dpy;
 Window win, win1;
 int screen;
@@ -75,13 +72,11 @@ int xkbEventType, xkbError, n1, revert;
 XEvent ev;
 unsigned char *ret;
 #ifdef XTG
-int xiopcode, xierror, ndevs2, hierarchy;
-XDevice *dev2;
-XIDeviceInfo *info2;
+int xiopcode, xierror;
 #define MASK_LEN = XIMaskLen(XI_LASTEVENT)
 typedef unsigned char xiMask[XIMaskLen(XI_LASTEVENT)];
-xiMask ximask0 = {}, ximask0a = {}, ximaskButton = {}, ximaskTouch = {};
-XIEventMask ximask = { .deviceid = XIAllDevices, .mask_len =  XIMaskLen(XI_LASTEVENT), .mask = (void *)&ximask0a };
+xiMask ximaskButton = {}, ximaskTouch = {};
+XIEventMask ximask = { .deviceid = XIAllDevices, .mask_len =  XIMaskLen(XI_LASTEVENT), };
 #endif
 
 static void opendpy() {
@@ -90,7 +85,6 @@ static void opendpy() {
 #ifdef XTG
 	int xievent = 0, xi = 0;
 	xiopcode = 0;
-	dev2 = NULL;
 	XQueryExtension(dpy, "XInputExtension", &xiopcode, &xievent, &xierror);
 #endif
 }
@@ -178,58 +172,10 @@ static void WMState(Atom *states, short nn){
 #endif
 
 #ifdef XTG
-static Bool _isTouch(XIDeviceInfo *d2) {
-	int i;
-	for (i=0; i<d2->num_classes; i++)
-		if (d2->classes[i]->type == XITouchClass)
-			return 1;
-	return 0;
-}
-
-static Bool _isAbs(XIDeviceInfo *d2) {
-	int i;
-	for (i=0; i<d2->num_classes; i++)
-		if (d2->classes[i]->type == XIValuatorClass
-		    && ((XIValuatorClassInfo*)d2->classes[i])->mode==Absolute)
-			return 1;
-	return 0;
-}
-
-static XIDeviceInfo *_getDevice(int id){
-	int i;
-	XIDeviceInfo *d2 = info2;
-	for(i=0; i<ndevs2; i++) {
-		if (d2->deviceid == id) return d2;
-		d2++;
-	}
-	return NULL;
-}
-
-static void getHierarchy(){
-	if(info2) XIFreeDeviceInfo(info2);
-	info2 = XIQueryDevice(dpy, XIAllDevices, &ndevs2);
-	hierarchy = 0;
-}
-
 short showPtr = 1, oldShowPtr = 1;
 static void setShowCursor(){
-	int i,t,show;
-	XIDeviceInfo *d2;
-	if (hierarchy) getHierarchy();
-	d2 = info2;
-	for(i=0; i<ndevs2; i++) {
-		switch (d2->use) {
-		    case XIFloatingSlave:
-		    case XISlavePointer:
-			t = _isTouch(d2);
-			show = !t;
-			ximask.mask = (void*)((show^showPtr)?t?&ximaskTouch:&ximaskButton:&ximask0);
-			ximask.deviceid = d2->deviceid;
-			XISelectEvents(dpy, wa.root, &ximask, 1);
-			break;
-		}
-		d2++;
-	}
+	ximask.mask = (void*)(showPtr?&ximaskTouch:&ximaskButton);
+	XISelectEvents(dpy, wa.root, &ximask, 1);
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
 	if (showPtr != oldShowPtr) {
@@ -284,7 +230,7 @@ static int xerrh(Display *dpy, XErrorEvent *err){
 #endif
 	if (err->error_code==BadWindow) win1 = None;
 #ifdef XTG
-	else if (err->error_code==xierror) hierarchy = 1;
+	else if (err->error_code==xierror);
 #endif
 	else oldxerrh(dpy,err);
 	return 0;
@@ -316,18 +262,10 @@ static void init(){
 	XISetMask(ximaskButton, XI_ButtonPress);
 	XISetMask(ximaskButton, XI_ButtonRelease);
 	XISetMask(ximaskButton, XI_Motion);
-#ifdef TOUCH_EVENTS
+
 	XISetMask(ximaskTouch, XI_TouchBegin);
 	XISetMask(ximaskTouch, XI_TouchUpdate);
 	XISetMask(ximaskTouch, XI_TouchEnd);
-	XISetMask(ximaskTouch, XI_HierarchyChanged);
-#else
-	XISetMask(ximaskTouch, XI_ButtonPress);
-	XISetMask(ximaskTouch, XI_ButtonRelease);
-#endif
-	XISetMask(ximask0a, XI_HierarchyChanged);  // only AllDevices!
-	XISelectEvents(dpy, wa.root, &ximask, 1);
-	hierarchy = 1;
 #endif
 	XSelectInput(dpy, wa.root, evmask);
 	oldxerrh = XSetErrorHandler(xerrh);
@@ -358,27 +296,14 @@ ev:
 #ifdef XTG
 		    case GenericEvent:
 			if (ev.xcookie.extension == xiopcode) {
-				XIDeviceInfo *d2;
-				if (ev.xcookie.evtype == XI_HierarchyChanged) {
-					hierarchy = 1;
-					setShowCursor();
-					goto ev;
-				}
 				if (!XGetEventData(dpy, &ev.xcookie)) goto ev;
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
-				if (e->deviceid == e->sourceid) {
-#ifdef TOUCH_EVENTS
+				static int lastid = 0;
+				if (e->deviceid == e->sourceid && lastid != e->sourceid) {
 					showPtr = (ev.xcookie.evtype < XI_TouchBegin);
+					if (!showPtr) lastid = e->sourceid;
 					if (showPtr != oldShowPtr) setShowCursor();
-#else
-					static int lastid = 0;
-					if (lastid != e->sourceid) {
-						lastid = e->sourceid;
-						showPtr = (d2 = _getDevice(lastid)) && !_isTouch(d2);
-						if (showPtr != oldShowPtr) setShowCursor();
-					}
-#endif
 				}
 				XFreeEventData(dpy, &ev.xcookie);
 			}

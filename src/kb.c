@@ -1192,7 +1192,7 @@ button *kb_handle_events(keyboard *kb, int type, const int x, const int y, unsig
 {
 	button *b, *b1, *b2;
 	int i,j;
-	int n;
+	int n, nt;
 	Time T;
 
 typedef struct _touch {
@@ -1205,7 +1205,6 @@ typedef struct _touch {
 	short gesture;
 #ifdef MULTITOUCH
 	unsigned short n;
-	int gestureid;
 #endif
 #endif
 #ifdef SIBLINGS
@@ -1269,6 +1268,7 @@ found:
 	if (!type) { // BEGIN/press
 #ifdef GESTURES_EMULATE
 		if (!b && !(!mask && swipe_fingers)) return NULL;
+		int g = 0;
 #else
 		if (!b) return NULL;
 #endif
@@ -1285,17 +1285,17 @@ found:
 		to->y = y;
 		to->gesture = !b;
 #ifdef MULTITOUCH
-		to->n = 0;
-		if (!mask && swipe_fingers) {
-			unsigned short nt = ((N-P)&TOUCH_MASK);
-			for (i=P; i!=N; TOUCH_INC(i)) {
+		if (nt = (!mask && swipe_fingers)) {
+			n = N;
+			TOUCH_DEC(n);
+			for (i=P; i!=n; TOUCH_INC(i)) {
 				Touch *t1 = &touch[i];
-				if (t1->deviceid == dev && t1->n < nt) {
-					t1->n = nt;
-					t1->gestureid = ptr;
-				}
+				if (t1->deviceid != dev) continue;
+				t1->n++;
+				nt++;
 			}
 		}
+		to->n = nt;
 #endif
 #endif
 		if (b!=(b1=to->but)) {
@@ -1460,56 +1460,65 @@ found:
 drop:
 #ifdef GESTURES_EMULATE
 #ifdef MULTITOUCH
-		if (to->n && b != b1) {
-#else
-		if (!mask && b != b1 && swipe_fingers) {
-#endif
-			to->gesture = 1;
-gesture:		if (type != 2) return NULL;
-			int bx = 99;
-			if (to->gesture != 99) {
-				int xx = x - to->x;
-				int yy = y - to->y;
-				int by = 99;
-				if (xx<0) {xx=-xx;bx = 6;}
-				else if (xx>0) bx = 7;
-				else bx = 0;
-				if (yy<0) {yy=-yy;by = 4;}
-				else if (yy>0) by = 5;
-				if (xx<yy) bx = by;
-				else if (xx==yy) bx = 1;
-				if (to->gesture > 1 && to->gesture != bx) bx = 99;
-			}
-#ifdef MULTITOUCH
-			int nt = 0;
-			if (to->n>1 && to->gesture != 99) for (i=P; i!=N; TOUCH_INC(i)) {
-				Touch *t1 = &touch[i];
-				if (t1->gestureid == to->gestureid && t1 != to) {
-					t1->gesture = bx;
-					nt++;
-				}
-			}
-			if (!nt)
-#endif
-			if (bx > 1 && bx != 99 && to->n == swipe_fingers) {
-				Display *dpy = kb->display;
-				XTestFakeButtonEvent(dpy,bx,1,0);
-				XTestFakeButtonEvent(dpy,bx,0,0);
-				XFlush(dpy);
-				XSync(dpy,False);
-				// after gesture recognition release all
-				// as possible resize & other lost touches
-				for (j=P; j!=N; TOUCH_INC(j)) {
-					to = &touch[j];
-					_release(b=to->but);
-					n = to->nsib;
-					for(i=0;i<n;i++) if ((b1=to->sib[i])!=b) _release(b1);
-					to->nsib=-1;
-				}
-				N=P=0;
-				return NULL;
-			}
+		if (!to->n || b == b1) goto drop2;
+		to->gesture = 1;
+gesture:
+		if (to->gesture == 99) goto drop2;
+		if (type != 2) return NULL;
+		nt = 0;
+		n = 0;
+		for (i=P; i!=N; TOUCH_INC(i)) {
+			Touch *t1 = &touch[i];
+			if (t1->deviceid != dev) continue;
+			n++;
+			if (t1->n == to->n) nt++;
 		}
+		if (nt != n) goto drop2;
+#else
+		if (mask || b == b1 || !swipe_fingers) goto drop2;
+		to->gesture = 1;
+gesture:
+		if (to->gesture == 99) goto drop2;
+		if (type != 2) return NULL;
+#endif
+		int bx = 99, by = 99, xx = x - to->x, yy = y - to->y;
+		if (xx<0) {xx=-xx;bx = 6;}
+		else if (xx>0) bx = 7;
+		if (yy<0) {yy=-yy;by = 4;}
+		else if (yy>0) by = 5;
+		if (xx<yy) bx = by;
+		else if (xx==yy) bx = 99;
+		if (to->gesture > 1 && to->gesture != bx) bx = 99;
+#ifdef MULTITOUCH
+		if (nt > 1) {
+			if (to->gesture == bx) goto drop2;
+			for (i=P; i!=N; TOUCH_INC(i)) {
+				Touch *t1 = &touch[i];
+				if (t1->deviceid != dev) continue;
+				t1->gesture = bx;
+			}
+			goto drop2;
+		}
+#endif
+		if (bx > 1 && bx != 99 && to->n == swipe_fingers) {
+			Display *dpy = kb->display;
+			XTestFakeButtonEvent(dpy,bx,1,0);
+			XTestFakeButtonEvent(dpy,bx,0,0);
+			XFlush(dpy);
+			XSync(dpy,False);
+			// after gesture recognition release all
+			// as possible resize & other lost touches
+			for (j=P; j!=N; TOUCH_INC(j)) {
+				to = &touch[j];
+				_release(b=to->but);
+				n = to->nsib;
+				for(i=0;i<n;i++) if ((b1=to->sib[i])!=b) _release(b1);
+				to->nsib=-1;
+			}
+			N=P=0;
+			return NULL;
+		}
+drop2:
 #endif
 		if (b=to->but) {
 			to->but = NULL;

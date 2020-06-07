@@ -363,7 +363,7 @@ int main(int argc, char **argv)
 	},
 	{ 'G', IAM ".gestures", 1, 0, &swipe_fingers, ""
 #ifdef GESTURES_EMULATE
-	"swipe 0=no, 1=1-finger"
+	"swipe fingers (0=disabled)"
 #ifdef MULTITOUCH
 	", 2=2-fingers"
 #endif
