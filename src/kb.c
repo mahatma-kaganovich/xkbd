@@ -1478,7 +1478,7 @@ gesture:
 		if (mask || b == b1 || !swipe_fingers) goto drop2;
 		to->gesture = 1;
 gesture:
-		if (to->gesture == 99) goto drop2;
+		if (to->gesture == 99 || to->n != swipe_fingers) goto drop2;
 		if (type != 2) return NULL;
 #endif
 		int bx = 99, by = 99, xx = x - to->x, yy = y - to->y;
@@ -1500,7 +1500,7 @@ gesture:
 			goto drop2;
 		}
 #endif
-		if (bx > 1 && bx != 99 && to->n == swipe_fingers) {
+		if (bx > 1 && bx != 99) {
 			Display *dpy = kb->display;
 			XTestFakeButtonEvent(dpy,bx,1,0);
 			XTestFakeButtonEvent(dpy,bx,0,0);

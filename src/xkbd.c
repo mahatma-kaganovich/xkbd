@@ -62,14 +62,13 @@ char *iam = IAM;
 Display* display; /* ack globals due to sighandlers - another way ? */
 Window   win;
 Window rootWin;
-Atom mwm_atom;
 int screen;
 XWindowAttributes wa0;
 char *display_name = NULL;
 
 CARD32 prop[12] = {2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 int crts=0, X1,Y1,X2,Y2, top=0, left=0;
-unsigned int dock = 0;
+unsigned int dock = 1974;
 int resized = 0;
 
 keyboard *kb = NULL;
@@ -228,9 +227,9 @@ static void _prop(int i, char *prop, Atom type, void *data, int n, int mode){
 	XChangeProperty(display,win,XInternAtom(display,prop,False),type,i,mode,(unsigned char *)data,n); 
 }
 
-static void _propAtom32(char *prop, char *data){
+static void _propAtom32(Atom prop, char *data){
 	Atom a=XInternAtom(display,data,False);
-	_prop(32,prop,XA_ATOM,&a,1,PropModeAppend);
+	XChangeProperty(display,win,prop,XA_ATOM,32,PropModeAppend,(unsigned char *)&a,1); 
 }
 
 static int inbound(int x,int xin,int x1,int x2){
@@ -243,6 +242,21 @@ static void reset2(){
 	XkbGetState(display,XkbUseCoreKbd,&s);
 	kb_sync_state(kb,s.mods,s.locked_mods,s.group);
 	if (g==s.group) kb_repaint(kb);
+}
+
+static void _move(int x, int y, int width, int height){
+	XSizeHints size_hints = {
+		.flags = PPosition | PMinSize | PMaxSize,
+		.x = x,
+		.y = y,
+		.min_width = width,
+		.max_width = width,
+		.min_height = height,
+		.max_height = height,
+	};
+	XSetNormalHints(display,win,&size_hints);
+	XSetWMNormalHints(display,win,&size_hints);
+	XMoveResizeWindow(display,win,x,y,width,height);
 }
 
 int sig[8] = {};
@@ -281,7 +295,7 @@ static void setSize(int x, int y, int width, int height, int resize){
 			sig[7] = SIG_HIDE;
 		}
 	}
-	if (resized != resize) XMoveResizeWindow(display,win,x,y,width,height);
+	if (resized != resize) _move(x,y,width,height);
 	resized = resize;
 	if (dock & (2|64)) {
 //		for(i=0;i<12;i++) fprintf(stderr," %li",prop[i]);fprintf(stderr," crts=%i\n",crts);
@@ -306,10 +320,6 @@ int main(int argc, char **argv)
 {
    char *window_name = iam;
    char *icon_name = iam;
-
-   XSizeHints size_hints;
-   XWMHints *wm_hints;
-   
 
 //   char *wm_name;
 //   int wm_type = WM_UNKNOWN;
@@ -352,8 +362,9 @@ int main(int argc, char **argv)
 	1=dock, 2=strut, 4=_NET_WM_WINDOW_TYPE_DOCK,\n\
 	8=_NET_WM_WINDOW_TYPE_TOOLBAR, 16=_NET_WM_STATE_STICKY,\n\
 	32=resize (slock), 64=strut horizontal, 128=_NET_WM_STATE_SKIP_TASKBAR,\n\
-	256=_NET_WM_STATE_ABOVE + RaiseWindow(), 512=_NET_WM_DESKTOP=0xffffffff.\n\
-	For OpenBox I use 946 = $[2+16+32+128+256+512}," },
+	256=_NET_WM_STATE_ABOVE + RaiseWindow(), 512=_NET_WM_DESKTOP=0xffffffff,\n\
+	1024=_NET_WM_STATE_SKIP_PAGER.\n\
+	For OpenBox I use 1974 = $[2+4+16+32+128+256+512+1024]," },
 	{ 'i', IAM ".fake_touch", 2, 0, &fake_touch,"event type bitmask: "
 #ifdef USE_XI
 		"1=Xkb vs. XI2,\n\
@@ -558,13 +569,6 @@ re_crts:
 	}
 #endif
 
-      Atom wm_protocols[]={
-	 XInternAtom(display, "WM_DELETE_WINDOW",False),
-	 XInternAtom(display, "WM_PROTOCOLS",False),
-	 XInternAtom(display, "WM_NORMAL_HINTS", False),
-      };
-
-    mwm_atom = XInternAtom(display, "_MOTIF_WM_HINTS",False);
 
       /* HACK to get libvirtkeys to work without mode_switch */
 	/* ??? 2delete? */
@@ -648,6 +652,11 @@ re_crts:
       win = XCreateSimpleWindow(display, rootWin, x, y, w, h,
 	0, WhitePixel(display, screen), BlackPixel(display, screen));
 
+      XSetStandardProperties(display, win, window_name,
+			     icon_name, None,
+			     argv, argc, None);
+
+
 #ifdef USE_XR
       if (xrr) {
 	XRRSelectInput(display, win, RRScreenChangeNotifyMask);
@@ -667,30 +676,52 @@ re_crts:
 	if (!left && k>=X1 && k<=X2) x = k;
         k = y + h - j;
 	if (!top && k>=Y1 && k<=Y2) y = k;
-	XMoveResizeWindow(display,win,x,y,width=i,height=j);
+	width=i;
+	height=j;
       }
+	_move(x,y,width,height); // +hints
 //      if (cache_pix) kb_repaint(kb); // reduce blinking on start
 
-      size_hints.flags = PPosition | PSize | PMinSize;
-      size_hints.x = 0;
-      size_hints.y = 0;
-      size_hints.width      =  width;
-      size_hints.height     =  height;
-      size_hints.min_width  =  width;
-      size_hints.min_height =  height;
-      XSetStandardProperties(display, win, window_name,
-			     icon_name, None,
-			     argv, argc, &size_hints);
-      wm_hints = XAllocWMHints();
-      wm_hints->input = False;
-      wm_hints->flags = InputHint;
-      if (dock & 1) {
-	wm_hints->flags |= IconWindowHint | WindowGroupHint | StateHint;
-	wm_hints->initial_state = WithdrawnState;
-	wm_hints->icon_window = wm_hints->window_group = win;
+      Atom atype = XInternAtom(display,"_NET_WM_WINDOW_TYPE",False);
+      Atom astate = XInternAtom(display,"_NET_WM_STATE",False);
+
+      if(dock & 4)
+	_propAtom32(atype,"_NET_WM_WINDOW_TYPE_DOCK");
+      if (dock & 8)
+	_propAtom32(atype,"_NET_WM_WINDOW_TYPE_TOOLBAR");
+      if (dock & 16)
+	_propAtom32(astate,"_NET_WM_STATE_STICKY");
+      if (dock & 128)
+	_propAtom32(astate,"_NET_WM_STATE_SKIP_TASKBAR");
+      if (dock & 256)
+	_propAtom32(astate,"_NET_WM_STATE_ABOVE");
+//      _propAtom32(astate,"_NET_WM_STATE_FOCUSED");
+//      Atom version = 4;
+//      __prop(32,"XdndAware",XA_ATOM,&version,1);
+      if (dock&512) {
+	CARD32 dsks = 0xffffffff;
+	_prop(32,"_NET_WM_DESKTOP",XA_CARDINAL,&dsks,1,PropModeReplace);
       }
-      XSetWMHints(display, win, wm_hints);
-      XFree(wm_hints);
+      if (dock&1024)
+	_propAtom32(astate,"_NET_WM_STATE_SKIP_PAGER");
+
+      Atom mwm_atom = XInternAtom(display, "_MOTIF_WM_HINTS",False);
+      XChangeProperty(display,win, mwm_atom, mwm_atom,32,PropModeReplace,(unsigned char *)&prop,5);
+      prop[0] = 0;
+
+      static XWMHints wm_hints = { .input = False, .flags = InputHint };
+      if (dock & 1) {
+	wm_hints.flags |= IconWindowHint | WindowGroupHint | StateHint;
+	wm_hints.initial_state = WithdrawnState;
+	wm_hints.icon_window = wm_hints.window_group = win;
+      }
+      XSetWMHints(display, win, &wm_hints);
+
+      Atom wm_protocols[]={
+	XInternAtom(display, "WM_DELETE_WINDOW",False),
+	XInternAtom(display, "WM_PROTOCOLS",False),
+	XInternAtom(display, "WM_NORMAL_HINTS", False),
+      };
       XSetWMProtocols(display, win, wm_protocols, sizeof(wm_protocols) /
 		      sizeof(Atom));
 
@@ -737,29 +768,6 @@ re_crts:
       evmask|=ButtonPressMask|ButtonReleaseMask|((fake_touch&4)?0:ButtonMotionMask);
 
       XSelectInput(display, win, evmask);
-
-      XChangeProperty(display,win, mwm_atom, mwm_atom,32,PropModeReplace,(unsigned char *)&prop,5);
-      prop[0] = 0;
-      if(dock & 4)
-	_propAtom32("_NET_WM_WINDOW_TYPE","_NET_WM_WINDOW_TYPE_DOCK");
-      if (dock & 8)
-	_propAtom32("_NET_WM_WINDOW_TYPE","_NET_WM_WINDOW_TYPE_TOOLBAR");
-      if (dock & 16)
-	_propAtom32("_NET_WM_STATE","_NET_WM_STATE_STICKY");
-      if (dock & 128)
-	_propAtom32("_NET_WM_STATE","_NET_WM_STATE_SKIP_TASKBAR");
-      if (dock & 256)
-	_propAtom32("_NET_WM_STATE","_NET_WM_STATE_ABOVE");
-//      _propAtom32("_NET_WM_STATE","_NET_WM_STATE_FOCUSED");
-//      Atom version = 4;
-//      _prop(32,"XdndAware",XA_ATOM,&version,1);
-      if (dock&512) {
-	CARD32 dsks = 0xffffffff;
-	_prop(32,"_NET_WM_DESKTOP",XA_CARDINAL,&dsks,1,PropModeReplace);
-      }
-
-
-
 
       if (embed) {
 	 fprintf(stdout, "%li\n", win);
