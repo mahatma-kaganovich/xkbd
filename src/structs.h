@@ -225,6 +225,8 @@ typedef struct _keyboard
   int def_height;
   int kp_width;
 
+  int X,Y; // root
+
 } keyboard;
 
 typedef struct _button

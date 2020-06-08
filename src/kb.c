@@ -1483,10 +1483,10 @@ gesture:
 		if (type != 2) return NULL;
 #endif
 		int bx = 99, by = 99, xx = x - to->x, yy = y - to->y;
-		if (xx<0) {xx=-xx;bx = 6;}
-		else if (xx>0) bx = 7;
-		if (yy<0) {yy=-yy;by = 4;}
-		else if (yy>0) by = 5;
+		if (xx<0) {xx=-xx;bx = 7;}
+		else if (xx>0) bx = 6;
+		if (yy<0) {yy=-yy;by = 5;}
+		else if (yy>0) by = 4;
 		if (xx<yy) bx = by;
 		else if (xx==yy) bx = 99;
 		if (to->gesture > 1 && to->gesture != bx) bx = 99;
@@ -1503,6 +1503,8 @@ gesture:
 #endif
 		if (bx > 1 && bx != 99) {
 			Display *dpy = kb->display;
+			// pointers may be different, but fake event - main
+			XTestFakeMotionEvent(dpy,kb->screen,kb->X+x,kb->Y+y,0);
 			XTestFakeButtonEvent(dpy,bx,1,0);
 			XTestFakeButtonEvent(dpy,bx,0,0);
 			XFlush(dpy);

@@ -276,15 +276,15 @@ static void setSize(int x, int y, int width, int height, int resize){
 			prop[2] = y + height; // +Y1
 			prop[8] = x;
 			prop[9] = x + width - 1;
-			sig[4] = SIG_HIDE;
-			sig[5] = SIG_SHOW;
+			sig[5] = SIG_HIDE;
+			sig[4] = SIG_SHOW;
 		} else {
 			if (resize) y = y + height - resize;
 			prop[3] = Y2 - y + 1;
 			prop[10] = x;
 			prop[11] = x + width - 1;
-			sig[4] = SIG_SHOW;
-			sig[5] = SIG_HIDE;
+			sig[5] = SIG_SHOW;
+			sig[4] = SIG_HIDE;
 		}
 	}
 	if (dock & 64) {
@@ -293,15 +293,15 @@ static void setSize(int x, int y, int width, int height, int resize){
 			prop[0] = x + width; // +X1
 			prop[4] = y;
 			prop[5] = y + height - 1;
-			sig[6] = SIG_HIDE;
-			sig[7] = SIG_SHOW;
+			sig[7] = SIG_HIDE;
+			sig[6] = SIG_SHOW;
 		} else {
 			if (resize) y = y + width - resize;
 			prop[1] = X2 - x + 1;
 			prop[6] = y;
 			prop[7] = y + height - 1;
-			sig[6] = SIG_SHOW;
-			sig[7] = SIG_HIDE;
+			sig[7] = SIG_SHOW;
+			sig[6] = SIG_HIDE;
 		}
 	}
 	if (resized != resize) _move(x,y,width,height);
@@ -315,6 +315,10 @@ static void setSize(int x, int y, int width, int height, int resize){
 		//8: top_start_x, top_end_x, bottom_start_x, bottom_end_x
 		_propCard32(aStrutPartial,&prop,12);
 	}
+	kb->X = kb->Y = 0;
+	Window win1;
+	XFlush(display);
+	XTranslateCoordinates(display,win,rootWin,0,0,&kb->X,&kb->Y,&win1);
 }
 
 int x=0, y=0, width=0, height=0;
