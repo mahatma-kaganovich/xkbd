@@ -1463,7 +1463,7 @@ drop:
 		if (!to->n || b == b1) goto drop2;
 		to->gesture = 1;
 gesture:
-		if (to->gesture == 99) goto drop2;
+		// keep "bad gesture" touch tracked to end
 		if (type != 2) return NULL;
 		if (to->n != swipe_fingers) goto drop2;
 		nt = 0;
