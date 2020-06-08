@@ -1463,8 +1463,9 @@ drop:
 		if (!to->n || b == b1) goto drop2;
 		to->gesture = 1;
 gesture:
-		if (to->gesture == 99) goto drop2;
+		if (to->gesture == 99 || to->n > swipe_fingers) goto drop2;
 		if (type != 2) return NULL;
+		if (to->n != swipe_fingers) goto drop2;
 		nt = 0;
 		n = 0;
 		for (i=P; i!=N; TOUCH_INC(i)) {
@@ -1478,7 +1479,7 @@ gesture:
 		if (mask || b == b1 || !swipe_fingers) goto drop2;
 		to->gesture = 1;
 gesture:
-		if (to->gesture == 99 || to->n != swipe_fingers) goto drop2;
+		if (to->gesture == 99) goto drop2;
 		if (type != 2) return NULL;
 #endif
 		int bx = 99, by = 99, xx = x - to->x, yy = y - to->y;
