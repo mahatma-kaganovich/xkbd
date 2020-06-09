@@ -856,12 +856,12 @@ re_crts:
 #ifndef GESTURES_USE
 		{
 #else
-		switch (e->detail) {
+		switch (ev.xbutton.button) {
 		    case 7: //XkbLockModifiers(display,XkbUseCoreKbd,STATE(KBIT_CAPS),kb->state ^ STATE(KBIT_CAPS));break;
 		    case 6: //XkbLockGroup(display,XkbUseCoreKbd,kb->group+1); break;
 		    case 5:
 		    case 4:
-			_hide(sig[e->detail]);
+			_hide(sig[ev.xbutton.button]);
 			break;
 		    default: if (!resized)
 #endif
