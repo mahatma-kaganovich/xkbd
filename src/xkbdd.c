@@ -1,5 +1,5 @@
 /*
-	xkbdd v1.10 - per-window keyboard layout switcher [+ XSS suspend].
+	xkbdd v1.11 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -26,8 +26,8 @@
 
 	Touchscreen extensions (-DXTG):
 	Auto hide/show mouse cursor on touchscreen.
-	May be +gestures in future.
-	WARNING: root touch events listener currently run ones per time.
+	Swipe.
+	Experimental.
 
 	(C) 2019-2020 Denis Kaganovich, Anarchy license
 */
@@ -50,7 +50,12 @@
 #ifdef XTG
 //#include <X11/extensions/XInput.h>
 #include <X11/extensions/XInput2.h>
+
+#include <X11/extensions/XTest.h>
+#include <signal.h>
+#include <stdlib.h>
 //#include <string.h>
+#define GESTURES
 #endif
 
 #define NO_GRP 99
@@ -75,9 +80,30 @@ unsigned char *ret;
 int xiopcode, xierror;
 #define MASK_LEN XIMaskLen(XI_LASTEVENT)
 typedef unsigned char xiMask[MASK_LEN];
-xiMask ximaskButton = {}, ximaskTouch = {};
-XIEventMask ximask = { .deviceid = XIAllDevices, .mask_len = MASK_LEN, };
+xiMask ximaskButton = {}, ximaskTouch = {}, ximaskBoth = {}, ximask0 = {};
+XIEventMask ximask = { .deviceid = XIAllDevices, .mask_len = MASK_LEN };
 #endif
+
+#ifdef GESTURES
+#define TOUCH_SHIFT 5
+#define TOUCH_MAX (1<<TOUCH_SHIFT)
+#define TOUCH_MASK (TOUCH_MAX-1)
+#define TOUCH_INC(x) (x=(x+1)&TOUCH_MASK)
+#define TOUCH_DEC(x) (x=(x+TOUCH_MASK)&TOUCH_MASK)
+typedef struct _Touch {
+	int touchid,deviceid,cnt;
+	Time time;
+	unsigned short n,g;
+	double x,y;
+	double tail;
+} Touch;
+Touch touch[TOUCH_MAX];
+unsigned short P=0,N=0;
+unsigned int XY = 2; // XY > 1 - min x/y or y/x
+double res = 15; // default resolution/increment = standard wheel
+unsigned short min_fingers = 1, max_fingers = 2;
+#endif
+
 
 static void opendpy() {
 	int reason_rtrn, xkbmjr = XkbMajorVersion, xkbmnr = XkbMinorVersion;
@@ -173,11 +199,16 @@ static void WMState(Atom *states, short nn){
 #endif
 
 #ifdef XTG
-short showPtr = 1, oldShowPtr = 1, oldShowEv=0;
+int xtestPtr, xtestKbd;
+short showPtr = 1, oldShowPtr = 1, oldShowEv=0, tdevs = 0, tdevs2=0, oldtdevs = 1;
 static inline void setShowCursor(){
 	if (showPtr != oldShowEv) {
 		oldShowEv = showPtr;
-		ximask.mask = (void*)(showPtr?&ximaskTouch:&ximaskButton);
+		ximask.mask = (void*) (
+			tdevs2 ? showPtr?&ximaskTouch:&ximaskBoth
+			: tdevs ? showPtr?&ximaskTouch:&ximaskButton
+			: &ximask0
+		);
 		XISelectEvents(dpy, wa.root, &ximask, 1);
 	}
 #undef e
@@ -192,6 +223,121 @@ static inline void setShowCursor(){
 //	}
 	}
 }
+
+static void getHierarchy(int st){
+	static XIAttachSlaveInfo ca = {.type=XIAttachSlave};
+	static XIDetachSlaveInfo cf = {.type=XIDetachSlave};
+	int i,j,ndevs2,nrel,nkbd;
+	XIDeviceInfo *info2 = XIQueryDevice(dpy, XIAllDevices, &ndevs2);
+
+	ca.new_master = 0;
+	xtestPtr = xtestKbd = 0;
+	tdevs2 = tdevs = 0;
+	for (i=0; i<ndevs2; i++) {
+		XIDeviceInfo *d2 = &info2[i];
+		void *c = NULL;
+		short t = 0, rel = 0, abs = 0, scroll = 0;
+		switch (d2->use) {
+		    case XIMasterPointer:
+			if (!ca.new_master) ca.new_master = d2->deviceid;
+		    case XIMasterKeyboard:
+			continue;
+		    case XISlavePointer:
+			if (!xtestPtr
+//			    && !strcmp(d2->name,"Virtual core XTEST pointer")
+			    ) {
+				xtestPtr = d2->deviceid;
+				continue;
+			}
+			break;
+		    case XISlaveKeyboard:
+			if (!xtestKbd
+//			    && !strcmp(d2->name,"Virtual core XTEST keyboard")
+			    ) {
+				xtestKbd = d2->deviceid;
+				continue;
+			}
+			break;
+
+		}
+		for (j=0; j<d2->num_classes; j++) {
+			XIAnyClassInfo *cl = d2->classes[j];
+			switch (cl->type) {
+#undef e
+#define e ((XITouchClassInfo*)cl)
+			    case XITouchClass:
+				if (e->mode != XIDirectTouch) break;
+				t=1;
+				break;
+#undef e
+#define e ((XIValuatorClassInfo*)cl)
+			    case XIValuatorClass:
+				switch (e->mode) {
+				    case Relative: rel=1; break;
+				    case Absolute: abs=1; break;
+				}
+				break;
+#undef e
+#define e ((XIScrollClassInfo*)cl)
+			    case XIScrollClass:
+				scroll=1;
+				break;
+			}
+		}
+		tdevs|=t;
+		nrel+=rel && !(abs || t);
+		// exclude touchscreen with scrolling
+		t&=!scroll;
+#ifdef GESTURES
+		tdevs2|=t;
+#endif
+		switch (d2->use) {
+		    case XIFloatingSlave:
+			if (!t || st) continue;
+			ca.deviceid = d2->deviceid;
+			c=&ca;
+			break;
+		    case XISlavePointer:
+			if(!t || !st) continue;
+			cf.deviceid = d2->deviceid;
+			c=&cf;
+			break;
+		    case XISlaveKeyboard:
+			nkbd++;
+		    default:
+			continue;
+		}
+#ifdef GESTURES
+		XIChangeHierarchy(dpy, c, 1);
+#endif
+	}
+	XFlush(dpy);
+	XIFreeDeviceInfo(info2);
+	if (!tdevs || !st) showPtr = 1;
+	static short old = 1;
+	short t = (tdevs2 < 1)|tdevs;
+	if (t != old) {
+		old = t;
+		oldShowEv = 2;
+	}
+}
+
+#ifdef GESTURES
+static void _signals(void *sig) {
+	signal(SIGTERM,sig);
+	signal(SIGINT,sig);
+	signal(SIGABRT,sig);
+	signal(SIGQUIT,sig);
+}
+
+static void sigterm(int sig) {
+	_signals(SIG_DFL);
+	opendpy();
+	if (dpy) getHierarchy(0);
+	exit(1);
+}
+#endif
+
 #endif
 
 static void getWinGrp(){
@@ -230,13 +376,28 @@ static int xerrh(Display *dpy, XErrorEvent *err){
 	switch (err->error_code) {
 	    case BadWindow: win1 = None; break;
 #ifdef XTG
-	    case BadAccess: oldShowEv=2; break; // second XI_Touch* root listener
+	    case BadAccess: // second XI_Touch* root listener
+		oldShowEv=2;
+		ximask.mask = (void*)&ximaskButton;
+		static int x = 0;
+		if (x++) goto old;
+		XISelectEvents(dpy, wa.root, &ximask, 1);
+		if (!oldShowPtr) {
+			oldShowPtr = 1;
+			XFixesShowCursor(dpy, wa.root);
+		}
+		getHierarchy(0);
+		XFlush(dpy);
+		x--;
+		break;
 //	    case BadMatch: oldShowPtr=2; break; // XShowCursor() before XHideCursor()
 #endif
 	    default:
 #ifdef XTG
-//		if (err->error_code==xierror) break; // changes on device list
+		if (err->error_code==xierror) break; // changes on device list
+old:
 #endif
+		
 		oldxerrh(dpy,err);
 	}
 #ifdef XTG
@@ -274,10 +435,23 @@ static void init(){
 	XISetMask(ximaskButton, XI_ButtonPress);
 	XISetMask(ximaskButton, XI_ButtonRelease);
 	XISetMask(ximaskButton, XI_Motion);
+	XISetMask(ximaskButton, XI_HierarchyChanged);
 
 	XISetMask(ximaskTouch, XI_TouchBegin);
 	XISetMask(ximaskTouch, XI_TouchUpdate);
 	XISetMask(ximaskTouch, XI_TouchEnd);
+	XISetMask(ximaskTouch, XI_HierarchyChanged);
+
+	XISetMask(ximaskBoth, XI_ButtonPress);
+	XISetMask(ximaskBoth, XI_ButtonRelease);
+	XISetMask(ximaskBoth, XI_Motion);
+	XISetMask(ximaskBoth, XI_TouchBegin);
+	XISetMask(ximaskBoth, XI_TouchUpdate);
+	XISetMask(ximaskBoth, XI_TouchEnd);
+	XISetMask(ximaskBoth, XI_HierarchyChanged);
+
+	XISetMask(ximask0, XI_HierarchyChanged);
+	
 #endif
 	XSelectInput(dpy, wa.root, evmask);
 	oldxerrh = XSetErrorHandler(xerrh);
@@ -295,31 +469,189 @@ int main(){
 	init();
 	printGrp();
 	getPropWin1();
+#ifdef XTG
+	_signals(sigterm);
+	getHierarchy(1);
+#endif
 //	ev.xcookie.data = NULL;
 	while (1) {
 		do {
 			if (win1 != win) getWinGrp();
 			else if (grp1 != grp) setWinGrp();
 		} while (win1 != win); // error handled
-ev:
 #ifdef XTG
-		// aggressive retry
 		setShowCursor();
 #endif
+ev:
 		XNextEvent(dpy, &ev);
 		switch (ev.type) {
 #ifdef XTG
 		    case GenericEvent:
 			if (ev.xcookie.extension == xiopcode) {
+				if (ev.xcookie.evtype == XI_HierarchyChanged) {
+					getHierarchy(1);
+					continue;
+				}
 				if (!XGetEventData(dpy, &ev.xcookie)) goto ev;
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
+				if (e->sourceid == xtestPtr) goto evfree;
 				static int lastid = 0;
-				if (e->deviceid == e->sourceid && lastid != e->sourceid) {
-					showPtr = (ev.xcookie.evtype < XI_TouchBegin);
-					if (!showPtr) lastid = e->sourceid;
+				if (lastid == e->sourceid) {
+					showPtr = 0;
+					if (e->deviceid != e->sourceid || ev.xcookie.evtype < XI_TouchBegin) goto evfree;
 				}
+				else if (e->deviceid != e->sourceid) goto evfree;
+				else if (ev.xcookie.evtype < XI_TouchBegin) {
+					showPtr = 1;
+					goto evfree;
+				} else {
+					showPtr = 0;
+					lastid = e->sourceid;
+				}
+#ifdef GESTURES
+				Touch *to = NULL;
+				unsigned short nt = 0, i, g0;
+				int j;
+				for(i=P; i!=N; TOUCH_INC(i)){
+					Touch *t1 = &touch[i];
+					if (t1->touchid != e->detail || t1->deviceid != e->deviceid) continue;
+					to = t1;
+					break;
+				}
+				if (ev.xcookie.evtype == XI_TouchBegin) {
+					if (to) goto evfree;
+					g0 = 0;
+					if (N!=P && touch[P].g == 99) g0 = 99;
+					to = &touch[N];
+					TOUCH_INC(N);
+					if (N==P) TOUCH_INC(P);
+					to->touchid = e->detail;
+					to->deviceid = e->deviceid;
+					to->time = e->time;
+					to->x = e->root_x;
+					to->y = e->root_y;
+					to->n = 0;
+					to->g = g0;
+					to->cnt = 0;
+					to->tail = 0;
+					if (max_fingers) {
+						nt = 1;
+						int n = N;
+						TOUCH_DEC(n);
+						for (i=P; i!=n; TOUCH_INC(i)) {
+							Touch *t1 = &touch[i];
+							if (t1->deviceid != to->deviceid) continue;
+							t1->n++;
+							nt++;
+						}
+					}
+					to->n = nt;
+					//if (nt > max_fingers) goto all99;
+					goto evfree;
+				}
+				if (to->g == 99) goto skip;
+#ifdef ADAPTIVE2
+				Touch *to2=NULL;
+#endif
+				if (to->n != 1) for (i=P; i!=N; TOUCH_INC(i)) {
+					Touch *t1 = &touch[i];
+					if (t1->deviceid != to->deviceid) continue;
+					if (t1->n != to->n) goto all99;
+#ifdef ADAPTIVE2
+					if (t1 != to) to2 = t1;
+#endif
+				}
+
+				int bx = 0, by = 0;
+				double xx = e->root_x - to->x, yy = e->root_y - to->y;
+#ifdef ADAPTIVE2
+				double x2=0,y2=0;
+				if (to2 && to->n == 2) {
+					// 2-fingers swipe will be new resolution
+					x2 = to2->x - to->x;
+					y2 = to2->y - to->y;
+				}
+#endif
+				if (xx<0) {xx = -xx; bx = 7;}
+				else if (xx>0) bx = 6;
+				if (yy<0) {yy = -yy; by = 5;}
+				else if (yy>0) by = 4;
+				if (xx<yy) {
+					double s = xx;
+					xx = yy;
+					yy = s;
+					bx = by;
+#ifdef ADAPTIVE2
+					y2 = x2;
+#endif
+				}
+#ifdef ADAPTIVE2
+				if (y2!=0 && (y2=y2/10)!=0) res = y2<0 ? -y2 : y2;
+#endif
+				if (!bx) goto _bx;
+				if(!bx);
+				else if (xx < res) bx = 0;
+				else {
+//					fprintf(stderr,"%.2f/%.2f/%lu/%f/%f  ",xx,res,(e->time - to->time),to->tail,y2);
+					if (xx/(yy?:1) < XY) bx = 0;
+				}
+				if (!bx) {
+_bx:
+					if (ev.xcookie.evtype != XI_TouchEnd) goto skip;
+					if (to->n > 1) goto skip;
+					if (to->g) goto skip;
+					bx = 1;
+				}
+
+				to->g = bx;
+				if (to->n != 1) for (i=P; i!=N; TOUCH_INC(i)) {
+					Touch *t1 = &touch[i];
+					if (t1->deviceid != to->deviceid) continue;
+					if (t1->g != bx) goto skip;
+				}
+
+				switch (bx) {
+				    case 1: break;
+				    default:
+					if (to->n < min_fingers) goto skip;
+					if (to->n <= max_fingers) {
+#ifndef ADAPTIVE2
+//						bx += (to->n - min_fingers) << 2;
+#endif
+						break;
+					}
+all99:
+					for (i=P; i!=N; TOUCH_INC(i)) {
+						Touch *t1 = &touch[i];
+						if (t1->deviceid != to->deviceid) continue;
+						t1->g = 99;
+					}
+					goto skip;
+				}
+				XTestFakeMotionEvent(dpy,screen,to->x+.5,to->y+.5,0);
+				XTestFakeButtonEvent(dpy,bx,1,0);
+				XTestFakeMotionEvent(dpy,screen,e->root_x+.5,e->root_y+.5,0);
+				XTestFakeButtonEvent(dpy,bx,0,0);
+				for (xx-=res;xx>=res;xx-=res) {
+					XTestFakeButtonEvent(dpy,bx,1,0);
+					XTestFakeButtonEvent(dpy,bx,0,0);
+				}
+//				XFlush(dpy);
+				to->time = e->time;
+				to->x = e->root_x;
+				to->y = e->root_y;
+				to->tail = xx;
+skip:
+				if (ev.xcookie.evtype == XI_TouchEnd) {
+					TOUCH_DEC(N);
+					Touch *t1 = &touch[N];
+					if (to != t1) *to = *t1;
+				}
+#endif
+evfree:
 				XFreeEventData(dpy, &ev.xcookie);
+				if (showPtr != oldShowPtr) continue;
 			}
 			goto ev;
 #endif

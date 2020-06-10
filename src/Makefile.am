@@ -15,7 +15,7 @@ xkbdd_xss_CPPFLAGS = -DNO_ALL -DXSS
 xkbdd_xss_LDADD = -lX11 -lXss
 
 xkbdd_xtg_SOURCES = xkbdd.c
-xkbdd_xtg_LDADD = -lX11 -lXss -lXi -lXfixes
+xkbdd_xtg_LDADD = -lX11 -lXss -lXi -lXfixes -lXtst
 
 xssevent_LDADD = -lX11 -lXss
 xkbswitch_LDADD = -lX11
