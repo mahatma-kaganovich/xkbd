@@ -589,19 +589,16 @@ ev:
 #ifdef ADAPTIVE2
 				if (y2!=0 && (y2=y2/10)!=0) res = y2<0 ? -y2 : y2;
 #endif
-				if (!bx) goto _bx;
-				if(!bx);
-				else if (xx < res) bx = 0;
-				else {
-//					fprintf(stderr,"%.2f/%.2f/%lu/%f/%f  ",xx,res,(e->time - to->time),to->tail,y2);
-					if (xx/(yy?:1) < XY) bx = 0;
-				}
-				if (!bx) {
+				if (!bx
+				    || xx < res
+				    || xx/(yy?:1) < XY
+					) {
 _bx:
 					if (ev.xcookie.evtype != XI_TouchEnd) goto skip;
 					if (to->n > 1) goto skip;
 					if (to->g) goto skip;
 					bx = 1;
+					xx = -1;
 				}
 
 				to->g = bx;
