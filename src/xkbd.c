@@ -836,17 +836,22 @@ re_crts:
 					active_but = kb_handle_events(kb, type, ex, ey, e->detail, e->sourceid, e->time,e->buttons.mask,e->buttons.mask_len);
 				}
 				break;
-			    case XI_TouchEnd: type++;
-			    case XI_TouchUpdate: type++;
+			    case XI_TouchUpdate:
+				if (!(e->flags & XITouchPendingEnd)) {
+					active_but = kb_handle_events(kb, 1, ex, ey, e->detail, lastid = e->sourceid, e->time, NULL, 0);
+					break;
+				}
+			    case XI_TouchEnd:
+				active_but = kb_handle_events(kb, 2, ex, ey, e->detail, lastid = e->sourceid, e->time, NULL, 0);
+				break;
 			    case XI_TouchBegin:
-				if (e->flags & XITouchPendingEnd) type = 2;
 #ifdef GESTURES_USE
 				if (resized) {
-					if (!type) _hide(SIG_SHOW);
+					_hide(SIG_SHOW);
 					break;
 				}
 #endif
-				active_but = kb_handle_events(kb, type, ex, ey, e->detail, lastid = e->sourceid, e->time, NULL, 0);
+				active_but = kb_handle_events(kb, 0, ex, ey, e->detail, lastid = e->sourceid, e->time, NULL, 0);
 			}
 			XFreeEventData(display, &ev.xcookie);
 		}

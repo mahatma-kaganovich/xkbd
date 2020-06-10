@@ -91,7 +91,7 @@ XIEventMask ximask = { .deviceid = XIAllDevices, .mask_len = MASK_LEN };
 #define TOUCH_INC(x) (x=(x+1)&TOUCH_MASK)
 #define TOUCH_DEC(x) (x=(x+TOUCH_MASK)&TOUCH_MASK)
 typedef struct _Touch {
-	int touchid,deviceid,cnt;
+	int touchid,deviceid;
 	Time time;
 	unsigned short n,g;
 	double x,y;
@@ -533,7 +533,6 @@ ev:
 					to->y = e->root_y;
 					to->n = 0;
 					to->g = g0;
-					to->cnt = 0;
 					to->tail = 0;
 					if (max_fingers) {
 						nt = 1;
@@ -551,7 +550,6 @@ ev:
 					goto evfree;
 				}
 				if (to->g == 99) goto skip;
-				if (e->flags & XITouchPendingEnd) goto drop;
 #ifdef ADAPTIVE2
 				Touch *to2=NULL;
 #endif
@@ -642,9 +640,8 @@ all99:
 				to->tail = xx;
 skip:
 				if (ev.xcookie.evtype != XI_TouchEnd
-//					&& !(e->flags & XITouchPendingEnd)
+					&& !(e->flags & XITouchPendingEnd)
 					) goto evfree;
-drop:
 				TOUCH_DEC(N);
 				Touch *t1 = &touch[N];
 				if (to != t1) *to = *t1;
