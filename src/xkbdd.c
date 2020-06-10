@@ -551,6 +551,7 @@ ev:
 					goto evfree;
 				}
 				if (to->g == 99) goto skip;
+				if (e->flags & XITouchPendingEnd) goto drop;
 #ifdef ADAPTIVE2
 				Touch *to2=NULL;
 #endif
@@ -640,11 +641,13 @@ all99:
 				to->y = e->root_y;
 				to->tail = xx;
 skip:
-				if (ev.xcookie.evtype == XI_TouchEnd) {
-					TOUCH_DEC(N);
-					Touch *t1 = &touch[N];
-					if (to != t1) *to = *t1;
-				}
+				if (ev.xcookie.evtype != XI_TouchEnd
+//					&& !(e->flags & XITouchPendingEnd)
+					) goto evfree;
+drop:
+				TOUCH_DEC(N);
+				Touch *t1 = &touch[N];
+				if (to != t1) *to = *t1;
 #endif
 evfree:
 				XFreeEventData(dpy, &ev.xcookie);

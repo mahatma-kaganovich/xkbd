@@ -839,6 +839,7 @@ re_crts:
 			    case XI_TouchEnd: type++;
 			    case XI_TouchUpdate: type++;
 			    case XI_TouchBegin:
+				if (e->flags & XITouchPendingEnd) type = 2;
 #ifdef GESTURES_USE
 				if (resized) {
 					if (!type) _hide(SIG_SHOW);
