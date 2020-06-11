@@ -80,8 +80,8 @@ unsigned char *ret;
 int xiopcode, xierror;
 #define MASK_LEN XIMaskLen(XI_LASTEVENT)
 typedef unsigned char xiMask[MASK_LEN];
-xiMask ximaskButton = {}, ximaskTouch = {}, ximaskBoth = {}, ximask0 = {};
-XIEventMask ximask = { .deviceid = XIAllDevices, .mask_len = MASK_LEN };
+xiMask ximaskButton = {}, ximaskTouch = {}, ximask0 = {};
+XIEventMask ximask = { .deviceid = XIAllDevices, .mask_len = MASK_LEN, .mask = (void*)&ximask0 };
 #endif
 
 #ifdef GESTURES
@@ -201,29 +201,6 @@ static void WMState(Atom *states, short nn){
 #ifdef XTG
 int xtestPtr, xtestKbd;
 short showPtr = 1, oldShowPtr = 1, oldShowEv=0, tdevs = 0, tdevs2=0, oldtdevs = 1;
-static inline void setShowCursor(){
-	if (showPtr != oldShowEv) {
-		oldShowEv = showPtr;
-		ximask.mask = (void*) (
-			tdevs2 ? showPtr?&ximaskTouch:&ximaskBoth
-			: tdevs ? showPtr?&ximaskTouch:&ximaskButton
-			: &ximask0
-		);
-		XISelectEvents(dpy, wa.root, &ximask, 1);
-	}
-#undef e
-#define e ((XIDeviceEvent*)ev.xcookie.data)
-	if (showPtr != oldShowPtr) {
-		oldShowPtr = showPtr;
-	// "Hide" must be first!
-//	if (e) {
-//		XWarpPointer(dpy, None, wa.root, 0, 0, 0, 0, e->root_x+0.5, e->root_y+0.5);
-		if (showPtr) XFixesShowCursor(dpy, wa.root);
-		else XFixesHideCursor(dpy, wa.root);
-//	}
-	}
-}
-
 static void getHierarchy(int st){
 	static XIAttachSlaveInfo ca = {.type=XIAttachSlave};
 	static XIDetachSlaveInfo cf = {.type=XIDetachSlave};
@@ -293,12 +270,18 @@ static void getHierarchy(int st){
 #endif
 		switch (d2->use) {
 		    case XIFloatingSlave:
-			if (!t || st) continue;
+			if (!t) continue;
+			if (st) {
+				ximask.deviceid = d2->deviceid;
+				ximask.mask = (void*)&ximaskTouch;
+				XISelectEvents(dpy, wa.root, &ximask, 1);
+				continue;
+			}
 			ca.deviceid = d2->deviceid;
 			c=&ca;
 			break;
 		    case XISlavePointer:
-			if(!t || !st) continue;
+			if (!t) continue;
 			cf.deviceid = d2->deviceid;
 			c=&cf;
 			break;
@@ -318,9 +301,38 @@ static void getHierarchy(int st){
 	short t = (tdevs2 < 1)|tdevs;
 	if (t != old) {
 		old = t;
-		oldShowEv = 2;
+		oldShowPtr = 2;
 	}
 }
+
+static inline void setShowCursor(){
+	if (showPtr != oldShowEv) {
+		if (oldShowEv == 2) {
+			getHierarchy(1);
+			if (showPtr == oldShowPtr) return;
+		}
+		oldShowEv = showPtr;
+		ximask.deviceid = XIAllMasterDevices;
+		ximask.mask = (void*) (
+			tdevs ? showPtr?&ximask0:&ximaskButton
+			: &ximask0
+		);
+		XISelectEvents(dpy, wa.root, &ximask, 1);
+	}
+#undef e
+#define e ((XIDeviceEvent*)ev.xcookie.data)
+	if (showPtr != oldShowPtr) {
+		oldShowPtr = showPtr;
+	// "Hide" must be first!
+//	if (e) {
+//		XWarpPointer(dpy, None, wa.root, 0, 0, 0, 0, e->root_x+0.5, e->root_y+0.5);
+		if (showPtr) XFixesShowCursor(dpy, wa.root);
+		else XFixesHideCursor(dpy, wa.root);
+//	}
+	}
+}
+
+
 
 #ifdef GESTURES
 static void _signals(void *sig) {
@@ -435,23 +447,14 @@ static void init(){
 	XISetMask(ximaskButton, XI_ButtonPress);
 	XISetMask(ximaskButton, XI_ButtonRelease);
 	XISetMask(ximaskButton, XI_Motion);
-	XISetMask(ximaskButton, XI_HierarchyChanged);
 
 	XISetMask(ximaskTouch, XI_TouchBegin);
 	XISetMask(ximaskTouch, XI_TouchUpdate);
 	XISetMask(ximaskTouch, XI_TouchEnd);
-	XISetMask(ximaskTouch, XI_HierarchyChanged);
-
-	XISetMask(ximaskBoth, XI_ButtonPress);
-	XISetMask(ximaskBoth, XI_ButtonRelease);
-	XISetMask(ximaskBoth, XI_Motion);
-	XISetMask(ximaskBoth, XI_TouchBegin);
-	XISetMask(ximaskBoth, XI_TouchUpdate);
-	XISetMask(ximaskBoth, XI_TouchEnd);
-	XISetMask(ximaskBoth, XI_HierarchyChanged);
 
 	XISetMask(ximask0, XI_HierarchyChanged);
-	
+	XISelectEvents(dpy, wa.root, &ximask, 1);
+	XIClearMask(ximask0, XI_HierarchyChanged);
 #endif
 	XSelectInput(dpy, wa.root, evmask);
 	oldxerrh = XSetErrorHandler(xerrh);
@@ -495,20 +498,12 @@ ev:
 				if (!XGetEventData(dpy, &ev.xcookie)) goto ev;
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
-				if (e->sourceid == xtestPtr) goto evfree;
-				static int lastid = 0;
-				if (lastid == e->sourceid) {
-					showPtr = 0;
-					if (e->deviceid != e->sourceid || ev.xcookie.evtype < XI_TouchBegin) goto evfree;
-				}
-				else if (e->deviceid != e->sourceid) goto evfree;
-				else if (ev.xcookie.evtype < XI_TouchBegin) {
+				if (ev.xcookie.evtype < XI_TouchBegin) {
+					if (e->sourceid == xtestPtr) goto evfree;
 					showPtr = 1;
-					goto evfree;
-				} else {
-					showPtr = 0;
-					lastid = e->sourceid;
+					continue;
 				}
+				showPtr = 0;
 #ifdef GESTURES
 				Touch *to = NULL;
 				unsigned short nt = 0, i, g0;
