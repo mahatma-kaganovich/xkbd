@@ -1,5 +1,5 @@
 /*
-	xkbdd v1.11 - per-window keyboard layout switcher [+ XSS suspend].
+	xkbdd v1.12 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -200,7 +200,7 @@ static void WMState(Atom *states, short nn){
 
 #ifdef XTG
 int xtestPtr, xtestKbd;
-short showPtr = 1, oldShowPtr = 1, oldShowEv=0, tdevs = 0, tdevs2=0, oldtdevs = 1;
+short showPtr = 1, oldShowPtr = 3, tdevs = 0, tdevs2=0;
 static void getHierarchy(int st){
 	static XIAttachSlaveInfo ca = {.type=XIAttachSlave};
 	static XIDetachSlaveInfo cf = {.type=XIDetachSlave};
@@ -261,17 +261,16 @@ static void getHierarchy(int st){
 				break;
 			}
 		}
-		tdevs|=t;
+		tdevs+=t;
 		nrel+=rel && !(abs || t);
 		// exclude touchscreen with scrolling
-		t&=!scroll;
 #ifdef GESTURES
-		tdevs2|=t;
-#endif
+		t&=!scroll;
 		switch (d2->use) {
 		    case XIFloatingSlave:
 			if (!t) continue;
 			if (st) {
+				tdevs2++;
 				ximask.deviceid = d2->deviceid;
 				ximask.mask = (void*)&ximaskTouch;
 				XISelectEvents(dpy, wa.root, &ximask, 1);
@@ -290,49 +289,44 @@ static void getHierarchy(int st){
 		    default:
 			continue;
 		}
-#ifdef GESTURES
 		XIChangeHierarchy(dpy, c, 1);
-#endif
 	}
-	XFlush(dpy);
 	XIFreeDeviceInfo(info2);
-	if (!tdevs || !st) showPtr = 1;
-	static short old = 1;
-	short t = (tdevs2 < 1)|tdevs;
-	if (t != old) {
-		old = t;
-		oldShowPtr = 2;
+	XFlush(dpy);
+	tdevs -= tdevs2;
+#else
+	XIFreeDeviceInfo(info2);
 	}
+#endif
 }
 
 static inline void setShowCursor(){
-	if (showPtr != oldShowEv) {
-		if (oldShowEv == 2) {
-			getHierarchy(1);
-			if (showPtr == oldShowPtr) return;
-		}
-		oldShowEv = showPtr;
-		ximask.deviceid = XIAllMasterDevices;
-		ximask.mask = (void*) (
-			tdevs ? showPtr?&ximask0:&ximaskButton
-			: &ximask0
-		);
-		XISelectEvents(dpy, wa.root, &ximask, 1);
+	if (oldShowPtr & 2) {
+		oldShowPtr ^= 2;
+		getHierarchy(1);
 	}
+	if (!((showPtr ^ oldShowPtr) & 1)) return;
+	oldShowPtr ^= 1;
+	ximask.deviceid = XIAllMasterDevices;
+	ximask.mask = (void*) (tdevs ?
+		showPtr? &ximaskTouch:&ximaskButton :
+		tdevs2? showPtr? &ximask0:&ximaskButton :
+		&ximask0);
+	XISelectEvents(dpy, wa.root, &ximask, 1);
+	XFlush(dpy);
+	if ((oldShowPtr & 2) && !showPtr) return;
+#if 0
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
-	if (showPtr != oldShowPtr) {
-		oldShowPtr = showPtr;
+	if (e) XWarpPointer(dpy, None, wa.root, 0, 0, 0, 0, e->root_x+0.5, e->root_y+0.5);
+#endif
 	// "Hide" must be first!
-//	if (e) {
-//		XWarpPointer(dpy, None, wa.root, 0, 0, 0, 0, e->root_x+0.5, e->root_y+0.5);
-		if (showPtr) XFixesShowCursor(dpy, wa.root);
-		else XFixesHideCursor(dpy, wa.root);
-//	}
-	}
+	static short _show = 1;
+	if (showPtr == _show) return;
+	_show = showPtr;
+	if (showPtr) XFixesShowCursor(dpy, wa.root);
+	else XFixesHideCursor(dpy, wa.root);
 }
-
-
 
 #ifdef GESTURES
 static void _signals(void *sig) {
@@ -389,20 +383,10 @@ static int xerrh(Display *dpy, XErrorEvent *err){
 	    case BadWindow: win1 = None; break;
 #ifdef XTG
 	    case BadAccess: // second XI_Touch* root listener
-		oldShowEv=2;
-		ximask.mask = (void*)&ximaskButton;
-		static int x = 0;
-		if (x++) goto old;
-		XISelectEvents(dpy, wa.root, &ximask, 1);
-		if (!oldShowPtr) {
-			oldShowPtr = 1;
-			XFixesShowCursor(dpy, wa.root);
-		}
-		getHierarchy(0);
-		XFlush(dpy);
-		x--;
+		oldShowPtr |= 2;
+		showPtr = 1;
 		break;
-//	    case BadMatch: oldShowPtr=2; break; // XShowCursor() before XHideCursor()
+//	    case BadMatch: break; // XShowCursor() before XHideCursor()
 #endif
 	    default:
 #ifdef XTG
@@ -455,6 +439,8 @@ static void init(){
 	XISetMask(ximask0, XI_HierarchyChanged);
 	XISelectEvents(dpy, wa.root, &ximask, 1);
 	XIClearMask(ximask0, XI_HierarchyChanged);
+	_signals(sigterm);
+//	ev.xcookie.data = NULL;
 #endif
 	XSelectInput(dpy, wa.root, evmask);
 	oldxerrh = XSetErrorHandler(xerrh);
@@ -472,18 +458,13 @@ int main(){
 	init();
 	printGrp();
 	getPropWin1();
-#ifdef XTG
-	_signals(sigterm);
-	getHierarchy(1);
-#endif
-//	ev.xcookie.data = NULL;
 	while (1) {
 		do {
 			if (win1 != win) getWinGrp();
 			else if (grp1 != grp) setWinGrp();
 		} while (win1 != win); // error handled
 #ifdef XTG
-		setShowCursor();
+		if (showPtr != oldShowPtr) setShowCursor();
 #endif
 ev:
 		XNextEvent(dpy, &ev);
@@ -492,7 +473,7 @@ ev:
 		    case GenericEvent:
 			if (ev.xcookie.extension == xiopcode) {
 				if (ev.xcookie.evtype == XI_HierarchyChanged) {
-					getHierarchy(1);
+					oldShowPtr |= 2;
 					continue;
 				}
 				if (!XGetEventData(dpy, &ev.xcookie)) goto ev;
