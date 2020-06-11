@@ -56,6 +56,7 @@
 #define SIG_HIDE SIGUSR2
 #define SIG_SHOW SIGHUP
 
+
 #define IAM "xkbd"
 char *iam = IAM;
 
@@ -69,7 +70,10 @@ char *display_name = NULL;
 CARD32 prop[12] = {2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 int crts=0, X1,Y1,X2,Y2, top=0, left=0;
 unsigned int dock = 1974;
+
+#define UNSIZE 1
 int resized = 0;
+int hide_enabled = 0;
 
 keyboard *kb = NULL;
 button *active_but = NULL;
@@ -80,7 +84,7 @@ int Xkb_sync = 2;
 int no_lock = 0;
 int swipe_fingers = 2;
 #ifdef CACHE_PIX
-int cache_pix = 3;
+int cache_pix = 1;
 #endif
 
 // dpi
@@ -267,19 +271,34 @@ static void _move(int x, int y, int width, int height){
 	XMoveResizeWindow(display,win,x,y,width,height);
 }
 
+static void transCoord(){
+	Window win1;
+	kb->X = kb->Y = 0;
+	XFlush(display);
+	XTranslateCoordinates(display,win,rootWin,0,0,&kb->X,&kb->Y,&win1);
+}
+
 int sig[8] = {};
 Atom aStrut,aStrutPartial;
 static void setSize(int x, int y, int width, int height, int resize){
+	resize*=UNSIZE;
 	if (dock & 2) {
 		if (top) {
-			if (resize) height = resize;
+			if (resize) {
+				y = wa0.y;
+				height = resize;
+			}
 			prop[2] = y + height; // +Y1
 			prop[8] = x;
 			prop[9] = x + width - 1;
 			sig[5] = SIG_HIDE;
 			sig[4] = SIG_SHOW;
 		} else {
-			if (resize) y = y + height - resize;
+			if (resize) {
+				//y = y + height - resize;
+				y = wa0.height - resize;
+				height = resize;
+			}
 			prop[3] = Y2 - y + 1;
 			prop[10] = x;
 			prop[11] = x + width - 1;
@@ -289,14 +308,21 @@ static void setSize(int x, int y, int width, int height, int resize){
 	}
 	if (dock & 64) {
 		if (left) {
-			if (resize) width = resize;
+			if (resize) {
+				x = wa0.x;
+				width = resize;
+			}
 			prop[0] = x + width; // +X1
 			prop[4] = y;
 			prop[5] = y + height - 1;
 			sig[7] = SIG_HIDE;
 			sig[6] = SIG_SHOW;
 		} else {
-			if (resize) y = y + width - resize;
+			if (resize) {
+				//x = x + width - resize;
+				x = wa0.width - resize;
+				width = resize;
+			}
 			prop[1] = X2 - x + 1;
 			prop[6] = y;
 			prop[7] = y + height - 1;
@@ -304,8 +330,6 @@ static void setSize(int x, int y, int width, int height, int resize){
 			sig[6] = SIG_HIDE;
 		}
 	}
-	if (resized != resize) _move(x,y,width,height);
-	resized = resize;
 	if (dock & (2|64)) {
 //		for(i=0;i<12;i++) fprintf(stderr," %li",prop[i]);fprintf(stderr," crts=%i\n",crts);
 		//0: left, right, top, bottom,
@@ -315,15 +339,14 @@ static void setSize(int x, int y, int width, int height, int resize){
 		//8: top_start_x, top_end_x, bottom_start_x, bottom_end_x
 		_propCard32(aStrutPartial,&prop,12);
 	}
-	kb->X = kb->Y = 0;
-	Window win1;
-	XFlush(display);
-	XTranslateCoordinates(display,win,rootWin,0,0,&kb->X,&kb->Y,&win1);
+	if (resized != resize) _move(x,y,width,height);
+	resized = resize;
+	transCoord();
 }
 
 int x=0, y=0, width=0, height=0;
 static void _hide(int sig) {
-	if (sig) {
+	if (sig && hide_enabled) {
 		setSize(x,y,width,height,sig == SIG_HIDE);
 		XFlush(display);
 	}
@@ -376,10 +399,10 @@ int main(int argc, char **argv)
 	8=_NET_WM_WINDOW_TYPE_TOOLBAR, 16=_NET_WM_STATE_STICKY,\n\
 	32=resize (slock), 64=strut horizontal, 128=_NET_WM_STATE_SKIP_TASKBAR,\n\
 	256=_NET_WM_STATE_ABOVE + RaiseWindow(), 512=_NET_WM_DESKTOP=0xffffffff,\n\
-	1024=_NET_WM_STATE_SKIP_PAGER.\n\
+	1024=_NET_WM_STATE_SKIP_PAGER, 2048=pending _NET_WM_WINDOW_TYPE_DOCK.\n\
 		(_NET_WM_WINDOW_TYPE_DOCK is hardwired, but can hide\n\
-		other toolbar/panel)\n\
-	For OpenBox I use 1974 = $[2+4+16+32+128+256+512+1024]," },
+		other toolbar/panel, so use pending hack where possible)\n\
+	For OpenBox I use 4018 = $[2+16+32+128+256+512+1024+2048]," },
 	{ 'i', IAM ".fake_touch", 2, 0, &fake_touch,"event type bitmask: "
 #ifdef USE_XI
 		"1=Xkb vs. XI2,\n\
@@ -393,6 +416,7 @@ int main(int argc, char **argv)
 #ifdef MULTITOUCH
 	", 2=2-fingers"
 #endif
+	"\n	(_NET_WM_WINDOW_TYPE_DOCK required to hide/show)"
 #endif
 	},
 	
@@ -408,7 +432,7 @@ int main(int argc, char **argv)
 #endif
 	},
 #ifdef CACHE_PIX
-	{ 'C', IAM ".cache", 1, 0, &cache_pix, "pixmap cache 0=disable, 1=enable, 2=preload, 3=direct+cache" },
+	{ 'C', IAM ".cache", 1, 0, &cache_pix, "pixmap cache 0=disable, 1=enable, 2=preload, 3=direct+cache\n	(3 is optimal, but sometimes start on black bar)" },
 #endif
 	{ 0, NULL }
    };
@@ -702,6 +726,8 @@ re_crts:
       aStrut = _atom("_NET_WM_STRUT");
       aStrutPartial = _atom("_NET_WM_STRUT_PARTIAL");
 
+	hide_enabled = 1;
+      //hide_enabled = dock & (4|2048);
       if(dock & 4)
 	_propAtom32(atype,"_NET_WM_WINDOW_TYPE_DOCK");
       if (dock & 8)
@@ -901,11 +927,24 @@ re_crts:
 		}
 		break;
 	    case Expose:
+		if (resized) break;
+		if (dock & 2048) {
+			// remap with DOCK.
+			// Let WM apply offsets first to respect other docks/panels
+			dock ^= 2048;
+			XUnmapWindow(display, win);
+			XFlush(display);
+			XDeleteProperty(display,win,_atom("_NET_WM_ALLOWED_ACTIONS"));
+			_propAtom32(atype,"_NET_WM_WINDOW_TYPE_DOCK");
+			XMapWindow(display, win);
+			XFlush(display);
+			continue;
+		}
 		XGetWindowAttributes(display,rootWin,&wa);
 		if (wa0.x!=wa.x || wa0.y!=wa.y || wa0.width!=wa.width || wa0.height!=wa.height) restart();
 		wa0=wa;
-		XTranslateCoordinates(display,win,rootWin,0,0,&x,&y,&win1);
-		setSize(x, y, width, height, resized);
+		transCoord();
+		setSize(x = kb->X, y = kb->Y, width, height, resized);
 		reset2();
 		break;
 	    case VisibilityNotify: if (dock & 32) {
