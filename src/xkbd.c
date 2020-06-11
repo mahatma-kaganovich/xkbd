@@ -377,6 +377,8 @@ int main(int argc, char **argv)
 	32=resize (slock), 64=strut horizontal, 128=_NET_WM_STATE_SKIP_TASKBAR,\n\
 	256=_NET_WM_STATE_ABOVE + RaiseWindow(), 512=_NET_WM_DESKTOP=0xffffffff,\n\
 	1024=_NET_WM_STATE_SKIP_PAGER.\n\
+		(_NET_WM_WINDOW_TYPE_DOCK is hardwired, but can hide\n\
+		other toolbar/panel)\n\
 	For OpenBox I use 1974 = $[2+4+16+32+128+256+512+1024]," },
 	{ 'i', IAM ".fake_touch", 2, 0, &fake_touch,"event type bitmask: "
 #ifdef USE_XI
