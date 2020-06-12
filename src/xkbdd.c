@@ -1,5 +1,5 @@
 /*
-	xkbdd v1.12 - per-window keyboard layout switcher [+ XSS suspend].
+	xkbdd v1.13 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -28,6 +28,7 @@
 	Auto hide/show mouse cursor on touchscreen.
 	Swipe.
 	Experimental.
+	optional: ARGV[1] = device (unknown = disable gestures)
 
 	(C) 2019-2020 Denis Kaganovich, Anarchy license
 */
@@ -54,8 +55,7 @@
 #include <X11/extensions/XTest.h>
 #include <signal.h>
 #include <stdlib.h>
-//#include <string.h>
-#define GESTURES
+#include <string.h>
 #endif
 
 #define NO_GRP 99
@@ -84,7 +84,6 @@ xiMask ximaskButton = {}, ximaskTouch = {}, ximask0 = {};
 XIEventMask ximask = { .deviceid = XIAllDevices, .mask_len = MASK_LEN, .mask = (void*)&ximask0 };
 #endif
 
-#ifdef GESTURES
 #define TOUCH_SHIFT 5
 #define TOUCH_MAX (1<<TOUCH_SHIFT)
 #define TOUCH_MASK (TOUCH_MAX-1)
@@ -102,8 +101,8 @@ unsigned short P=0,N=0;
 unsigned int XY = 2; // XY > 1 - min x/y or y/x
 double res = 15; // default resolution/increment = standard wheel
 unsigned short min_fingers = 1, max_fingers = 2;
-#endif
-
+char *devname = "";
+int devnum = 0;
 
 static void opendpy() {
 	int reason_rtrn, xkbmjr = XkbMajorVersion, xkbmnr = XkbMinorVersion;
@@ -200,7 +199,7 @@ static void WMState(Atom *states, short nn){
 
 #ifdef XTG
 int xtestPtr, xtestKbd;
-short showPtr = 1, oldShowPtr = 3, tdevs = 0, tdevs2=0;
+short showPtr = 1, oldShowPtr = 3, tdevs = 0, tdevs2=0, curShow = 1;
 static void getHierarchy(int st){
 	static XIAttachSlaveInfo ca = {.type=XIAttachSlave};
 	static XIDetachSlaveInfo cf = {.type=XIDetachSlave};
@@ -212,7 +211,6 @@ static void getHierarchy(int st){
 	tdevs2 = tdevs = 0;
 	for (i=0; i<ndevs2; i++) {
 		XIDeviceInfo *d2 = &info2[i];
-		void *c = NULL;
 		short t = 0, rel = 0, abs = 0, scroll = 0;
 		switch (d2->use) {
 		    case XIMasterPointer:
@@ -226,6 +224,7 @@ static void getHierarchy(int st){
 				xtestPtr = d2->deviceid;
 				continue;
 			}
+			if (!strcmp(d2->name,"Virtual core XTEST pointer")) continue;
 			break;
 		    case XISlaveKeyboard:
 			if (!xtestKbd
@@ -234,6 +233,7 @@ static void getHierarchy(int st){
 				xtestKbd = d2->deviceid;
 				continue;
 			}
+			if (!strcmp(d2->name,"Virtual core XTEST keyboard")) continue;
 			break;
 
 		}
@@ -261,59 +261,51 @@ static void getHierarchy(int st){
 				break;
 			}
 		}
+		if (*devname) {
+			if (!strcmp(devname,d2->name) || devnum == d2->deviceid) {
+				scroll = 0;
+				t = 1;
+			} else {
+				scroll = 1;
+				//t = 0;
+			}
+		}
 		tdevs+=t;
 		nrel+=rel && !(abs || t);
 		// exclude touchscreen with scrolling
-#ifdef GESTURES
-		t&=!scroll;
+		void *c = NULL;
+		cf.deviceid = ca.deviceid = ximask.deviceid = d2->deviceid;
+		ximask.mask = NULL;
 		switch (d2->use) {
 		    case XIFloatingSlave:
-			if (!t) continue;
+			if (!t && !scroll) continue;
 			if (st) {
 				tdevs2++;
-				ximask.deviceid = d2->deviceid;
 				ximask.mask = (void*)&ximaskTouch;
-				XISelectEvents(dpy, wa.root, &ximask, 1);
-				continue;
-			}
-			ca.deviceid = d2->deviceid;
-			c=&ca;
+			} else c=&ca;
 			break;
 		    case XISlavePointer:
-			if (!t) continue;
-			cf.deviceid = d2->deviceid;
-			c=&cf;
+			if (!t) ximask.mask = (void*)(showPtr ? &ximask0 : &ximaskButton);
+			else if (!scroll) c=&cf;
+			else ximask.mask = (void*)(showPtr ? &ximaskTouch : &ximask0);
+//			else ximask.mask = (void*)(showPtr ? &ximaskButton : &ximask0);
 			break;
 		    case XISlaveKeyboard:
 			nkbd++;
 		    default:
 			continue;
 		}
-		XIChangeHierarchy(dpy, c, 1);
+		if (c) XIChangeHierarchy(dpy, c, 1);
+		if (ximask.mask) XISelectEvents(dpy, wa.root, &ximask, 1);
 	}
 	XIFreeDeviceInfo(info2);
 	XFlush(dpy);
 	tdevs -= tdevs2;
-#else
-	XIFreeDeviceInfo(info2);
-	}
-#endif
 }
 
 static inline void setShowCursor(){
-	if (oldShowPtr & 2) {
-		oldShowPtr ^= 2;
-		getHierarchy(1);
-	}
-	if (!((showPtr ^ oldShowPtr) & 1)) return;
-	oldShowPtr ^= 1;
-	ximask.deviceid = XIAllMasterDevices;
-	ximask.mask = (void*) (tdevs ?
-		showPtr? &ximaskTouch:&ximaskButton :
-		tdevs2? showPtr? &ximask0:&ximaskButton :
-		&ximask0);
-	XISelectEvents(dpy, wa.root, &ximask, 1);
-	XFlush(dpy);
+	oldShowPtr = showPtr;
+	getHierarchy(1);
 	if ((oldShowPtr & 2) && !showPtr) return;
 #if 0
 #undef e
@@ -321,14 +313,12 @@ static inline void setShowCursor(){
 	if (e) XWarpPointer(dpy, None, wa.root, 0, 0, 0, 0, e->root_x+0.5, e->root_y+0.5);
 #endif
 	// "Hide" must be first!
-	static short _show = 1;
-	if (showPtr == _show) return;
-	_show = showPtr;
+	if (showPtr == curShow) return;
+	curShow = showPtr;
 	if (showPtr) XFixesShowCursor(dpy, wa.root);
 	else XFixesHideCursor(dpy, wa.root);
 }
 
-#ifdef GESTURES
 static void _signals(void *sig) {
 	signal(SIGTERM,sig);
 	signal(SIGINT,sig);
@@ -342,7 +332,6 @@ static void sigterm(int sig) {
 	if (dpy) getHierarchy(0);
 	exit(1);
 }
-#endif
 
 #endif
 
@@ -452,7 +441,10 @@ static void init(){
 	rul2 =NULL;
 	ret = NULL;
 }
-int main(){
+int main(int argc, char **argv){
+#ifdef XTG
+	if (argc > 1) devnum = atoi(devname = argv[1]);
+#endif
 	opendpy();
 	if (!dpy) return 1;
 	init();
@@ -476,16 +468,14 @@ ev:
 					oldShowPtr |= 2;
 					continue;
 				}
-				if (!XGetEventData(dpy, &ev.xcookie)) goto ev;
-#undef e
-#define e ((XIDeviceEvent*)ev.xcookie.data)
 				if (ev.xcookie.evtype < XI_TouchBegin) {
-					if (e->sourceid == xtestPtr) goto evfree;
 					showPtr = 1;
 					continue;
 				}
 				showPtr = 0;
-#ifdef GESTURES
+				if (!tdevs2 || !XGetEventData(dpy, &ev.xcookie)) goto ev;
+#undef e
+#define e ((XIDeviceEvent*)ev.xcookie.data)
 				Touch *to = NULL;
 				unsigned short nt = 0, i, g0;
 				int j;
@@ -621,10 +611,9 @@ skip:
 				TOUCH_DEC(N);
 				Touch *t1 = &touch[N];
 				if (to != t1) *to = *t1;
-#endif
 evfree:
 				XFreeEventData(dpy, &ev.xcookie);
-				if (showPtr != oldShowPtr) continue;
+				if (oldShowPtr) continue;
 			}
 			goto ev;
 #endif
