@@ -236,7 +236,7 @@ static void getHierarchy(int st){
 		    case XIMasterKeyboard:
 			continue;
 		    case XISlavePointer:
-			if (showPtr && ev.xcookie.extension == xiopcode && P != N && touch[N].deviceid == d2->deviceid) TOUCH_DEC(N);
+			if (ev.xcookie.extension == xiopcode && P != N && touch[N].deviceid == d2->deviceid) TOUCH_DEC(N);
 			if (!xtestPtr
 //			    && !strcmp(d2->name,"Virtual core XTEST pointer")
 			    ) {
