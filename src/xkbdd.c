@@ -471,7 +471,7 @@ int main(int argc, char **argv){
 		}
 		return 0;
 	}
-	for (i=0; i<MAX_PAR; i++) pi[i] = pf[i] =  (i<argc-1 || !strcmp(argv[i+1],'-')) ? atof(pa[i] = argv[i+1]) :  pd[i];
+	for (i=0; i<MAX_PAR; i++) pi[i] = pf[i] =  (i<argc-1 && strcmp(argv[i+1],"-")) ? atof(pa[i] = argv[i+1]) :  pd[i];
 #endif
 	opendpy();
 	if (!dpy) return 1;
