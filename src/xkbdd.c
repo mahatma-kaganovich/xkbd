@@ -236,7 +236,7 @@ static void getHierarchy(int st){
 		    case XIMasterKeyboard:
 			continue;
 		    case XISlavePointer:
-			if (ev.xcookie.extension == xiopcode && P != N && touch[N].deviceid == d2->deviceid) TOUCH_DEC(N);
+			if (showPtr && ev.xcookie.extension == xiopcode && P != N && touch[N].deviceid == d2->deviceid) TOUCH_DEC(N);
 			if (!xtestPtr
 //			    && !strcmp(d2->name,"Virtual core XTEST pointer")
 			    ) {
@@ -448,7 +448,6 @@ static void init(){
 	XISelectEvents(dpy, wa.root, &ximask, 1);
 	XIClearMask(ximask0, XI_HierarchyChanged);
 	_signals(sigterm);
-//	ev.xcookie.data = NULL;
 #endif
 	XSelectInput(dpy, wa.root, evmask);
 	oldxerrh = XSetErrorHandler(xerrh);
