@@ -465,13 +465,13 @@ int main(int argc, char **argv){
 #ifdef XTG
 	int i;
 	if (argc == 2 && (!strcmp(argv[1],"-h") || !strcmp(argv[1],"--help"))) {
-		fprintf(stdout,"Usage: %s {parameters}\n",argv[0]);
+		fprintf(stdout,"Usage: %s {parameter|-}\n",argv[0]);
 		for(i=0; i<MAX_PAR; i++) {
 			fprintf(stdout,"%i %2.f %s\n",i,pd[i],ph[i]);
 		}
 		return 0;
 	}
-	for (i=0; i<MAX_PAR; i++) pi[i] = pf[i] = (i<argc-1 ? (atof(pa[i] = argv[i+1]) ? : pd[i]) : pd[i]);
+	for (i=0; i<MAX_PAR; i++) pi[i] = pf[i] =  (i<argc-1 || !strcmp(argv[i+1],'-')) ? atof(pa[i] = argv[i+1]) :  pd[i];
 #endif
 	opendpy();
 	if (!dpy) return 1;
