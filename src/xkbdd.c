@@ -1,5 +1,5 @@
 /*
-	xkbdd v1.13 - per-window keyboard layout switcher [+ XSS suspend].
+	xkbdd v1.14 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -84,6 +84,7 @@ xiMask ximaskButton = {}, ximaskTouch = {}, ximask0 = {};
 XIEventMask ximask = { .deviceid = XIAllDevices, .mask_len = MASK_LEN, .mask = (void*)&ximask0 };
 #endif
 
+#ifdef XTG
 #define TOUCH_SHIFT 5
 #define TOUCH_MAX (1<<TOUCH_SHIFT)
 #define TOUCH_MASK (TOUCH_MAX-1)
@@ -91,18 +92,35 @@ XIEventMask ximask = { .deviceid = XIAllDevices, .mask_len = MASK_LEN, .mask = (
 #define TOUCH_DEC(x) (x=(x+TOUCH_MASK)&TOUCH_MASK)
 typedef struct _Touch {
 	int touchid,deviceid;
-	Time time;
+//	Time time;
 	unsigned short n,g;
 	double x,y;
 	double tail;
 } Touch;
 Touch touch[TOUCH_MAX];
 unsigned short P=0,N=0;
-unsigned int XY = 2; // XY > 1 - min x/y or y/x
-double res = 15; // default resolution/increment = standard wheel
-unsigned short min_fingers = 1, max_fingers = 2;
-char *devname = "";
-int devnum = 0;
+
+#define p_device 0
+#define p_minfingers 1
+#define p_maxfingers 2
+#define p_max7 3
+#define p_xy 4
+#define p_res 5
+#define MAX_PAR 6
+char *pa[MAX_PAR] = {};
+int pi[MAX_PAR];
+double pf[MAX_PAR];
+double pd[MAX_PAR] = { 0, 1, 2, 1, 2, 15 };
+char *ph[MAX_PAR] = {
+	"touch device 0=auto",
+	"min fingers",
+	"max fingers",
+	"only buttons 4-7",
+	"min swipe x/y or y/x",
+	"dot per swipe",
+};
+#define res pf[p_res]
+#endif
 
 static void opendpy() {
 	int reason_rtrn, xkbmjr = XkbMajorVersion, xkbmnr = XkbMinorVersion;
@@ -218,6 +236,7 @@ static void getHierarchy(int st){
 		    case XIMasterKeyboard:
 			continue;
 		    case XISlavePointer:
+			if (ev.xcookie.extension == xiopcode && P != N && touch[N].deviceid == d2->deviceid) TOUCH_DEC(N);
 			if (!xtestPtr
 //			    && !strcmp(d2->name,"Virtual core XTEST pointer")
 			    ) {
@@ -261,8 +280,8 @@ static void getHierarchy(int st){
 				break;
 			}
 		}
-		if (*devname) {
-			if (!strcmp(devname,d2->name) || devnum == d2->deviceid) {
+		if (pa[p_device] && *pa[p_device]) {
+			if (!strcmp(pa[p_device],d2->name) || pi[p_device] == d2->deviceid) {
 				scroll = 0;
 				t = 1;
 			} else {
@@ -441,9 +460,18 @@ static void init(){
 	rul2 =NULL;
 	ret = NULL;
 }
+
 int main(int argc, char **argv){
 #ifdef XTG
-	if (argc > 1) devnum = atoi(devname = argv[1]);
+	int i;
+	if (argc == 2 && (!strcmp(argv[1],"-h") || !strcmp(argv[1],"--help"))) {
+		fprintf(stdout,"Usage: %s {parameters}\n",argv[0]);
+		for(i=0; i<MAX_PAR; i++) {
+			fprintf(stdout,"%i %2.f %s\n",i,pd[i],ph[i]);
+		}
+		return 0;
+	}
+	for (i=0; i<MAX_PAR && i<argc-1; i++) pi[i] = pf[i] = atof(pa[i] = argv[i+1]) ? : pd[i];
 #endif
 	opendpy();
 	if (!dpy) return 1;
@@ -494,13 +522,13 @@ ev:
 					if (N==P) TOUCH_INC(P);
 					to->touchid = e->detail;
 					to->deviceid = e->deviceid;
-					to->time = e->time;
+					//to->time = e->time;
 					to->x = e->root_x;
 					to->y = e->root_y;
 					to->n = 0;
 					to->g = g0;
 					to->tail = 0;
-					if (max_fingers) {
+					if (pi[p_maxfingers]) {
 						nt = 1;
 						int n = N;
 						TOUCH_DEC(n);
@@ -512,7 +540,7 @@ ev:
 						}
 					}
 					to->n = nt;
-					//if (nt > max_fingers) goto all99;
+					//if (nt > pi[p_maxfingers]) goto all99;
 					goto evfree;
 				}
 				if (to->g == 99) goto skip;
@@ -527,36 +555,31 @@ ev:
 					if (t1 != to) to2 = t1;
 #endif
 				}
-
 				int bx = 0, by = 0;
 				double xx = e->root_x - to->x, yy = e->root_y - to->y;
-#ifdef ADAPTIVE2
-				double x2=0,y2=0;
-				if (to2 && to->n == 2) {
-					// 2-fingers swipe will be new resolution
-					x2 = to2->x - to->x;
-					y2 = to2->y - to->y;
-				}
-#endif
 				if (xx<0) {xx = -xx; bx = 7;}
 				else if (xx>0) bx = 6;
 				if (yy<0) {yy = -yy; by = 5;}
 				else if (yy>0) by = 4;
+#ifdef ADAPTIVE2
+#undef res
+				double res = pf[p_res];
+				if (pi[p_max7]>1 && to2 && to->n == 2) {
+					double r = (xx<yy) ? to2->x - to->x : to2->y->to2->y;
+					r = r < 0: -r : r;
+					r /= 10;
+					res = r;
+				}
+#endif
 				if (xx<yy) {
 					double s = xx;
 					xx = yy;
 					yy = s;
 					bx = by;
-#ifdef ADAPTIVE2
-					y2 = x2;
-#endif
 				}
-#ifdef ADAPTIVE2
-				if (y2!=0 && (y2=y2/10)!=0) res = y2<0 ? -y2 : y2;
-#endif
-				if (!bx
-				    || xx < res
-				    || xx/(yy?:1) < XY
+				if (!bx ||
+				    xx < res
+				    || xx/(yy?:1) < pf[p_xy]
 					) {
 _bx:
 					if (ev.xcookie.evtype != XI_TouchEnd) goto skip;
@@ -576,11 +599,10 @@ _bx:
 				switch (bx) {
 				    case 1: break;
 				    default:
-					if (to->n < min_fingers) goto skip;
-					if (to->n <= max_fingers) {
-#ifndef ADAPTIVE2
-//						bx += (to->n - min_fingers) << 2;
-#endif
+					if (to->n < pi[p_minfingers]) goto skip;
+					if (to->n <= pi[p_maxfingers]) {
+						if (!pi[p_max7])
+							bx += (to->n - pi[p_minfingers]) << 2;
 						break;
 					}
 all99:
@@ -593,14 +615,14 @@ all99:
 				}
 				XTestFakeMotionEvent(dpy,screen,to->x+.5,to->y+.5,0);
 				XTestFakeButtonEvent(dpy,bx,1,0);
+				for (xx-=pf[p_res];xx>=pf[p_res];xx-=pf[p_res]) {
+					XTestFakeButtonEvent(dpy,bx,0,0);
+					XTestFakeButtonEvent(dpy,bx,1,0);
+				}
 				XTestFakeMotionEvent(dpy,screen,e->root_x+.5,e->root_y+.5,0);
 				XTestFakeButtonEvent(dpy,bx,0,0);
-				for (xx-=res;xx>=res;xx-=res) {
-					XTestFakeButtonEvent(dpy,bx,1,0);
-					XTestFakeButtonEvent(dpy,bx,0,0);
-				}
 //				XFlush(dpy);
-				to->time = e->time;
+				//to->time = e->time;
 				to->x = e->root_x;
 				to->y = e->root_y;
 				to->tail = xx;
