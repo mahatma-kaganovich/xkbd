@@ -604,7 +604,7 @@ _bx:
 					if (t1->deviceid != to->deviceid) continue;
 					if (t1->g != bx) goto skip;
 				}
-				g = pi[p_max7] ? bx : bx + (to->n - pi[p_minfingers]) << 2;
+				g = pi[p_max7] ? bx : bx + ((to->n - pi[p_minfingers]) << 2);
 gest:
 				XTestFakeMotionEvent(dpy,screen,to->x+.5,to->y+.5,0);
 				XTestFakeButtonEvent(dpy,g,1,0);
