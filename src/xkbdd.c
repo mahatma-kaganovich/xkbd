@@ -109,8 +109,7 @@ unsigned short P=0,N=0;
 #define MAX_PAR 6
 char *pa[MAX_PAR] = {};
 int pi[MAX_PAR];
-double pf[MAX_PAR];
-double pd[MAX_PAR] = { 0, 1, 2, 1, 2, 15 };
+double pf[MAX_PAR] = { 0, 1, 2, 1, 2, 15 };
 char *ph[MAX_PAR] = {
 	"touch device 0=auto",
 	"min fingers",
@@ -120,6 +119,7 @@ char *ph[MAX_PAR] = {
 	"dot per swipe",
 };
 #define res pf[p_res]
+#define MAX_BUTTON 255
 #endif
 
 static void opendpy() {
@@ -466,11 +466,13 @@ int main(int argc, char **argv){
 	if (argc == 2 && (!strcmp(argv[1],"-h") || !strcmp(argv[1],"--help"))) {
 		fprintf(stdout,"Usage: %s {parameter|-}\n",argv[0]);
 		for(i=0; i<MAX_PAR; i++) {
-			fprintf(stdout,"%i %2.f %s\n",i,pd[i],ph[i]);
+			fprintf(stdout,"%i %2.f %s\n",i,pf[i],ph[i]);
 		}
+		fprintf(stdout,"%i+ 1+ buttons map\n",i);
 		return 0;
 	}
-	for (i=0; i<MAX_PAR; i++) pi[i] = pf[i] =  (i<argc-1 && strcmp(argv[i+1],"-")) ? atof(pa[i] = argv[i+1]) :  pd[i];
+	argc--;
+	for (i=0; i<MAX_PAR; i++) pi[i] = pf[i] =  (i<argc && strcmp(*(++argv),"-")) ? atof(pa[i] = *argv) :  pf[i];
 #endif
 	opendpy();
 	if (!dpy) return 1;
@@ -504,7 +506,7 @@ ev:
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
 				Touch *to = NULL;
-				unsigned short nt = 0, i, g0;
+				unsigned short i, g = 0;
 				int j;
 				for(i=P; i!=N; TOUCH_INC(i)){
 					Touch *t1 = &touch[i];
@@ -514,46 +516,42 @@ ev:
 				}
 				if (ev.xcookie.evtype == XI_TouchBegin) {
 					if (to) goto evfree;
-					g0 = 0;
-					if (N!=P && touch[P].g == 99) g0 = 99;
+					g = 0;
+					if (N!=P && touch[P].g == MAX_BUTTON) g = MAX_BUTTON;
 					to = &touch[N];
 					TOUCH_INC(N);
 					if (N==P) TOUCH_INC(P);
 					to->touchid = e->detail;
 					to->deviceid = e->deviceid;
+
+					to->g = g;
+					if (g) goto evfree;
+
 					//to->time = e->time;
 					to->x = e->root_x;
 					to->y = e->root_y;
-					to->n = 0;
-					to->g = g0;
 					to->tail = 0;
-					if (pi[p_maxfingers]) {
-						nt = 1;
-						int n = N;
-						TOUCH_DEC(n);
-						for (i=P; i!=n; TOUCH_INC(i)) {
-							Touch *t1 = &touch[i];
-							if (t1->deviceid != to->deviceid) continue;
-							t1->n++;
-							nt++;
-						}
+					unsigned short nt;
+					to->n = nt = (N+TOUCH_MAX-P)&TOUCH_MASK;
+					if (nt == 1) goto evfree;
+					if (pi[p_maxfingers] && nt > pi[p_maxfingers]) goto invalidate;
+					unsigned short n = N;
+					TOUCH_DEC(n);
+					for (i=P; i!=n; TOUCH_INC(i)) {
+						Touch *t1 = &touch[i];
+						if (t1->deviceid != to->deviceid) continue;
+						if (++t1->n != nt) goto invalidate;
 					}
-					to->n = nt;
-					//if (nt > pi[p_maxfingers]) goto all99;
+					goto evfree;
+invalidate:
+					for (i=P; i!=N; TOUCH_INC(i)) {
+						Touch *t1 = &touch[i];
+						if (t1->deviceid != to->deviceid) continue;
+						t1->g = MAX_BUTTON;
+					}
 					goto evfree;
 				}
-				if (to->g == 99) goto skip;
-#ifdef ADAPTIVE2
-				Touch *to2=NULL;
-#endif
-				if (to->n != 1) for (i=P; i!=N; TOUCH_INC(i)) {
-					Touch *t1 = &touch[i];
-					if (t1->deviceid != to->deviceid) continue;
-					if (t1->n != to->n) goto all99;
-#ifdef ADAPTIVE2
-					if (t1 != to) to2 = t1;
-#endif
-				}
+				if (to->g == MAX_BUTTON) goto skip;
 				int bx = 0, by = 0;
 				double xx = e->root_x - to->x, yy = e->root_y - to->y;
 				if (xx<0) {xx = -xx; bx = 7;}
@@ -563,11 +561,19 @@ ev:
 #ifdef ADAPTIVE2
 #undef res
 				double res = pf[p_res];
-				if (pi[p_max7]>1 && to2 && to->n == 2) {
-					double r = (xx<yy) ? to2->x - to->x : to2->y->to2->y;
-					r = r < 0: -r : r;
-					r /= 10;
-					res = r;
+				if (to->n == 2 && pi[p_max7]>1) {
+					for (i=P; i!=N; TOUCH_INC(i)) {
+						Touch *t1 = &touch[i];
+						if (t1->deviceid != to->deviceid) continue;
+						if (t1 != to) {
+							to2 = t1;
+							double r = (xx<yy) ? to2->x - to->x : to2->y->to2->y;
+							r = r < 0: -r : r;
+							r /= 10;
+							res = r;
+							break;
+						}
+					}
 				}
 #endif
 				if (xx<yy) {
@@ -586,40 +592,28 @@ _bx:
 					if (to->g) goto skip;
 					bx = 1;
 					xx = -1;
+					g = bx;
+					goto gest;
 				}
 
+				if (to->g == bx && g) goto gest;
 				to->g = bx;
-				if (to->n != 1) for (i=P; i!=N; TOUCH_INC(i)) {
+				if (to->n != 1)
+				    for (i=P; i!=N; TOUCH_INC(i)) {
 					Touch *t1 = &touch[i];
 					if (t1->deviceid != to->deviceid) continue;
 					if (t1->g != bx) goto skip;
 				}
-
-				switch (bx) {
-				    case 1: break;
-				    default:
-					if (to->n < pi[p_minfingers]) goto skip;
-					if (to->n <= pi[p_maxfingers]) {
-						if (!pi[p_max7])
-							bx += (to->n - pi[p_minfingers]) << 2;
-						break;
-					}
-all99:
-					for (i=P; i!=N; TOUCH_INC(i)) {
-						Touch *t1 = &touch[i];
-						if (t1->deviceid != to->deviceid) continue;
-						t1->g = 99;
-					}
-					goto skip;
-				}
+				g = pi[p_max7] ? bx : bx + (to->n - pi[p_minfingers]) << 2;
+gest:
 				XTestFakeMotionEvent(dpy,screen,to->x+.5,to->y+.5,0);
-				XTestFakeButtonEvent(dpy,bx,1,0);
+				XTestFakeButtonEvent(dpy,g,1,0);
 				for (xx-=pf[p_res];xx>=pf[p_res];xx-=pf[p_res]) {
-					XTestFakeButtonEvent(dpy,bx,0,0);
-					XTestFakeButtonEvent(dpy,bx,1,0);
+					XTestFakeButtonEvent(dpy,g,0,0);
+					XTestFakeButtonEvent(dpy,g,1,0);
 				}
 				XTestFakeMotionEvent(dpy,screen,e->root_x+.5,e->root_y+.5,0);
-				XTestFakeButtonEvent(dpy,bx,0,0);
+				XTestFakeButtonEvent(dpy,g,0,0);
 //				XFlush(dpy);
 				//to->time = e->time;
 				to->x = e->root_x;
@@ -635,6 +629,17 @@ skip:
 evfree:
 				XFreeEventData(dpy, &ev.xcookie);
 				if (oldShowPtr) continue;
+
+/*
+				goto ev;
+invalidate2:			// optimization clone
+				for (i=P; i!=N; TOUCH_INC(i)) {
+					Touch *t1 = &touch[i];
+					if (t1->deviceid != to->deviceid) continue;
+					t1->g = MAX_BUTTON;
+				}
+				goto skip;
+*/
 			}
 			goto ev;
 #endif
