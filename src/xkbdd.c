@@ -1,5 +1,5 @@
 /*
-	xkbdd v1.14 - per-window keyboard layout switcher [+ XSS suspend].
+	xkbdd v1.15 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -26,7 +26,7 @@
 
 	Touchscreen extensions (-DXTG):
 	Auto hide/show mouse cursor on touchscreen.
-	Swipe.
+	Gestures (swipe).
 	Experimental.
 	optional: ARGV[1] = device (unknown = disable gestures)
 
@@ -35,6 +35,7 @@
 #ifndef NO_ALL
 #define XSS
 #define XTG
+//#define TOUCH_ORDER
 #endif
 
 #include <stdio.h>
@@ -88,22 +89,32 @@ XIEventMask ximask = { .deviceid = XIAllDevices, .mask_len = MASK_LEN, .mask = (
 #define TOUCH_SHIFT 5
 #define TOUCH_MAX (1<<TOUCH_SHIFT)
 #define TOUCH_MASK (TOUCH_MAX-1)
-#define TOUCH_INC(x) (x=(x+1)&TOUCH_MASK)
-#define TOUCH_DEC(x) (x=(x+TOUCH_MASK)&TOUCH_MASK)
+#define TOUCH_N(x) (((x)+1)&TOUCH_MASK)
+#define TOUCH_P(x) (((x)+TOUCH_MASK)&TOUCH_MASK)
+#define TOUCH_CNT ((N+TOUCH_MAX-P)&TOUCH_MASK)
 typedef struct _Touch {
 	int touchid,deviceid;
 //	Time time;
-	unsigned short n,g;
+	unsigned short n,g,g1;
 	double x,y;
 	double tail;
 } Touch;
 Touch touch[TOUCH_MAX];
 unsigned short P=0,N=0;
 
+unsigned int bmap_size;
+unsigned char *bmap;
+
+// normal gestures dont use >8 fingers, but if... continue this tree
+//typedef struct _TouchChain {
+//	void *gg[8];
+//	unsigned short g;
+//} TouchChain;
+
 #define p_device 0
 #define p_minfingers 1
 #define p_maxfingers 2
-#define p_max7 3
+#define p_map 3
 #define p_xy 4
 #define p_res 5
 #define MAX_PAR 6
@@ -114,7 +125,7 @@ char *ph[MAX_PAR] = {
 	"touch device 0=auto",
 	"min fingers",
 	"max fingers",
-	"only buttons 4-7",
+	"use translation map (0=no, 1=preinit, 2=zero)",
 	"min swipe x/y or y/x",
 	"dot per swipe",
 };
@@ -236,7 +247,7 @@ static void getHierarchy(int st){
 		    case XIMasterKeyboard:
 			continue;
 		    case XISlavePointer:
-			if (ev.xcookie.extension == xiopcode && P != N && touch[N].deviceid == d2->deviceid) TOUCH_DEC(N);
+			if (ev.xcookie.extension == xiopcode && P != N && touch[N].deviceid == d2->deviceid) N=TOUCH_P(N);
 			if (!xtestPtr
 //			    && !strcmp(d2->name,"Virtual core XTEST pointer")
 			    ) {
@@ -468,11 +479,44 @@ int main(int argc, char **argv){
 		for(i=0; i<MAX_PAR; i++) {
 			fprintf(stdout,"%i %2.f %s\n",i,pf[i],ph[i]);
 		}
-		fprintf(stdout,"%i+ 1+ buttons map\n",i);
+		fprintf(stdout,"%i+ buttons map in form value:button, where value is octal combination\n",i);
+		fprintf(stdout,"default equal: %s - - - - - - 01:1 02:2 03:3 04:4 05:5 06:6 07:7 044:4 055:5 066:6 077:7\n",argv[0]);
 		return 0;
 	}
 	argc--;
 	for (i=0; i<MAX_PAR; i++) pi[i] = pf[i] =  (i<argc && strcmp(*(++argv),"-")) ? atof(pa[i] = *argv) :  pf[i];
+	if (pi[p_map]) {
+		bmap_size=(1<<(pi[p_maxfingers])*3);
+		if (pi[p_maxfingers]>8) {
+			fprintf(stderr,"Error: allocating map for mode=%i max fingers=%i>8 disabled as it is crazy & need %uM RAM\n",pi[p_map],pi[p_maxfingers],bmap_size>>10);
+			return 1;
+		}
+		bmap = calloc(1,bmap_size);
+
+		if (pi[p_map] == 1) {
+			unsigned int i,j,g;
+			for(i=0; i<4; i++) bmap[i] = i;
+			for(; i<8; i++){
+				g = 0;
+				for (j=1; j<pi[p_minfingers]; j++) bmap[g = (g<<3)|i] = i;
+				for (; j<=pi[p_maxfingers]; j++) bmap[g = (g<<3)|i] = i;
+			}
+		//for(i=0; i<bmap_size; i++) if (bmap[i]) fprintf(stderr," 0%o:%i",i,bmap[i]); fprintf(stderr,"\n");
+		}
+
+		argc -= MAX_PAR - 1;
+		while(*(++argv)) {
+			int x=0,y=0;
+			switch (sscanf(*argv,"%i:%i",&x,&y)) {
+			    case 0:
+				fprintf(stderr,"Error: invalid map value '%s'\n",*argv);
+				return 1;
+			    case 1:	y = x;
+			    case 2:
+				bmap[x]=y;
+			}
+		}
+	}
 #endif
 	opendpy();
 	if (!dpy) return 1;
@@ -506,9 +550,9 @@ ev:
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
 				Touch *to = NULL;
-				unsigned short i, g = 0;
-				int j;
-				for(i=P; i!=N; TOUCH_INC(i)){
+				unsigned short i;
+				unsigned int g = 0;
+				for(i=P; i!=N; i=TOUCH_N(i)){
 					Touch *t1 = &touch[i];
 					if (t1->touchid != e->detail || t1->deviceid != e->deviceid) continue;
 					to = t1;
@@ -519,8 +563,8 @@ ev:
 					g = 0;
 					if (N!=P && touch[P].g == MAX_BUTTON) g = MAX_BUTTON;
 					to = &touch[N];
-					TOUCH_INC(N);
-					if (N==P) TOUCH_INC(P);
+					N=TOUCH_N(N);
+					if (N==P) P=TOUCH_N(P);
 					to->touchid = e->detail;
 					to->deviceid = e->deviceid;
 
@@ -531,20 +575,20 @@ ev:
 					to->x = e->root_x;
 					to->y = e->root_y;
 					to->tail = 0;
+					to->g1 = 0;
 					unsigned short nt;
-					to->n = nt = (N+TOUCH_MAX-P)&TOUCH_MASK;
+					to->n = nt = TOUCH_CNT;
 					if (nt == 1) goto evfree;
 					if (pi[p_maxfingers] && nt > pi[p_maxfingers]) goto invalidate;
-					unsigned short n = N;
-					TOUCH_DEC(n);
-					for (i=P; i!=n; TOUCH_INC(i)) {
+					unsigned short n = TOUCH_P(N);
+					for (i=P; i!=n; i=TOUCH_N(i)) {
 						Touch *t1 = &touch[i];
 						if (t1->deviceid != to->deviceid) continue;
 						if (++t1->n != nt) goto invalidate;
 					}
 					goto evfree;
 invalidate:
-					for (i=P; i!=N; TOUCH_INC(i)) {
+					for (i=P; i!=N; i=TOUCH_N(i)) {
 						Touch *t1 = &touch[i];
 						if (t1->deviceid != to->deviceid) continue;
 						t1->g = MAX_BUTTON;
@@ -552,6 +596,9 @@ invalidate:
 					goto evfree;
 				}
 				if (to->g == MAX_BUTTON) goto skip;
+
+				unsigned short n = to->n;
+
 				int bx = 0, by = 0;
 				double xx = e->root_x - to->x, yy = e->root_y - to->y;
 				if (xx<0) {xx = -xx; bx = 7;}
@@ -561,8 +608,8 @@ invalidate:
 #ifdef ADAPTIVE2
 #undef res
 				double res = pf[p_res];
-				if (to->n == 2 && pi[p_max7]>1) {
-					for (i=P; i!=N; TOUCH_INC(i)) {
+				if (n == 2) {
+					for (i=P; i!=N; i=TOUCH_N(i)) {
 						Touch *t1 = &touch[i];
 						if (t1->deviceid != to->deviceid) continue;
 						if (t1 != to) {
@@ -582,29 +629,28 @@ invalidate:
 					yy = s;
 					bx = by;
 				}
-				if (!bx ||
-				    xx < res
-				    || xx/(yy?:1) < pf[p_xy]
-					) {
-_bx:
-					if (ev.xcookie.evtype != XI_TouchEnd) goto skip;
-					if (to->n > 1) goto skip;
-					if (to->g) goto skip;
-					bx = 1;
-					xx = -1;
-					g = bx;
-					goto gest;
-				}
 
-				if (to->g == bx && g) goto gest;
+				if (bx)
+				    if (xx < res || xx/(yy?:1) < pf[p_xy]) bx = 0;
+				if (g && to->g == bx) goto gest;
+				if (bx) to->g1 = bx;
+				else {
+					if (!to->g1 && ev.xcookie.evtype == XI_TouchEnd) {
+						bx = 1;
+						xx = -1;
+					}
+				}
 				to->g = bx;
-				if (to->n != 1)
-				    for (i=P; i!=N; TOUCH_INC(i)) {
+
+				unsigned int x = 0;
+				for (i=P; i!=N; i=TOUCH_N(i)) {
 					Touch *t1 = &touch[i];
 					if (t1->deviceid != to->deviceid) continue;
-					if (t1->g != bx) goto skip;
+					x = (x << 3)|t1->g;
 				}
-				g = pi[p_max7] ? bx : bx + ((to->n - pi[p_minfingers]) << 2);
+				//if (bmap && x > bmap_size) goto skip;
+				g = bmap ? bmap[x] : x;
+				if (!g) goto skip;
 gest:
 				XTestFakeMotionEvent(dpy,screen,to->x+.5,to->y+.5,0);
 				XTestFakeButtonEvent(dpy,g,1,0);
@@ -623,9 +669,16 @@ skip:
 				if (ev.xcookie.evtype != XI_TouchEnd
 					&& !(e->flags & XITouchPendingEnd)
 					) goto evfree;
-				TOUCH_DEC(N);
+				Touch *t2 = &touch[3];
+#ifdef TOUCH_ORDER
+				unsigned short t = (to - &touch[0]);
+				for(i=TOUCH_N(t); i!=N; i=TOUCH_N(t = i)) touch[t] = touch[i];
+				N=TOUCH_P(N);
+#else
+				N=TOUCH_P(N);
 				Touch *t1 = &touch[N];
 				if (to != t1) *to = *t1;
+#endif
 evfree:
 				XFreeEventData(dpy, &ev.xcookie);
 				if (oldShowPtr) continue;
@@ -633,7 +686,7 @@ evfree:
 /*
 				goto ev;
 invalidate2:			// optimization clone
-				for (i=P; i!=N; TOUCH_INC(i)) {
+				for (i=P; i!=N; i=TOUCH_N(i)) {
 					Touch *t1 = &touch[i];
 					if (t1->deviceid != to->deviceid) continue;
 					t1->g = MAX_BUTTON;
