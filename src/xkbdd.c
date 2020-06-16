@@ -1,5 +1,5 @@
 /*
-	xkbdd v1.15 - per-window keyboard layout switcher [+ XSS suspend].
+	xkbdd v1.16 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -57,10 +57,28 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
+#if 0
+#include <sys/time.h>
+Time T;
+unsigned short do_delay = 0;
+static Time ms(){
+	if(!do_delay) return T;
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+//	return (tv.tv_sec * 1000) + (tv.tv_usec / 1000);
+	return (tv.tv_sec << 10) + (tv.tv_usec >> 10);
+
+}
+#define TIME(T,t) (T = (t))
+#endif
 #endif
 
 #define NO_GRP 99
 
+
+#ifndef TIME
+#define TIME(T,t)
+#endif
 
 Display *dpy;
 Window win, win1;
@@ -94,7 +112,7 @@ XIEventMask ximask = { .deviceid = XIAllDevices, .mask_len = MASK_LEN, .mask = (
 #define TOUCH_CNT ((N+TOUCH_MAX-P)&TOUCH_MASK)
 typedef struct _Touch {
 	int touchid,deviceid;
-//	Time time;
+	Time time;
 	unsigned short n,g,g1;
 	double x,y;
 	double tail;
@@ -114,18 +132,19 @@ unsigned char *bmap;
 #define p_device 0
 #define p_minfingers 1
 #define p_maxfingers 2
-#define p_map 3
+#define p_delay 3
 #define p_xy 4
 #define p_res 5
 #define MAX_PAR 6
 char *pa[MAX_PAR] = {};
 int pi[MAX_PAR];
-double pf[MAX_PAR] = { 0, 1, 2, 1, 2, 15 };
+// android: 125ms tap, 500ms long
+double pf[MAX_PAR] = { 0, 1, 2, 500, 2, 15 };
 char *ph[MAX_PAR] = {
 	"touch device 0=auto",
 	"min fingers",
 	"max fingers",
-	"use translation map (0=no, 1=preinit, 2=zero)",
+	"",
 	"min swipe x/y or y/x",
 	"dot per swipe",
 };
@@ -473,48 +492,46 @@ static void init(){
 
 int main(int argc, char **argv){
 #ifdef XTG
-	int i;
-	if (argc == 2 && (!strcmp(argv[1],"-h") || !strcmp(argv[1],"--help"))) {
-		fprintf(stdout,"Usage: %s {parameter|-}\n",argv[0]);
-		for(i=0; i<MAX_PAR; i++) {
-			fprintf(stdout,"%i %2.f %s\n",i,pf[i],ph[i]);
-		}
-		fprintf(stdout,"%i+ buttons map in form value:button, where value is octal combination\n",i);
-		fprintf(stdout,"default equal: %s - - - - - - 01:1 02:2 03:3 04:4 05:5 06:6 07:7 044:4 055:5 066:6 077:7\n",argv[0]);
+	unsigned int i;
+	char **a = argv;
+	argc--;
+	for (i=0; i<MAX_PAR; i++) pi[i] = pf[i] =  (i<argc && strcmp(*(++a),"-")) ? atof(pa[i] = *a) :  pf[i];
+
+	bmap_size=pi[p_maxfingers];
+	bmap_size=1<<(bmap_size*3+1);
+	if (pi[p_maxfingers]>8 || !bmap_size) {
+			fprintf(stderr,"Error: allocating map for %i>8 fingers disabled as crazy & use %uM RAM\n",pi[p_maxfingers],bmap_size>>20);
+			return 1;
+	}
+	bmap = calloc(1,bmap_size);
+
+	for(i=1; i<4; i++) bmap[i|8] = i;
+	for(; i<8; i++){
+		unsigned int j, g = 1;
+		for (j=1; j<pi[p_minfingers]; j++) g = (g<<3)|i;
+		for (; j<=pi[p_maxfingers]; j++) bmap[g = (g<<3)|i] = i;
+	}
+
+	if (argc == 1 && (!strcmp(argv[1],"-h") || !strcmp(argv[1],"--help"))) {
+		printf("Usage: %s {parameter|-}\n",argv[0]);
+		for(i=0; i<MAX_PAR; i++) printf("%i %2.f %s\n",i,pf[i],ph[i]);
+		printf("%i+ map is {<value>:<button>}, <value> is octal combination, starting from 1 (octal 01)\n",i);
+		printf("default equal: %s",argv[0]);
+		for(i=0; i<MAX_PAR; i++) printf(" -");
+		for(i=0; i<bmap_size; i++) if (bmap[i]) printf(" 0%o:%i",i,bmap[i]);
+		printf("\n");
 		return 0;
 	}
-	argc--;
-	for (i=0; i<MAX_PAR; i++) pi[i] = pf[i] =  (i<argc && strcmp(*(++argv),"-")) ? atof(pa[i] = *argv) :  pf[i];
-	if (pi[p_map]) {
-		bmap_size=(1<<(pi[p_maxfingers])*3);
-		if (pi[p_maxfingers]>8) {
-			fprintf(stderr,"Error: allocating map for mode=%i max fingers=%i>8 disabled as it is crazy & need %uM RAM\n",pi[p_map],pi[p_maxfingers],bmap_size>>10);
+
+	while(*(++a)) {
+		int x=0,y=0;
+		switch (sscanf(*a,"%i:%i",&x,&y)) {
+		    case 0:
+			fprintf(stderr,"Error: invalid map value '%s'\n",*a);
 			return 1;
-		}
-		bmap = calloc(1,bmap_size);
-
-		if (pi[p_map] == 1) {
-			unsigned int i,j,g;
-			for(i=0; i<4; i++) bmap[i] = i;
-			for(; i<8; i++){
-				g = 0;
-				for (j=1; j<pi[p_minfingers]; j++) bmap[g = (g<<3)|i] = i;
-				for (; j<=pi[p_maxfingers]; j++) bmap[g = (g<<3)|i] = i;
-			}
-		//for(i=0; i<bmap_size; i++) if (bmap[i]) fprintf(stderr," 0%o:%i",i,bmap[i]); fprintf(stderr,"\n");
-		}
-
-		argc -= MAX_PAR - 1;
-		while(*(++argv)) {
-			int x=0,y=0;
-			switch (sscanf(*argv,"%i:%i",&x,&y)) {
-			    case 0:
-				fprintf(stderr,"Error: invalid map value '%s'\n",*argv);
-				return 1;
-			    case 1:	y = x;
-			    case 2:
-				bmap[x]=y;
-			}
+		    case 1:	y = x;
+		    case 2:
+			bmap[x]=y;
 		}
 	}
 #endif
@@ -538,6 +555,7 @@ ev:
 		    case GenericEvent:
 			if (ev.xcookie.extension == xiopcode) {
 				if (ev.xcookie.evtype == XI_HierarchyChanged) {
+					// time?
 					oldShowPtr |= 2;
 					continue;
 				}
@@ -549,6 +567,7 @@ ev:
 				if (!tdevs2 || !XGetEventData(dpy, &ev.xcookie)) goto ev;
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
+				TIME(T,e->time);
 				Touch *to = NULL;
 				unsigned short i;
 				unsigned int g = 0;
@@ -571,7 +590,7 @@ ev:
 					to->g = g;
 					if (g) goto evfree;
 
-					//to->time = e->time;
+					TIME(to->time,T);
 					to->x = e->root_x;
 					to->y = e->root_y;
 					to->tail = 0;
@@ -598,9 +617,10 @@ invalidate:
 				if (to->g == MAX_BUTTON) goto skip;
 
 				unsigned short n = to->n;
+				double x1 = to->x, y1 = to->y, x2 = e->root_x, y2 = e->root_y;
 
 				int bx = 0, by = 0;
-				double xx = e->root_x - to->x, yy = e->root_y - to->y;
+				double xx = x2 - x1, yy = y2 - y1;
 				if (xx<0) {xx = -xx; bx = 7;}
 				else if (xx>0) bx = 6;
 				if (yy<0) {yy = -yy; by = 5;}
@@ -614,7 +634,7 @@ invalidate:
 						if (t1->deviceid != to->deviceid) continue;
 						if (t1 != to) {
 							to2 = t1;
-							double r = (xx<yy) ? to2->x - to->x : to2->y->to2->y;
+							double r = (xx<yy) ? to2->x - x1 : to2->y->to2->y;
 							r = r < 0: -r : r;
 							r /= 10;
 							res = r;
@@ -634,36 +654,38 @@ invalidate:
 				    if (xx < res || xx/(yy?:1) < pf[p_xy]) bx = 0;
 				if (g && to->g == bx) goto gest;
 				if (bx) to->g1 = bx;
-				else {
-					if (!to->g1 && ev.xcookie.evtype == XI_TouchEnd) {
-						bx = 1;
+				else if (!to->g1) {
+					// todo: timer pseudo-event
+					if (ev.xcookie.evtype == XI_TouchEnd) {
 						xx = -1;
+						bx = 1;
+						//if (T - to->time > pi[p_delay]) bx = 3;
 					}
 				}
 				to->g = bx;
 
-				unsigned int x = 0;
+				unsigned int x = 1;
 				for (i=P; i!=N; i=TOUCH_N(i)) {
 					Touch *t1 = &touch[i];
 					if (t1->deviceid != to->deviceid) continue;
 					x = (x << 3)|t1->g;
 				}
-				//if (bmap && x > bmap_size) goto skip;
-				g = bmap ? bmap[x] : x;
+				//if (x > bmap_size) goto skip;
+				g = bmap[x];
 				if (!g) goto skip;
 gest:
-				XTestFakeMotionEvent(dpy,screen,to->x+.5,to->y+.5,0);
+				XTestFakeMotionEvent(dpy,screen,x1+.5,y1+.5,0);
 				XTestFakeButtonEvent(dpy,g,1,0);
 				for (xx-=pf[p_res];xx>=pf[p_res];xx-=pf[p_res]) {
 					XTestFakeButtonEvent(dpy,g,0,0);
 					XTestFakeButtonEvent(dpy,g,1,0);
 				}
-				XTestFakeMotionEvent(dpy,screen,e->root_x+.5,e->root_y+.5,0);
+				XTestFakeMotionEvent(dpy,screen,x2+.5,y2+.5,0);
 				XTestFakeButtonEvent(dpy,g,0,0);
 //				XFlush(dpy);
-				//to->time = e->time;
-				to->x = e->root_x;
-				to->y = e->root_y;
+				TIME(to->time,T);
+				to->x = x2;
+				to->y = y2;
 				to->tail = xx;
 skip:
 				if (ev.xcookie.evtype != XI_TouchEnd
@@ -700,6 +722,7 @@ invalidate2:			// optimization clone
 #undef e
 #define e (ev.xclient)
 		    case ClientMessage:
+			TIME(T,ms());
 			if (e.message_type == aWMState){
 				if (e.window==win)
 					WMState(&e.data.l[1],e.data.l[0]);
@@ -709,6 +732,7 @@ invalidate2:			// optimization clone
 #undef e
 #define e (ev.xproperty)
 		    case PropertyNotify:
+			TIME(T,e.time);
 			//fprintf(stderr,"Prop %s\n",XGetAtomName(dpy,e.atom));
 			//if (e.window!=wa.root) break;
 			if (e.atom==aActWin) {
@@ -728,6 +752,7 @@ invalidate2:			// optimization clone
 #undef e
 #define e ((XkbEvent)ev)
 			if (ev.type == xkbEventType) {
+				TIME(T,e.any.time);
 				switch (e.any.xkb_type) {
 #undef e
 #define e (((XkbEvent)ev).state)
