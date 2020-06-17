@@ -100,7 +100,7 @@ Time T;
 #define TOUCH_CNT ((N+TOUCH_MAX-P)&TOUCH_MASK)
 typedef struct _Touch {
 	int touchid,deviceid;
-	Time time, time0;
+	Time time;
 	unsigned short n,g,g1;
 	double x,y;
 	double tail;
@@ -109,8 +109,30 @@ Touch touch[TOUCH_MAX];
 unsigned short P=0,N=0;
 unsigned short st = 0;
 
+#define MAX_BUTTON 255
+//#define MAX_BUTTON 15
+#define BAD_BUTTON MAX_BUTTON
 unsigned int bmap_size;
 unsigned char *bmap;
+
+#if MAX_BUTTON < 16
+
+#define BMAP(i) ((bmap[(i)>>1]>>(((i)&1)<<2))&15)
+static inline void SET_BMAP(unsigned int i, unsigned int x){
+	int i1 = (i&1)<<2;
+	i>>=1;
+	bmap[i] &= 15 << (4-i1);
+	bmap[i] |= x << i1;
+}
+#define BMAP_SIZE (bmap_size>>1)
+
+#else
+
+#define BMAP(i) bmap[i]
+#define SET_BMAP(i,x) bmap[i]=x;
+#define BMAP_SIZE bmap_size
+
+#endif
 
 // normal gestures dont use >8 fingers, but if... continue this tree
 //typedef struct _TouchChain {
@@ -126,9 +148,10 @@ unsigned char *bmap;
 #define p_res 5
 #define MAX_PAR 6
 char *pa[MAX_PAR] = {};
-int pi[MAX_PAR];
 // android: 125ms tap, 500ms long
-double pf[MAX_PAR] = { 0, 1, 2, 1000, 2, 15 };
+#define PAR_DEFS { 0, 1, 2, 1000, 2, 15 }
+int pi[MAX_PAR] = PAR_DEFS;
+double pf[MAX_PAR] = PAR_DEFS;
 char *ph[MAX_PAR] = {
 	"touch device 0=auto",
 	"min fingers",
@@ -139,7 +162,6 @@ char *ph[MAX_PAR] = {
 };
 char pc[] = "d:m:M:t:x:r:h";
 #define res pf[p_res]
-#define MAX_BUTTON 255
 #else
 #define TIME(T,t)
 #endif
@@ -406,21 +428,26 @@ static void initmap(){
 	bmap_size=pi[p_maxfingers];
 	bmap_size=1<<(bmap_size*3+1);
 	if (pi[p_maxfingers]>8 || !bmap_size) {
-			fprintf(stderr,"Error: allocating map for %i>8 fingers disabled as crazy & use %uM RAM\n",pi[p_maxfingers],bmap_size>>20);
+			fprintf(stderr,"Error: allocating map for %i>8 fingers disabled as crazy & use %uM RAM\n",pi[p_maxfingers],BMAP_SIZE>>20);
 			exit(1);
 	}
-	bmap = calloc(1,bmap_size);
-	for(i=1; i<4; i++) bmap[i|8] = i;
+	bmap = calloc(1,BMAP_SIZE);
+	for(i=1; i<4; i++) {
+		SET_BMAP(i|8,i);
+		if (pi[p_maxfingers] < 2) continue;
+		SET_BMAP((i<<3)|BUTTON_DND,i);
+		SET_BMAP((BUTTON_DND<<3)|i,i);
+	}
 	for(; i<8; i++){
 		unsigned int j, g = 1;
 		for (j=1; j<=pi[p_maxfingers]; j++) {
 			g = (g<<3)|i;
 			if (j<pi[p_minfingers]) continue;
-			bmap[g] = i;
-			unsigned int g1 = BUTTON_DND, g2 = 7, k;
+			SET_BMAP(g,i);
 			if (j==1) continue;
+			unsigned int g1 = BUTTON_DND, g2 = 7, k;
 			for (k=0; k<j; k++) {
-				bmap[(g & ~g2)|g1] = i;
+				SET_BMAP((g & ~g2)|g1,i);
 				g1 <<= 3;
 				g2 <<= 3;
 			}
@@ -538,39 +565,35 @@ static void init(){
 int main(int argc, char **argv){
 #ifdef XTG
 	unsigned int i;
-
-	for (i=0; i<MAX_PAR; i++) pi[i] = pf[i];
 	int opt;
+
 	while((opt=getopt(argc, argv, pc))>=0){
-		for (i=0; i<MAX_PAR; i++) if (pc[i<<1] == opt) {
-			pi[i] = pf[i] = optarg ? atof(pa[i] = optarg) : pf[i];
-			break;
-		}
-		if (opt == 'h') {
+		for (i=0; i<MAX_PAR && pc[i<<1] != opt; i++);
+		if (i>=MAX_PAR) {
 			printf("Usage: %s {<option>} {<value>:<button>}\n",argv[0]);
 			for(i=0; i<MAX_PAR; i++) printf("	-%c %2.f %s\n",pc[i<<1],pf[i],ph[i]);
-			printf("<value> is octal combination, starting from 1 (octal 01)\n",i);
-			printf("\ndefault map:");
+			printf("<value> is octal combination, starting from 1 (octal 01)\n"
+				"<button> 0..%i\n"
+				"\ndefault map:",MAX_BUTTON);
 			initmap();
-			for(i=0; i<bmap_size; i++) if (bmap[i]) printf(" 0%o:%i",i,bmap[i]);
+			for(i=0; i<bmap_size; i++) if (BMAP(i)) printf(" 0%o:%i",i,BMAP(i));
 			printf("\n\nRoute 'hold' button 3 to 'd-n-d' button 2: 013:2\n");
 			return 0;
 		}
+		pi[i] = pf[i] = optarg ? atof(pa[i] = optarg) : pf[i];
 	}
 	initmap();
 
-	char **a = argv + optind;
-	while(*a) {
-		int x=0,y=0;
-		switch (sscanf(*a,"%i:%i",&x,&y)) {
-		    case 0:
-			fprintf(stderr,"Error: invalid map value '%s', -h to help\n",*a);
-			return 1;
-		    case 1:	y = x;
-		    case 2:
-			bmap[x]=y;
+	char **a;
+	for (a=argv+optind; *a; a++) {
+		int x, y;
+		if (sscanf(*a,"%i:%i",&x,&y)==2 && x>=0 && x<bmap_size && y>=0 && y<=MAX_BUTTON) {
+			SET_BMAP(x,y);
+			for(; x>1; x>>=3);
+			if (x) continue;
 		}
-		a++;
+		fprintf(stderr,"Error: invalid map item '%s', -h to help\n",*a);
+		return 1;
 	}
 #endif
 	opendpy();
@@ -623,7 +646,6 @@ ev:
 					to->touchid = e->detail;
 					to->deviceid = e->deviceid;
 					TIME(to->time,T);
-					TIME(to->time0,T);
 					to->x = e->root_x;
 					to->y = e->root_y;
 					to->tail = 0;
@@ -637,26 +659,31 @@ ev:
 					for (i=P; i!=n; i=TOUCH_N(i)) {
 						Touch *t1 = &touch[i];
 						if (t1->deviceid != to->deviceid) continue;
-						if (t1->g == BUTTON_DND) continue;
+						switch (t1->g) {
+						    case BUTTON_DND: continue;
+						    case BAD_BUTTON: goto invalidate1;
+						}
 						if (++t1->n != nt) goto invalidate;
 					}
 delay1:
 					if (!_delay(pi[p_hold])) goto evfree;
-					g = 3;
+					g = BUTTON_HOLD;
 					goto gest;
 invalidate:
 					for (i=P; i!=N; i=TOUCH_N(i)) {
 						Touch *t1 = &touch[i];
 						if (t1->deviceid != to->deviceid) continue;
 						if (t1->g == BUTTON_DND) continue;
-						t1->g = MAX_BUTTON;
+						t1->g = BAD_BUTTON;
 					}
 					goto evfree;
+invalidate1:
+					to->g = BAD_BUTTON;
+					goto evfree;
 				}
-				if (T == to->time0) goto skip; // skip some noise
 				double x1 = to->x + .5, y1 = to->y + .5, x2 = e->root_x + .5, y2 = e->root_y + .5;
 				switch (to->g) {
-				    case MAX_BUTTON: goto skip;
+				    case BAD_BUTTON: goto skip;
 				    case BUTTON_DND: goto next_dnd;
 				}
 
@@ -690,10 +717,12 @@ invalidate:
 					x = (x << 3)|t1->g;
 				}
 				//if (x > bmap_size) goto skip;
-				g = bmap[x];
-				if (!g) goto skip;
+				g = BMAP(x);
 gest:
 				switch (g) {
+				    case BAD_BUTTON:
+				    case 0:
+					goto skip;
 				    case BUTTON_DND:
 					XTestFakeMotionEvent(dpy,screen,x1,y1,0);
 					XTestFakeButtonEvent(dpy,BUTTON_DND,1,0);
@@ -704,7 +733,7 @@ next_dnd:
 					break;
 #if BUTTON_HOLD != BUTTON_DND
 				    case BUTTON_HOLD:
-					to->g = MAX_BUTTON;
+					to->g = BAD_BUTTON;
 #endif
 				    case 1:
 					xx = -1;
