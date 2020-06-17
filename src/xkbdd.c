@@ -1,5 +1,5 @@
 /*
-	xkbdd v1.17 - per-window keyboard layout switcher [+ XSS suspend].
+	xkbdd v1.18 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -65,6 +65,10 @@
 
 #define BUTTON_DND 2
 #define BUTTON_HOLD 3
+#define MAX_FINGERS 8
+
+// map size/4. 8 finges: 8M vs. 32M, overhead and less strict table lookup
+//#define MINIMAL
 
 Display *dpy;
 Window win, win1;
@@ -109,8 +113,14 @@ Touch touch[TOUCH_MAX];
 unsigned short P=0,N=0;
 unsigned short st = 0;
 
+#ifdef MINIMAL
+#define MAX_BUTTON 15
+#define bmap_high_bit 0
+#else
 #define MAX_BUTTON 255
-//#define MAX_BUTTON 15
+#define bmap_high_bit 1
+#endif
+
 #define BAD_BUTTON MAX_BUTTON
 unsigned int bmap_size;
 unsigned char *bmap;
@@ -129,7 +139,7 @@ static inline void SET_BMAP(unsigned int i, unsigned int x){
 #else
 
 #define BMAP(i) bmap[i]
-#define SET_BMAP(i,x) bmap[i]=x;
+#define SET_BMAP(i,x) bmap[i]=x
 #define BMAP_SIZE bmap_size
 
 #endif
@@ -426,26 +436,20 @@ static void sigterm(int sig) {
 static void initmap(){
 	unsigned int i;
 	bmap_size=pi[p_maxfingers];
-	bmap_size=1<<(bmap_size*3+1);
-	if (pi[p_maxfingers]>8 || !bmap_size) {
+	bmap_size=1<<(bmap_size*3+bmap_high_bit);
+	if (pi[p_maxfingers]>MAX_FINGERS || !bmap_size) {
 			fprintf(stderr,"Error: allocating map for %i>8 fingers disabled as crazy & use %uM RAM\n",pi[p_maxfingers],BMAP_SIZE>>20);
 			exit(1);
 	}
 	bmap = calloc(1,BMAP_SIZE);
-	for(i=1; i<4; i++) {
-		SET_BMAP(i|8,i);
-		if (pi[p_maxfingers] < 2) continue;
-		if (i == BUTTON_DND) continue;
-		SET_BMAP(0100|BUTTON_DND|(i<<3),i);
-		SET_BMAP(0100|(BUTTON_DND<<3)|i,i);
-	}
-	for(; i<8; i++){
-		unsigned int j, g = 1;
+	for(i=1; i<8; i++){
+		unsigned int j, g = bmap_high_bit;
 		for (j=1; j<=pi[p_maxfingers]; j++) {
 			g = (g<<3)|i;
-			if (j<pi[p_minfingers]) continue;
-			SET_BMAP(g,i);
+			if (i<4 ? (j==1) : (j>=pi[p_minfingers])) SET_BMAP(g,i);
 			if (j==1) continue;
+			if (i==BUTTON_DND) continue;
+			if (i<4 ? (j>2) : ((j-1)<pi[p_minfingers])) continue;
 			unsigned int g1 = BUTTON_DND, g2 = 7, k;
 			for (k=0; k<j; k++) {
 				SET_BMAP((g & ~g2)|g1,i);
@@ -711,7 +715,7 @@ invalidate1:
 				}
 				if (bx) to->g1 = bx;
 				to->g = bx;
-				unsigned int x = 1;
+				unsigned int x = bmap_high_bit;
 				for (i=P; i!=N; i=TOUCH_N(i)) {
 					Touch *t1 = &touch[i];
 					if (t1->deviceid != to->deviceid) continue;
