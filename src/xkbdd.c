@@ -435,6 +435,7 @@ static void initmap(){
 	for(i=1; i<4; i++) {
 		SET_BMAP(i|8,i);
 		if (pi[p_maxfingers] < 2) continue;
+		if (i == BUTTON_DND) continue;
 		SET_BMAP((i<<3)|BUTTON_DND,i);
 		SET_BMAP((BUTTON_DND<<3)|i,i);
 	}
