@@ -39,6 +39,7 @@
 #endif
 
 #include <stdio.h>
+#include <stdint.h>
 
 #include <X11/Xproto.h>
 #include <X11/Xlib.h>
@@ -59,7 +60,6 @@
 #include <string.h>
 //#include <sys/time.h>
 #include <X11/Xpoll.h>
-#include <stdint.h>
 #endif
 
 #define NO_GRP 99
