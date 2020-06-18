@@ -59,6 +59,7 @@
 #include <string.h>
 //#include <sys/time.h>
 #include <X11/Xpoll.h>
+#include <stdint.h>
 #endif
 
 #define NO_GRP 99
@@ -66,6 +67,9 @@
 #define BUTTON_DND 2
 #define BUTTON_HOLD 3
 #define MAX_FINGERS 8
+
+typedef unsigned short _short;
+typedef uint32_t _int;
 
 // map size/4. 8 finges: 8M vs. 32M, overhead and less strict table lookup
 //#define MINIMAL
@@ -105,13 +109,14 @@ Time T;
 typedef struct _Touch {
 	int touchid,deviceid;
 	Time time;
-	unsigned short n,g,g1;
+	_short n,g,g1;
 	double x,y;
 	double tail;
+//	double xy;
 } Touch;
 Touch touch[TOUCH_MAX];
-unsigned short P=0,N=0;
-unsigned short st = 0;
+_short P=0,N=0;
+_short st = 0;
 
 #ifdef MINIMAL
 #define MAX_BUTTON 15
@@ -122,32 +127,33 @@ unsigned short st = 0;
 #endif
 
 #define BAD_BUTTON MAX_BUTTON
-unsigned int bmap_size;
+_int bmap_size;
 unsigned char *bmap;
 
 #if MAX_BUTTON < 16
 
 #define BMAP(i) ((bmap[(i)>>1]>>(((i)&1)<<2))&15)
-static inline void SET_BMAP(unsigned int i, unsigned int x){
-	int i1 = (i&1)<<2;
+static void SET_BMAP(_int i, _int x){
+	_int i1=(i&1)<<2;
 	i>>=1;
-	bmap[i] &= 15 << (4-i1);
-	bmap[i] |= x << i1;
+	bmap[i]=(bmap[i]&(15<<(4-i1)))|(x<<i1);
 }
 #define BMAP_SIZE (bmap_size>>1)
+#define DEF_END_BIT 0
 
 #else
 
 #define BMAP(i) bmap[i]
 #define SET_BMAP(i,x) bmap[i]=x
 #define BMAP_SIZE bmap_size
+#define DEF_END_BIT ((MAX_BUTTON+1)>>1)
 
 #endif
 
 // normal gestures dont use >8 fingers, but if... continue this tree
 //typedef struct _TouchChain {
 //	void *gg[8];
-//	unsigned short g;
+//	_short g;
 //} TouchChain;
 
 #define p_device 0
@@ -156,12 +162,13 @@ static inline void SET_BMAP(unsigned int i, unsigned int x){
 #define p_hold 3
 #define p_xy 4
 #define p_res 5
-#define MAX_PAR 6
+#define p_end 6
+#define MAX_PAR 7
 char *pa[MAX_PAR] = {};
 // android: 125ms tap, 500ms long
-#define PAR_DEFS { 0, 1, 2, 1000, 2, 15 }
-int pi[MAX_PAR] = PAR_DEFS;
-double pf[MAX_PAR] = PAR_DEFS;
+#define PAR_DEFS { 0, 1, 2, 1000, 2, 15, DEF_END_BIT }
+int pi[] = PAR_DEFS;
+double pf[] = PAR_DEFS;
 char *ph[MAX_PAR] = {
 	"touch device 0=auto",
 	"min fingers",
@@ -169,8 +176,11 @@ char *ph[MAX_PAR] = {
 	"button 2|3 hold time, ms",
 	"min swipe x/y or y/x",
 	"dot per swipe",
+#if DEF_END_BIT
+	"on-TouchEnd bit(s) (=send once)",
+#endif
 };
-char pc[] = "d:m:M:t:x:r:h";
+char pc[] = "d:m:M:t:x:r:e:b:h";
 #define res pf[p_res]
 #else
 #define TIME(T,t)
@@ -285,7 +295,7 @@ static void WMState(Atom *states, short nn){
 //	return TMUL1000(tv.tv_sec) + TDIV1000(tv.tv_usec);
 //}
 
-static unsigned int _delay(Time delay){
+static int _delay(Time delay){
 	if (XPending(dpy)) return 0;
 	struct timeval tv;
 	fd_set rs;
@@ -434,7 +444,7 @@ static void sigterm(int sig) {
 }
 
 static void initmap(){
-	unsigned int i;
+	_int i,j;
 	bmap_size=pi[p_maxfingers];
 	bmap_size=1<<(bmap_size*3+bmap_high_bit);
 	if (pi[p_maxfingers]>MAX_FINGERS || !bmap_size) {
@@ -443,14 +453,14 @@ static void initmap(){
 	}
 	bmap = calloc(1,BMAP_SIZE);
 	for(i=1; i<8; i++){
-		unsigned int j, g = bmap_high_bit;
+		_int g = bmap_high_bit;
 		for (j=1; j<=pi[p_maxfingers]; j++) {
 			g = (g<<3)|i;
 			if (i<4 ? (j==1) : (j>=pi[p_minfingers])) SET_BMAP(g,i);
 			if (j==1) continue;
 			if (i==BUTTON_DND) continue;
 			if (i<4 ? (j>2) : ((j-1)<pi[p_minfingers])) continue;
-			unsigned int g1 = BUTTON_DND, g2 = 7, k;
+			_int g1 = BUTTON_DND, g2 = 7, k;
 			for (k=0; k<j; k++) {
 				SET_BMAP((g & ~g2)|g1,i);
 				g1 <<= 3;
@@ -569,7 +579,7 @@ static void init(){
 
 int main(int argc, char **argv){
 #ifdef XTG
-	unsigned int i;
+	_int i;
 	int opt;
 
 	while((opt=getopt(argc, argv, pc))>=0){
@@ -582,10 +592,18 @@ int main(int argc, char **argv){
 				"\ndefault map:",MAX_BUTTON);
 			initmap();
 			for(i=0; i<bmap_size; i++) if (BMAP(i)) printf(" 0%o:%i",i,BMAP(i));
-			printf("\n\nRoute 'hold' button 3 to 'd-n-d' button 2: 013:2\n");
+			printf("\n\nRoute 'hold' button 3 to 'd-n-d' button 2: 013:2\n"
+#ifndef MINIMAL
+				"Use default on-TouchEnd bit - oneshot buttons:\n"
+				"  2-fingers swipe right to 8-11 buttons: 177:0x88\n"
+#endif
+				);
 			return 0;
 		}
-		pi[i] = pf[i] = optarg ? atof(pa[i] = optarg) : pf[i];
+		if (!optarg) continue;
+		pa[i] = optarg;
+		pf[i] = atof(optarg);
+		pi[i] = atoi(optarg);
 	}
 	initmap();
 
@@ -635,8 +653,10 @@ ev:
 #define e ((XIDeviceEvent*)ev.xcookie.data)
 				TIME(T,e->time);
 				Touch *to = NULL;
-				unsigned short i;
-				static unsigned int g = 0;
+				_short i, fin = 0;
+				_short g;
+				_short end = (ev.xcookie.evtype == XI_TouchEnd
+						|| (e->flags & XITouchPendingEnd));
 				for(i=P; i!=N; i=TOUCH_N(i)){
 					Touch *t1 = &touch[i];
 					if (t1->touchid != e->detail || t1->deviceid != e->deviceid) continue;
@@ -656,11 +676,11 @@ ev:
 					to->tail = 0;
 					to->g = 0;
 					to->g1 = 0;
-					unsigned short nt;
+					_short nt;
 					to->n = nt = TOUCH_CNT;
 					if (nt == 1) goto delay1;
 					if (pi[p_maxfingers] && nt > pi[p_maxfingers]) goto invalidate;
-					unsigned short n = TOUCH_P(N);
+					_short n = TOUCH_P(N);
 					for (i=P; i!=n; i=TOUCH_N(i)) {
 						Touch *t1 = &touch[i];
 						if (t1->deviceid != to->deviceid) continue;
@@ -710,12 +730,12 @@ invalidate1:
 				if (!bx && !to->g1) {
 					Time t = T - to->time;
 					if (t >= pi[p_hold]) bx = BUTTON_HOLD;
-					else if (ev.xcookie.evtype == XI_TouchEnd) bx = 1;
+					else if (end) bx = 1;
 					else if (_delay(pi[p_hold] - t)) bx = BUTTON_HOLD;
 				}
 				if (bx) to->g1 = bx;
 				to->g = bx;
-				unsigned int x = bmap_high_bit;
+				_int x = bmap_high_bit;
 				for (i=P; i!=N; i=TOUCH_N(i)) {
 					Touch *t1 = &touch[i];
 					if (t1->deviceid != to->deviceid) continue;
@@ -723,6 +743,19 @@ invalidate1:
 				}
 				//if (x > bmap_size) goto skip;
 				g = BMAP(x);
+#ifndef MINIMAL
+				if (g & pi[p_end]) {
+					if (!end) goto evfree;
+					g ^= pi[p_end];
+					xx = -1;
+					for(i=P; i!=N; i=TOUCH_N(i)) {
+						Touch *t1 = &touch[i];
+						if (t1->deviceid != to->deviceid) continue;
+						if (t1->g == BUTTON_DND) continue;
+						t1->g = BAD_BUTTON;
+					}
+				}
+#endif
 gest:
 				switch (g) {
 				    case BAD_BUTTON:
@@ -733,8 +766,7 @@ gest:
 					XTestFakeButtonEvent(dpy,BUTTON_DND,1,0);
 next_dnd:
 					XTestFakeMotionEvent(dpy,screen,x2,y2,0);
-					if (ev.xcookie.evtype == XI_TouchEnd)
-						XTestFakeButtonEvent(dpy,BUTTON_DND,0,0);
+					if (end) XTestFakeButtonEvent(dpy,BUTTON_DND,0,0);
 					break;
 #if BUTTON_HOLD != BUTTON_DND
 				    case BUTTON_HOLD:
@@ -758,11 +790,9 @@ next_dnd:
 				to->y = y2;
 				to->tail = xx;
 skip:
-				if (ev.xcookie.evtype != XI_TouchEnd
-					&& !(e->flags & XITouchPendingEnd)
-					) goto evfree;
+				if (!end) goto evfree;
 #ifdef TOUCH_ORDER
-				unsigned short t = (to - &touch[0]);
+				_short t = (to - &touch[0]);
 				for(i=TOUCH_N(t); i!=N; i=TOUCH_N(t = i)) touch[t] = touch[i];
 				N=TOUCH_P(N);
 #else
