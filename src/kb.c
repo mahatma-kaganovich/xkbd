@@ -862,8 +862,14 @@ void kb_size(keyboard *kb) {
 
 	// actual kb size, based on virtual size & screen size & DPI
 	if (!kb->vbox->act_height || !kb->vbox->act_width) {
-	    w2 = scr_mwidth?ldiv(scr_width*kb->width,scr_mwidth).quot:0;
-	    h2 = scr_mheight?ldiv(scr_height*kb->height,scr_mheight).quot:0;
+	    // check rotation. can be done by xrandr, but this is good too
+	    unsigned long _mwidth = scr_mwidth, _mheight = scr_mheight;
+	    if (scr_mwidth > scr_mheight && scr_width < scr_height && scr_mheight) {
+		_mwidth = scr_mheight;
+		_mheight = scr_mwidth;
+	    }
+	    w2 = _mwidth?ldiv(scr_width*kb->width,_mwidth).quot:0;
+	    h2 = _mheight?ldiv(scr_height*kb->height,_mheight).quot:0;
 	    unsigned long d1=w2,d2=h2;
 	    if (!w2 || !h2) {
 		d1=3;
