@@ -521,9 +521,16 @@ stop_argv:
    rootWin = RootWindow(display, screen);
    scr_mwidth=DisplayWidthMM(display, screen);
    scr_mheight=DisplayHeightMM(display, screen);
+
    XGetWindowAttributes(display,rootWin,&wa0);
 
    X1=wa0.x; Y1=wa0.y; X2=wa0.x+wa0.width-1; Y2=wa0.y+wa0.height-1;
+   if (scr_mwidth > scr_mheight && scr_width < scr_height && scr_mheight) {
+	unsigned long sw = scr_mwidth;
+	scr_mwidth = scr_mheight;
+	scr_mheight = sw;
+   }
+
    char *rs;
 
    if ((rs = XResourceManagerString(display)) && (xrm = XrmGetStringDatabase(rs))) {
@@ -596,6 +603,10 @@ re_crts:
 				Y2=min(Y2,y2);
 				scr_mwidth=oinf->mm_width;
 				scr_mheight=oinf->mm_height;
+				if (scr_mwidth > scr_mheight && x2-x1 < y2-y1 && scr_mheight) {
+					scr_mwidth=oinf->mm_height;
+					scr_mheight=oinf->mm_width;
+				}
 				if (crts>1 && !geometry && dock & (64|2)) goto re_crts;
 			}
 			XRRFreeOutputInfo(oinf);

@@ -51,6 +51,7 @@
 #endif
 
 #ifdef XTG
+#include <X11/extensions/Xrandr.h>
 //#include <X11/extensions/XInput.h>
 #include <X11/extensions/XInput2.h>
 
@@ -118,6 +119,11 @@ Touch touch[TOUCH_MAX];
 _short P=0,N=0;
 _short st = 0;
 
+int width, height, mwidth, mheight;
+double resX, resY;
+int resDev;
+int xrr, xrevent, xrerror;
+
 #ifdef MINIMAL
 #define MAX_BUTTON 15
 #define bmap_high_bit 0
@@ -166,7 +172,7 @@ static void SET_BMAP(_int i, _int x){
 #define MAX_PAR 7
 char *pa[MAX_PAR] = {};
 // android: 125ms tap, 500ms long
-#define PAR_DEFS { 0, 1, 2, 1000, 2, 15, DEF_END_BIT }
+#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, DEF_END_BIT }
 int pi[] = PAR_DEFS;
 double pf[] = PAR_DEFS;
 char *ph[MAX_PAR] = {
@@ -175,13 +181,12 @@ char *ph[MAX_PAR] = {
 	"max fingers",
 	"button 2|3 hold time, ms",
 	"min swipe x/y or y/x",
-	"dot per swipe",
+	"swipe size (>0 - dots, <0 - -mm)",
 #if DEF_END_BIT
 	"on-TouchEnd bit(s) (=send once)",
 #endif
 };
 char pc[] = "d:m:M:t:x:r:e:b:h";
-#define res pf[p_res]
 #else
 #define TIME(T,t)
 #endif
@@ -194,6 +199,7 @@ static void opendpy() {
 	int xievent = 0, xi = 0;
 	xiopcode = 0;
 	XQueryExtension(dpy, "XInputExtension", &xiopcode, &xievent, &xierror);
+	xrr = XRRQueryExtension(dpy, &xrevent, &xrerror);
 #endif
 }
 
@@ -307,6 +313,53 @@ static int _delay(Time delay){
 	return !Select(fd+1, &rs, 0, 0, &tv);
 }
 
+static void getRes(int x, int y){
+	int i;
+	mwidth = DisplayWidthMM(dpy, screen);
+	mheight = DisplayHeightMM(dpy, screen);
+	width = wa.width;
+	height = wa.height;
+	if (pf[p_res]>0) {
+		resX = resY = pf[p_res];
+		return;
+	}
+	if (xrr) {
+		XRRScreenResources *xrrr = XRRGetScreenResources(dpy,wa.root);
+		_short found = 0;
+		if (xrrr)
+		for (i = 0; i < xrrr->noutput && !found; i++) {
+			XRROutputInfo *oinf = XRRGetOutputInfo(dpy, xrrr, xrrr->outputs[i]);
+			if (oinf && oinf->crtc && oinf->connection == RR_Connected) {
+				XRRCrtcInfo *cinf = XRRGetCrtcInfo (dpy, xrrr, oinf->crtc);
+				if (cinf && x >= cinf->x && y >= cinf->y && x < cinf->x + cinf->width && y < cinf->y + cinf->height) {
+					mwidth=oinf->mm_width;
+					mheight=oinf->mm_height;
+					width = cinf->width;
+					height = cinf->height;
+					found = 1;
+				}
+				XRRFreeCrtcInfo(cinf);
+			}
+			XRRFreeOutputInfo(oinf);
+		}
+		XRRFreeScreenResources(xrrr);
+	}
+	if (mwidth > mheight && width < height && mheight) {
+		i = mwidth;
+		mwidth = mheight;
+		mheight = i;
+	}
+	if (!mwidth && !mheight) {
+		resX = resY = -pf[p_res];
+		fprintf(stderr,"Screen dimensions in mm unknown. Use resolution in dots.\n");
+	} else {
+		if (mwidth) resX = (0.+wa.width)/mwidth*(-pf[p_res]);
+		resY = mheight ? (0.+wa.height)/mheight*(-pf[p_res]) : resX;
+		if (!mwidth) resX = resY;
+	}
+}
+
+
 int xtestPtr, xtestKbd;
 short showPtr = 1, oldShowPtr = 3, tdevs = 0, tdevs2=0, curShow = 1;
 static void getHierarchy(int st){
@@ -411,6 +464,7 @@ static void getHierarchy(int st){
 	XIFreeDeviceInfo(info2);
 	XFlush(dpy);
 	tdevs -= tdevs2;
+	resDev = 0;
 }
 
 static inline void setShowCursor(){
@@ -531,6 +585,7 @@ old:
 	return 0;
 }
 
+
 static void init(){
 	int evmask = PropertyChangeMask;
 
@@ -565,6 +620,7 @@ static void init(){
 	XISelectEvents(dpy, wa.root, &ximask, 1);
 	XIClearMask(ximask0, XI_HierarchyChanged);
 	_signals(sigterm);
+	if (xrr) XRRSelectInput(dpy, wa.root, RRScreenChangeNotifyMask);
 #endif
 	XSelectInput(dpy, wa.root, evmask);
 	oldxerrh = XSetErrorHandler(xerrh);
@@ -624,6 +680,9 @@ int main(int argc, char **argv){
 	init();
 	printGrp();
 	getPropWin1();
+#ifdef XTG
+	getRes(0,0);
+#endif
 	while (1) {
 		do {
 			if (win1 != win) getWinGrp();
@@ -712,7 +771,12 @@ invalidate1:
 				    case BUTTON_DND: goto next_dnd;
 				}
 
-				double xx = x2 - x1, yy = y2 - y1;
+				if (resDev != to->deviceid) {
+					// slow for multiple touchscreens
+					getRes(x2,y2);
+					resDev = to->deviceid;
+				}
+				double xx = x2 - x1, yy = y2 - y1, res = resX;
 				int bx = 0, by = 0;
 				if (xx<0) {xx = -xx; bx = 7;}
 				else if (xx>0) bx = 6;
@@ -723,6 +787,7 @@ invalidate1:
 					xx = yy;
 					yy = s;
 					bx = by;
+					res = resY;
 				}
 
 				if (bx)
@@ -851,6 +916,11 @@ evfree:
 					//break;
 				}
 			}
+#ifdef XTG
+			else if (xrr && ev.type == xrevent + RRScreenChangeNotify) {
+				resDev = 0;
+			}
+#endif
 //			else fprintf(stderr,"ev? %i\n",ev.type);
 			break;
 		}
