@@ -610,14 +610,11 @@ static void init(){
 	XISetMask(ximaskTouch, XI_TouchBegin);
 	XISetMask(ximaskTouch, XI_TouchUpdate);
 	XISetMask(ximaskTouch, XI_TouchEnd);
-//	XISetMask(ximaskTouch, XI_PropertyEvent);
+	XISetMask(ximaskTouch, XI_PropertyEvent);
 
 	XISetMask(ximask0, XI_HierarchyChanged);
-	XISetMask(ximask0, XI_PropertyEvent);
 	XISelectEvents(dpy, wa.root, &ximask, 1);
 	XIClearMask(ximask0, XI_HierarchyChanged);
-	XIClearMask(ximask0, XI_PropertyEvent);
-	XISetMask(ximask0, XI_PropertyEvent);
 	_signals(sigterm);
 	if (pf[p_res]<0 && (xrr = XRRQueryExtension(dpy, &xrevent, &xrerror))) XRRSelectInput(dpy, wa.root, RRScreenChangeNotifyMask);
 #endif
@@ -673,7 +670,7 @@ int main(int argc, char **argv){
 		fprintf(stderr,"Error: invalid map item '%s', -h to help\n",*a);
 		return 1;
 	}
-	resX = resY = pf[p_res] <= 0 ? 1 : pf[p_res];
+	resX = resY = pf[p_res] < 0 ? 1 : pf[p_res];
 #endif
 	opendpy();
 	if (!dpy) return 1;
@@ -694,17 +691,15 @@ ev:
 #ifdef XTG
 		    case GenericEvent:
 			if (ev.xcookie.extension == xiopcode) {
-				switch (ev.xcookie.evtype) {
+				if (ev.xcookie.evtype < XI_TouchBegin) switch (ev.xcookie.evtype) {
 				    case XI_PropertyEvent:
-					fprintf(stderr,"prop\n");
 					resDev = 0;
 //					continue;
 				    case XI_HierarchyChanged:
 					// time?
 					oldShowPtr |= 2;
 					continue;
-				}
-				if (ev.xcookie.evtype < XI_TouchBegin) {
+				    default:
 					showPtr = 1;
 					continue;
 				}
