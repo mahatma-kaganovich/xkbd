@@ -673,7 +673,7 @@ int main(int argc, char **argv){
 		fprintf(stderr,"Error: invalid map item '%s', -h to help\n",*a);
 		return 1;
 	}
-	resX = resY = pf[p_res] < 0 ? 1 : pf[p_res];
+	resX = resY = pf[p_res] <= 0 ? 1 : pf[p_res];
 #endif
 	opendpy();
 	if (!dpy) return 1;
