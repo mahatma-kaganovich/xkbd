@@ -610,10 +610,14 @@ static void init(){
 	XISetMask(ximaskTouch, XI_TouchBegin);
 	XISetMask(ximaskTouch, XI_TouchUpdate);
 	XISetMask(ximaskTouch, XI_TouchEnd);
+//	XISetMask(ximaskTouch, XI_PropertyEvent);
 
 	XISetMask(ximask0, XI_HierarchyChanged);
+	XISetMask(ximask0, XI_PropertyEvent);
 	XISelectEvents(dpy, wa.root, &ximask, 1);
 	XIClearMask(ximask0, XI_HierarchyChanged);
+	XIClearMask(ximask0, XI_PropertyEvent);
+	XISetMask(ximask0, XI_PropertyEvent);
 	_signals(sigterm);
 	if (pf[p_res]<0 && (xrr = XRRQueryExtension(dpy, &xrevent, &xrerror))) XRRSelectInput(dpy, wa.root, RRScreenChangeNotifyMask);
 #endif
@@ -669,7 +673,7 @@ int main(int argc, char **argv){
 		fprintf(stderr,"Error: invalid map item '%s', -h to help\n",*a);
 		return 1;
 	}
-	resX = resY = pf[p_res];
+	resX = resY = pf[p_res] < 0 ? 1 : pf[p_res];
 #endif
 	opendpy();
 	if (!dpy) return 1;
@@ -690,7 +694,12 @@ ev:
 #ifdef XTG
 		    case GenericEvent:
 			if (ev.xcookie.extension == xiopcode) {
-				if (ev.xcookie.evtype == XI_HierarchyChanged) {
+				switch (ev.xcookie.evtype) {
+				    case XI_PropertyEvent:
+					fprintf(stderr,"prop\n");
+					resDev = 0;
+//					continue;
+				    case XI_HierarchyChanged:
 					// time?
 					oldShowPtr |= 2;
 					continue;
@@ -704,6 +713,7 @@ ev:
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
 				TIME(T,e->time);
+				double res = resX;
 				Touch *to = NULL;
 				_short i, fin = 0;
 				_short g;
@@ -769,7 +779,7 @@ invalidate1:
 					if (pf[p_res]<0) getRes(x2,y2);
 					resDev = to->deviceid;
 				}
-				double xx = x2 - x1, yy = y2 - y1, res = resX;
+				double xx = x2 - x1, yy = y2 - y1;
 				int bx = 0, by = 0;
 				if (xx<0) {xx = -xx; bx = 7;}
 				else if (xx>0) bx = 6;
@@ -835,7 +845,7 @@ next_dnd:
 				    default:
 					XTestFakeMotionEvent(dpy,screen,x1,y1,0);
 					XTestFakeButtonEvent(dpy,g,1,0);
-					for (xx-=pf[p_res];xx>=pf[p_res];xx-=pf[p_res]) {
+					for (xx-=res;xx>=res;xx-=res) {
 						XTestFakeButtonEvent(dpy,g,0,0);
 						XTestFakeButtonEvent(dpy,g,1,0);
 					}
