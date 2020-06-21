@@ -820,6 +820,8 @@ gest:
 				switch (g) {
 				    case BAD_BUTTON:
 				    case 0:
+					if (end && TOUCH_CNT == 1)
+						XTestFakeMotionEvent(dpy,screen,x2,y2,0);
 					goto skip;
 				    case BUTTON_DND:
 					XTestFakeMotionEvent(dpy,screen,x1,y1,0);
