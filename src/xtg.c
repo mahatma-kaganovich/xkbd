@@ -805,9 +805,11 @@ invalidate1:
 				g = BMAP(x);
 #ifndef MINIMAL
 				if (g & pi[p_end]) {
-					if (!end) goto evfree;
-					g ^= pi[p_end];
-					xx = -1;
+					if (g != BAD_BUTTON) {
+						if (!end) goto evfree;
+						g ^= pi[p_end];
+						xx = -1;
+					}
 					for(i=P; i!=N; i=TOUCH_N(i)) {
 						Touch *t1 = &touch[i];
 						if (t1->deviceid != to->deviceid) continue;
