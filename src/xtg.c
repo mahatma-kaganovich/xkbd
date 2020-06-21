@@ -787,7 +787,7 @@ invalidate1:
 
 				if (bx)
 				    if (xx < res || xx/(yy?:1) < pf[p_xy]) bx = 0;
-				if (!bx && !to->g1) {
+				if (!bx && !to->g1 && to->n==1) {
 					Time t = T - to->time;
 					if (t >= pi[p_hold]) bx = BUTTON_HOLD;
 					else if (end) bx = 1;
