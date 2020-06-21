@@ -1,5 +1,5 @@
 /*
-	xkbdd v1.18 - per-window keyboard layout switcher [+ XSS suspend].
+	xkbdd v1.19 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -119,10 +119,9 @@ Touch touch[TOUCH_MAX];
 _short P=0,N=0;
 _short st = 0;
 
-int width, height, mwidth, mheight;
 double resX, resY;
-int resDev;
-int xrr, xrevent, xrerror;
+int resDev = 0;
+int xrr = 0, xrevent, xrerror;
 
 #ifdef MINIMAL
 #define MAX_BUTTON 15
@@ -199,7 +198,6 @@ static void opendpy() {
 	int xievent = 0, xi = 0;
 	xiopcode = 0;
 	XQueryExtension(dpy, "XInputExtension", &xiopcode, &xievent, &xierror);
-	xrr = XRRQueryExtension(dpy, &xrevent, &xrerror);
 #endif
 }
 
@@ -315,14 +313,12 @@ static int _delay(Time delay){
 
 static void getRes(int x, int y){
 	int i;
+	int width, height, mwidth, mheight;
+
 	mwidth = DisplayWidthMM(dpy, screen);
 	mheight = DisplayHeightMM(dpy, screen);
 	width = wa.width;
 	height = wa.height;
-	if (pf[p_res]>0) {
-		resX = resY = pf[p_res];
-		return;
-	}
 	if (xrr) {
 		XRRScreenResources *xrrr = XRRGetScreenResources(dpy,wa.root);
 		_short found = 0;
@@ -464,7 +460,6 @@ static void getHierarchy(int st){
 	XIFreeDeviceInfo(info2);
 	XFlush(dpy);
 	tdevs -= tdevs2;
-	resDev = 0;
 }
 
 static inline void setShowCursor(){
@@ -620,7 +615,7 @@ static void init(){
 	XISelectEvents(dpy, wa.root, &ximask, 1);
 	XIClearMask(ximask0, XI_HierarchyChanged);
 	_signals(sigterm);
-	if (xrr) XRRSelectInput(dpy, wa.root, RRScreenChangeNotifyMask);
+	if (pf[p_res]<0 && (xrr = XRRQueryExtension(dpy, &xrevent, &xrerror))) XRRSelectInput(dpy, wa.root, RRScreenChangeNotifyMask);
 #endif
 	XSelectInput(dpy, wa.root, evmask);
 	oldxerrh = XSetErrorHandler(xerrh);
@@ -674,15 +669,13 @@ int main(int argc, char **argv){
 		fprintf(stderr,"Error: invalid map item '%s', -h to help\n",*a);
 		return 1;
 	}
+	resX = resY = pf[p_res];
 #endif
 	opendpy();
 	if (!dpy) return 1;
 	init();
 	printGrp();
 	getPropWin1();
-#ifdef XTG
-	getRes(0,0);
-#endif
 	while (1) {
 		do {
 			if (win1 != win) getWinGrp();
@@ -773,7 +766,7 @@ invalidate1:
 
 				if (resDev != to->deviceid) {
 					// slow for multiple touchscreens
-					getRes(x2,y2);
+					if (pf[p_res]<0) getRes(x2,y2);
 					resDev = to->deviceid;
 				}
 				double xx = x2 - x1, yy = y2 - y1, res = resX;
@@ -917,9 +910,7 @@ evfree:
 				}
 			}
 #ifdef XTG
-			else if (xrr && ev.type == xrevent + RRScreenChangeNotify) {
-				resDev = 0;
-			}
+			else if (xrr && ev.type == xrevent + RRScreenChangeNotify) resDev = 0;
 #endif
 //			else fprintf(stderr,"ev? %i\n",ev.type);
 			break;
