@@ -1,11 +1,10 @@
 /*
-	xkbdd v1.19 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.20 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
 	I found some problems in kbdd (for example - startup WM detection),
 	CPU usage and strange random bugs...
-
 	But looking in code - I found this is terrible, overcoded and required
 	to be much simpler.
 
@@ -24,11 +23,9 @@
 	Disable XScreenSaver if fullscreen window focused.
 	Added to xkbdd as massive code utilization.
 
-	Touchscreen extensions (-DXTG):
 	Auto hide/show mouse cursor on touchscreen.
-	Gestures (swipe).
-	Experimental.
-	optional: ARGV[1] = device (unknown = disable gestures)
+	Gestures.
+	-h to help
 
 	(C) 2019-2020 Denis Kaganovich, Anarchy license
 */

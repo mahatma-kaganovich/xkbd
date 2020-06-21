@@ -1511,6 +1511,7 @@ gesture:
 			XSync(dpy,False);
 			// after gesture recognition release all
 			// as possible resize & other lost touches
+#ifdef MULTITOUCH
 			for (j=P; j!=N; TOUCH_INC(j)) {
 				to = &touch[j];
 				_release(b=to->but);
@@ -1519,6 +1520,7 @@ gesture:
 				to->nsib=-1;
 			}
 			N=P=0;
+#endif
 			return NULL;
 		}
 drop2:
