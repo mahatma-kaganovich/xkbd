@@ -118,7 +118,10 @@ _short st = 0;
 
 double resX, resY;
 int resDev = 0;
-int xrr = 0, xrevent, xrerror;
+int xrr, xrevent, xrerror;
+
+int xssevent, xsserror;
+timeSkip = 0;
 
 #ifdef MINIMAL
 #define MAX_BUTTON 15
@@ -613,7 +616,21 @@ static void init(){
 	XISelectEvents(dpy, wa.root, &ximask, 1);
 	XIClearMask(ximask0, XI_HierarchyChanged);
 	_signals(sigterm);
-	if (pf[p_res]<0 && (xrr = XRRQueryExtension(dpy, &xrevent, &xrerror))) XRRSelectInput(dpy, wa.root, RRScreenChangeNotifyMask);
+	if (pf[p_res]<0 && (xrr = XRRQueryExtension(dpy, &xrevent, &xrerror))) {
+		xrevent += RRScreenChangeNotify;
+		XRRSelectInput(dpy, wa.root, RRScreenChangeNotifyMask);
+	} else xrevent = -1;
+#ifdef XSS
+	if (XScreenSaverQueryExtension(dpy, &xssevent, &xsserror)) {
+		xssevent += ScreenSaverNotify;
+		XScreenSaverSelectInput(dpy, wa.root, ScreenSaverNotifyMask);
+		XScreenSaverInfo *x = XScreenSaverAllocInfo();
+		if (x && XScreenSaverQueryInfo(dpy, wa.root, x) == Success && x->state == ScreenSaverOn) {
+			timeSkip = ~(Time)0;
+		}
+		XFree(x);
+	} else xssevent = -1;
+#endif
 #endif
 	XSelectInput(dpy, wa.root, evmask);
 	oldxerrh = XSetErrorHandler(xerrh);
@@ -733,6 +750,7 @@ ev:
 					to->g1 = 0;
 					_short nt;
 					to->n = nt = TOUCH_CNT;
+					if (T <= timeSkip) goto invalidateT;
 					if (nt == 1) goto delay1;
 					if (pi[p_maxfingers] && nt > pi[p_maxfingers]) goto invalidate;
 					_short n = TOUCH_P(N);
@@ -759,6 +777,8 @@ invalidate:
 						t1->g = BAD_BUTTON;
 					}
 					goto evfree;
+invalidateT:
+					timeSkip = T; // allow bad time value, after XSS only once
 invalidate1:
 					to->g = BAD_BUTTON;
 					goto evfree;
@@ -789,8 +809,10 @@ invalidate1:
 					res = resY;
 				}
 
-				if (bx)
+				if (bx) {
+				    if (bx == to->g1) xx += to->tail;
 				    if (xx < res || xx/(yy?:1) < pf[p_xy]) bx = 0;
+				}
 				if (!bx && !to->g1 && to->n==1) {
 					Time t = T - to->time;
 					if (t >= pi[p_hold]) bx = BUTTON_HOLD;
@@ -812,7 +834,7 @@ invalidate1:
 					if (g != BAD_BUTTON) {
 						if (!end) goto evfree;
 						g ^= pi[p_end];
-						xx = -1;
+						xx = 0;
 					}
 					for(i=P; i!=N; i=TOUCH_N(i)) {
 						Touch *t1 = &touch[i];
@@ -841,7 +863,7 @@ next_dnd:
 					to->g = BAD_BUTTON;
 #endif
 				    case 1:
-					xx = -1;
+					xx = 0;
 				    default:
 					XTestFakeMotionEvent(dpy,screen,x1,y1,0);
 					XTestFakeButtonEvent(dpy,g,1,0);
@@ -920,7 +942,17 @@ evfree:
 				}
 			}
 #ifdef XTG
-			else if (xrr && ev.type == xrevent + RRScreenChangeNotify) resDev = 0;
+#ifdef XSS
+#undef e
+#define e ((XScreenSaverNotifyEvent*)&ev)
+			else if (ev.type == xssevent) switch (e->state) {
+//			    case ScreenSaverDisabled:
+			    case ScreenSaverOff:
+				timeSkip = e->time;
+				break;
+			}
+#endif
+			else if (ev.type == xrevent) resDev = 0;
 #endif
 //			else fprintf(stderr,"ev? %i\n",ev.type);
 			break;
