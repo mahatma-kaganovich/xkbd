@@ -711,6 +711,7 @@ ev:
 				_short g;
 				_short end = (ev.xcookie.evtype == XI_TouchEnd
 						|| (e->flags & XITouchPendingEnd));
+				double x1, y1, x2 = e->root_x + .5, y2 = e->root_y + .5;
 				for(i=P; i!=N; i=TOUCH_N(i)){
 					Touch *t1 = &touch[i];
 					if (t1->touchid != e->detail || t1->deviceid != e->deviceid) continue;
@@ -725,8 +726,8 @@ ev:
 					to->touchid = e->detail;
 					to->deviceid = e->deviceid;
 					TIME(to->time,T);
-					to->x = e->root_x;
-					to->y = e->root_y;
+					to->x = x2;
+					to->y = y2;
 					to->tail = 0;
 					to->g = 0;
 					to->g1 = 0;
@@ -746,6 +747,8 @@ ev:
 					}
 delay1:
 					if (!_delay(pi[p_hold])) goto evfree;
+					x1 = x2;
+					y1 = y2;
 					g = BUTTON_HOLD;
 					goto gest;
 invalidate:
@@ -760,7 +763,8 @@ invalidate1:
 					to->g = BAD_BUTTON;
 					goto evfree;
 				}
-				double x1 = to->x + .5, y1 = to->y + .5, x2 = e->root_x + .5, y2 = e->root_y + .5;
+				x1 = to->x;
+				y1 = to->y;
 				switch (to->g) {
 				    case BAD_BUTTON: goto skip;
 				    case BUTTON_DND: goto next_dnd;
