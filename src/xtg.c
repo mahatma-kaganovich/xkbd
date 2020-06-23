@@ -716,7 +716,7 @@ ev:
 				double res = resX;
 				Touch *to = NULL;
 				_short i, fin = 0;
-				_short g = 0;
+				_short g = 0, ph = 0;
 				TouchTree *m = &bmap;
 				_short end = (ev.xcookie.evtype == XI_TouchEnd
 						|| (e->flags & XITouchPendingEnd));
@@ -735,17 +735,17 @@ ev:
 					to->touchid = e->detail;
 					to->deviceid = e->deviceid;
 					TIME(to->time,T);
-					to->x = x2;
-					to->y = y2;
+					to->x = x1 = x2;
+					to->y = y1 = y2;
 					to->tail = 0;
 					to->g = 0;
 					to->g1 = 0;
 					_short nt;
-					to->n = nt = TOUCH_CNT;
+					to->n = nt = 1;
 					if (T <= timeSkip) goto invalidateT;
-					if (nt == 1) goto delay1;
-					if (pi[p_maxfingers] && nt > pi[p_maxfingers]) goto invalidate;
+					//if (pi[p_maxfingers] && nt > pi[p_maxfingers]) goto invalidate;
 					_short n = TOUCH_P(N);
+					_short nt1 = 1;
 					for (i=P; i!=n; i=TOUCH_N(i)) {
 						Touch *t1 = &touch[i];
 						if (t1->deviceid != to->deviceid) continue;
@@ -753,16 +753,22 @@ ev:
 						    case BUTTON_DND: continue;
 						    case BAD_BUTTON: goto invalidate1;
 						}
-						if (++t1->n != nt) goto invalidate;
+						if (nt1++ == 1) nt = ++t1->n;
+						else if (++t1->n != nt) goto invalidate;
 						if (m) m = m->gg[t1->g];
 					}
-					if (m && (m=m->gg[to->g]) && (m=m->gg[1])) goto found;
-delay1:
-					if (!_delay(pi[p_hold])) goto evfree;
-					x1 = x2;
-					y1 = y2;
-					g = BUTTON_HOLD;
-					goto gest;
+					if (nt1 != nt) goto invalidate;
+					to->n = nt;
+					if (!m) goto evfree;
+					if (nt != 1) goto evfree;
+					if (_delay(pi[p_hold])) to->g = BUTTON_HOLD;
+					if (!(m=m->gg[to->g])) goto evfree;
+					ph |= 1;
+					m = m->gg[ph];
+					if (!m) goto evfree;
+					g = m->g;
+					if (g) goto found;
+					goto evfree;
 invalidate:
 					for (i=P; i!=N; i=TOUCH_N(i)) {
 						Touch *t1 = &touch[i];
@@ -822,10 +828,11 @@ invalidate1:
 					m = m->gg[t1->g & 7];
 					if (!m) goto gest;
 				}
-				m = m->gg[end + 2];
+				ph |= end + 2;
+				m = m->gg[ph];
 				if (!m) goto gest;
-found:
 				g = m->g;
+found:
 				if (g & pi[p_end]) {
 					if (g != BAD_BUTTON) {
 						g ^= pi[p_end];
