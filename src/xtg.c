@@ -122,7 +122,6 @@ timeSkip = 0;
 
 #define MAX_BUTTON 255
 #define BAD_BUTTON MAX_BUTTON
-#define bmap_high_bit 1
 #define DEF_END_BIT ((MAX_BUTTON+1)>>1)
 typedef struct _TouchTree {
 	void *gg[8];
@@ -757,7 +756,7 @@ ev:
 						if (++t1->n != nt) goto invalidate;
 						if (m) m = m->gg[t1->g];
 					}
-					if (m && (m=m->gg[1])) goto found;
+					if (m && (m=m->gg[to->g]) && (m=m->gg[1])) goto found;
 delay1:
 					if (!_delay(pi[p_hold])) goto evfree;
 					x1 = x2;
