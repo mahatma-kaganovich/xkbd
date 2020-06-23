@@ -69,9 +69,6 @@
 typedef unsigned short _short;
 typedef uint32_t _int;
 
-// map size/4. 8 finges: 8M vs. 32M, overhead and less strict table lookup
-//#define MINIMAL
-
 Display *dpy;
 Window win, win1;
 int screen;
@@ -123,43 +120,31 @@ int xrr, xrevent, xrerror;
 int xssevent, xsserror;
 timeSkip = 0;
 
-#ifdef MINIMAL
-#define MAX_BUTTON 15
-#define bmap_high_bit 0
-#else
 #define MAX_BUTTON 255
-#define bmap_high_bit 1
-#endif
-
 #define BAD_BUTTON MAX_BUTTON
-_int bmap_size;
-unsigned char *bmap;
-
-#if MAX_BUTTON < 16
-
-#define BMAP(i) ((bmap[(i)>>1]>>(((i)&1)<<2))&15)
-static void SET_BMAP(_int i, _int x){
-	_int i1=(i&1)<<2;
-	i>>=1;
-	bmap[i]=(bmap[i]&(15<<(4-i1)))|(x<<i1);
-}
-#define BMAP_SIZE (bmap_size>>1)
-#define DEF_END_BIT 0
-
-#else
-
-#define BMAP(i) bmap[i]
-#define SET_BMAP(i,x) bmap[i]=x
-#define BMAP_SIZE bmap_size
+#define bmap_high_bit 1
 #define DEF_END_BIT ((MAX_BUTTON+1)>>1)
-
-#endif
-
-// normal gestures dont use >8 fingers, but if... continue this tree
-//typedef struct _TouchChain {
-//	void *gg[8];
-//	_short g;
-//} TouchChain;
+typedef struct _TouchTree {
+	void *gg[8];
+	_short g;
+} TouchTree;
+TouchTree bmap = {};
+static void SET_BMAP(_int i, _short x){
+	static TouchTree *bmap_ = &bmap;;
+	TouchTree **m = &bmap_;
+	for(; i; i>>=3) {
+		m = &((*m)->gg[i&7]);
+		if (!*m) *m = calloc(1, sizeof(**m));
+	}
+	(*m)->g = x;
+}
+static void _print_bmap(_int x, _short n, TouchTree *m) {
+	_short i;
+	if (m->g) printf(" 0%o:%i",x,m->g);
+	for(i=0; i<8; i++) {
+		if (m->gg[i]) _print_bmap(x|(i<<n),n+3,m->gg[i]);
+	}
+}
 
 #define p_device 0
 #define p_minfingers 1
@@ -492,29 +477,39 @@ static void sigterm(int sig) {
 	exit(1);
 }
 
+static void _set_bmap(_int g, _short i, _int j){
+	switch (i) {
+	    case 1:
+		SET_BMAP(g|(3<<j),i);
+		break;
+	    case 2:
+		break;
+	    case 3:
+		SET_BMAP(g|(1<<j),i);
+	    default:
+		SET_BMAP(g|(2<<j),i);
+		SET_BMAP(g|(3<<j),i);
+	}
+}
+
 static void initmap(){
 	_int i,j;
-	bmap_size=pi[p_maxfingers];
-	bmap_size=1<<(bmap_size*3+bmap_high_bit);
-	if (pi[p_maxfingers]>MAX_FINGERS || !bmap_size) {
-			fprintf(stderr,"Error: allocating map for %i>8 fingers disabled as crazy & use %uM RAM\n",pi[p_maxfingers],BMAP_SIZE>>20);
-			exit(1);
-	}
-	bmap = calloc(1,BMAP_SIZE);
 	for(i=1; i<8; i++){
-		_int g = bmap_high_bit;
+		_int g = 0;
+		_int j3 = 0;
 		for (j=1; j<=pi[p_maxfingers]; j++) {
+			j3 += 3;
 			g = (g<<3)|i;
-			if (i<4 ? (j==1) : (j>=pi[p_minfingers])) SET_BMAP(g,i);
+			if (i<4 ? (j==1) : (j>=pi[p_minfingers])) _set_bmap(g,i,j3);
 			if (j==1) continue;
 			if (i==BUTTON_DND) continue;
 			if (i<4 ? (j>2) : ((j-1)<pi[p_minfingers])) continue;
-			_int g1 = BUTTON_DND, g2 = 7, k;
-			for (k=0; k<j; k++) {
-				SET_BMAP((g & ~g2)|g1,i);
-				g1 <<= 3;
-				g2 <<= 3;
-			}
+//			_int g1 = BUTTON_DND, g2 = 7, k;
+//			for (k=0; k<j; k++) {
+//				_set_bmap((g & ~g2)|g1,i,j3);
+//				g1 <<= 3;
+//				g2 <<= 3;
+//			}
 		}
 	}
 }
@@ -653,16 +648,14 @@ int main(int argc, char **argv){
 		if (i>=MAX_PAR) {
 			printf("Usage: %s {<option>} {<value>:<button>}\n",argv[0]);
 			for(i=0; i<MAX_PAR; i++) printf("	-%c %2.f %s\n",pc[i<<1],pf[i],ph[i]);
-			printf("<value> is octal combination, starting from 1 (octal 01)\n"
+			printf("<value> is octal combination, starting from x>0, where x is last event type:\n	1=begin, 2=update, 3=end\n"
 				"<button> 0..%i\n"
 				"\ndefault map:",MAX_BUTTON);
 			initmap();
-			for(i=0; i<bmap_size; i++) if (BMAP(i)) printf(" 0%o:%i",i,BMAP(i));
+			_print_bmap(0, 0, &bmap);
 			printf("\n\nRoute 'hold' button 3 to 'd-n-d' button 2: 013:2\n"
-#ifndef MINIMAL
 				"Use default on-TouchEnd bit - oneshot buttons:\n"
-				"  2-fingers swipe right to 8-11 buttons: 177:0x88\n"
-#endif
+				"  2-fingers swipe right to 8 button: 0277:0 0377:0x88\n"
 				);
 			return 0;
 		}
@@ -676,10 +669,9 @@ int main(int argc, char **argv){
 	char **a;
 	for (a=argv+optind; *a; a++) {
 		int x, y;
-		if (sscanf(*a,"%i:%i",&x,&y)==2 && x>=0 && x<bmap_size && y>=0 && y<=MAX_BUTTON) {
+		if (sscanf(*a,"%i:%i",&x,&y)==2) {
 			SET_BMAP(x,y);
-			for(; x>1; x>>=3);
-			if (x) continue;
+			continue;
 		}
 		fprintf(stderr,"Error: invalid map item '%s', -h to help\n",*a);
 		return 1;
@@ -725,7 +717,8 @@ ev:
 				double res = resX;
 				Touch *to = NULL;
 				_short i, fin = 0;
-				_short g;
+				_short g = 0;
+				TouchTree *m = &bmap;
 				_short end = (ev.xcookie.evtype == XI_TouchEnd
 						|| (e->flags & XITouchPendingEnd));
 				double x1, y1, x2 = e->root_x + .5, y2 = e->root_y + .5;
@@ -762,7 +755,9 @@ ev:
 						    case BAD_BUTTON: goto invalidate1;
 						}
 						if (++t1->n != nt) goto invalidate;
+						if (m) m = m->gg[t1->g];
 					}
+					if (m && (m=m->gg[1])) goto found;
 delay1:
 					if (!_delay(pi[p_hold])) goto evfree;
 					x1 = x2;
@@ -821,18 +816,19 @@ invalidate1:
 				}
 				if (bx) to->g1 = bx;
 				to->g = bx;
-				_int x = bmap_high_bit;
 				for (i=P; i!=N; i=TOUCH_N(i)) {
 					Touch *t1 = &touch[i];
 					if (t1->deviceid != to->deviceid) continue;
-					x = (x << 3)|t1->g;
+					if (t1->g == BUTTON_DND) continue;
+					m = m->gg[t1->g & 7];
+					if (!m) goto gest;
 				}
-				//if (x > bmap_size) goto skip;
-				g = BMAP(x);
-#ifndef MINIMAL
+				m = m->gg[end + 2];
+				if (!m) goto gest;
+found:
+				g = m->g;
 				if (g & pi[p_end]) {
 					if (g != BAD_BUTTON) {
-						if (!end) goto evfree;
 						g ^= pi[p_end];
 						xx = 0;
 					}
@@ -843,7 +839,6 @@ invalidate1:
 						t1->g = BAD_BUTTON;
 					}
 				}
-#endif
 gest:
 				switch (g) {
 				    case BAD_BUTTON:
