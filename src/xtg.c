@@ -66,6 +66,13 @@
 #define BUTTON_HOLD 3
 #define MAX_FINGERS 8
 
+#define BUTTON_LEFT 7
+#define BUTTON_RIGHT 6
+#define BUTTON_UP 5
+#define BUTTON_DOWN 4
+
+#define PH_BORDER (1<<2)
+
 typedef unsigned short _short;
 typedef uint32_t _int;
 
@@ -118,14 +125,16 @@ int resDev = 0;
 int xrr, xrevent, xrerror;
 
 int xssevent, xsserror;
-timeSkip = 0;
+Time timeSkip = 0;
 
 #define MAX_BUTTON 255
 #define BAD_BUTTON MAX_BUTTON
 #define DEF_END_BIT ((MAX_BUTTON+1)>>1)
 typedef struct _TouchTree {
+	union {
 	void *gg[8];
 	_short g;
+	}
 } TouchTree;
 TouchTree bmap = {};
 static void SET_BMAP(_int i, _short x){
@@ -295,6 +304,7 @@ static int _delay(Time delay){
 	return !Select(fd+1, &rs, 0, 0, &tv);
 }
 
+int scrX1,scrY1,scrX2,scrY2;
 static void getRes(int x, int y){
 	int i;
 	int width, height, mwidth, mheight;
@@ -303,6 +313,8 @@ static void getRes(int x, int y){
 	mheight = DisplayHeightMM(dpy, screen);
 	width = wa.width;
 	height = wa.height;
+	scrX1 = 0;
+	scrY1 = 0;
 	if (xrr) {
 		XRRScreenResources *xrrr = XRRGetScreenResources(dpy,wa.root);
 		_short found = 0;
@@ -312,6 +324,8 @@ static void getRes(int x, int y){
 			if (oinf && oinf->crtc && oinf->connection == RR_Connected) {
 				XRRCrtcInfo *cinf = XRRGetCrtcInfo (dpy, xrrr, oinf->crtc);
 				if (cinf && x >= cinf->x && y >= cinf->y && x < cinf->x + cinf->width && y < cinf->y + cinf->height) {
+					scrX1 = cinf->x;
+					scrY1 = cinf->y;
 					mwidth=oinf->mm_width;
 					mheight=oinf->mm_height;
 					width = cinf->width;
@@ -324,6 +338,8 @@ static void getRes(int x, int y){
 		}
 		XRRFreeScreenResources(xrrr);
 	}
+	scrX2 = scrX1 + width - 1;
+	scrY2 = scrY1 + height - 1;
 	if (mwidth > mheight && width < height && mheight) {
 		i = mwidth;
 		mwidth = mheight;
@@ -338,7 +354,6 @@ static void getRes(int x, int y){
 		if (!mwidth) resX = resY;
 	}
 }
-
 
 int xtestPtr, xtestKbd;
 short showPtr = 1, oldShowPtr = 3, tdevs = 0, tdevs2=0, curShow = 1;
@@ -716,7 +731,7 @@ ev:
 				double res = resX;
 				Touch *to = NULL;
 				_short i, fin = 0;
-				_short g = 0, ph = 0;
+				_short g, ph = 0;
 				TouchTree *m = &bmap;
 				_short end = (ev.xcookie.evtype == XI_TouchEnd
 						|| (e->flags & XITouchPendingEnd));
@@ -727,6 +742,13 @@ ev:
 					to = t1;
 					break;
 				}
+				if (resDev != to->deviceid) {
+					// slow for multiple touchscreens
+					if (pf[p_res]<0) getRes(x2,y2);
+					resDev = to->deviceid;
+				}
+				g = ((int)x2 == scrX1) ? BUTTON_RIGHT : ((int)x2 == scrX2) ? BUTTON_LEFT : ((int)y2 == scrY1) ? BUTTON_UP : ((int)y2 == scrY2) ? BUTTON_DOWN : 0;
+				if (g) ph |= PH_BORDER;
 				if (ev.xcookie.evtype == XI_TouchBegin) {
 					if (to) goto evfree;
 					to = &touch[N];
@@ -738,7 +760,7 @@ ev:
 					to->x = x1 = x2;
 					to->y = y1 = y2;
 					to->tail = 0;
-					to->g = 0;
+					to->g = g;
 					to->g1 = 0;
 					_short nt;
 					to->n = nt = 1;
@@ -783,6 +805,7 @@ invalidate1:
 					to->g = BAD_BUTTON;
 					goto evfree;
 				}
+				g = 0;
 				x1 = to->x;
 				y1 = to->y;
 				switch (to->g) {
@@ -790,17 +813,12 @@ invalidate1:
 				    case BUTTON_DND: goto next_dnd;
 				}
 
-				if (resDev != to->deviceid) {
-					// slow for multiple touchscreens
-					if (pf[p_res]<0) getRes(x2,y2);
-					resDev = to->deviceid;
-				}
 				double xx = x2 - x1, yy = y2 - y1;
 				int bx = 0, by = 0;
-				if (xx<0) {xx = -xx; bx = 7;}
-				else if (xx>0) bx = 6;
-				if (yy<0) {yy = -yy; by = 5;}
-				else if (yy>0) by = 4;
+				if (xx<0) {xx = -xx; bx = BUTTON_LEFT;}
+				else if (xx>0) bx = BUTTON_RIGHT;
+				if (yy<0) {yy = -yy; by = BUTTON_UP;}
+				else if (yy>0) by = BUTTON_DOWN;
 				if (xx<yy) {
 					double s = xx;
 					xx = yy;
@@ -809,10 +827,12 @@ invalidate1:
 					res = resY;
 				}
 
+
 				if (bx) {
 				    if (bx == to->g1) xx += to->tail;
 				    if (xx < res || xx/(yy?:1) < pf[p_xy]) bx = 0;
 				}
+
 				if (!bx && !to->g1 && to->n==1) {
 					Time t = T - to->time;
 					if (t >= pi[p_hold]) bx = BUTTON_HOLD;
