@@ -1,5 +1,5 @@
 /*
-	xtg v1.20 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.21 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -71,6 +71,8 @@
 #define BUTTON_UP 5
 #define BUTTON_DOWN 4
 
+#define BUTTON_KEY 15
+
 #define PH_BORDER (1<<2)
 
 typedef unsigned short _short;
@@ -129,13 +131,14 @@ Time timeSkip = 0;
 
 #define MAX_BUTTON 255
 #define BAD_BUTTON MAX_BUTTON
-#define DEF_END_BIT ((MAX_BUTTON+1)>>1)
+#define END_BIT ((MAX_BUTTON+1)>>1)
 typedef struct _TouchTree {
 	void *gg[8];
 	_short g;
+	unsigned int key;
 } TouchTree;
 TouchTree bmap = {};
-static void SET_BMAP(_int i, _short x){
+static void SET_BMAP(_int i, _short x, unsigned int key){
 	static TouchTree *bmap_ = &bmap;;
 	TouchTree **m = &bmap_;
 	for(; i; i>>=3) {
@@ -143,6 +146,7 @@ static void SET_BMAP(_int i, _short x){
 		if (!*m) *m = calloc(1, sizeof(**m));
 	}
 	(*m)->g = x;
+	(*m)->key = key;
 }
 static void _print_bmap(_int x, _short n, TouchTree *m) {
 	_short i;
@@ -158,12 +162,11 @@ static void _print_bmap(_int x, _short n, TouchTree *m) {
 #define p_hold 3
 #define p_xy 4
 #define p_res 5
-#define p_end 6
-#define p_round 7
-#define MAX_PAR 8
+#define p_round 6
+#define MAX_PAR 7
 char *pa[MAX_PAR] = {};
 // android: 125ms tap, 500ms long
-#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, DEF_END_BIT, 0 }
+#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0 }
 int pi[] = PAR_DEFS;
 double pf[] = PAR_DEFS;
 char *ph[MAX_PAR] = {
@@ -173,10 +176,9 @@ char *ph[MAX_PAR] = {
 	"button 2|3 hold time, ms",
 	"min swipe x/y or y/x",
 	"swipe size (>0 - dots, <0 - -mm)",
-	"on-TouchEnd bit(s) (=send once)",
 	"add to coordinates (to round to integer)",
 };
-char pc[] = "d:m:M:t:x:r:e:b:i:h";
+char pc[] = "d:m:M:t:x:r:e:i:h";
 #else
 #define TIME(T,t)
 #endif
@@ -492,15 +494,15 @@ static void sigterm(int sig) {
 static void _set_bmap(_int g, _short i, _int j){
 	switch (i) {
 	    case 1:
-		SET_BMAP(g|(3<<j),i);
+		SET_BMAP(g|(3<<j),i,0);
 		break;
 	    case 2:
 		break;
 	    case 3:
-		SET_BMAP(g|(1<<j),i);
+		SET_BMAP(g|(1<<j),i,0);
 	    default:
-		SET_BMAP(g|(2<<j),i);
-		SET_BMAP(g|(3<<j),i);
+		SET_BMAP(g|(2<<j),i,0);
+		SET_BMAP(g|(3<<j),i,0);
 	}
 }
 
@@ -658,21 +660,26 @@ int main(int argc, char **argv){
 	while((opt=getopt(argc, argv, pc))>=0){
 		for (i=0; i<MAX_PAR && pc[i<<1] != opt; i++);
 		if (i>=MAX_PAR) {
-			printf("Usage: %s {<option>} {<value>:<button>}\n",argv[0]);
+			printf("Usage: %s {<option>} {<value>:<button>[:<key>]}\n",argv[0]);
 			for(i=0; i<MAX_PAR; i++) {
 				printf("	-%c ",pc[i<<1]);
 				if (pf[i] == pi[i]) printf("%i",pi[i]);
 				else printf("%.1f",pf[i]);
 				printf(" %s\n",ph[i]);
 			}
-			printf("<value> is octal combination, starting from x>0, where x is last event type:\n	1=begin, 2=update, 3=end\n"
-				"<button> 0..%i\n"
+			printf("<value> is octal combination, starting from x>0, where x is last event type:\n"
+				"	1=begin, 2=update, 3=end\n"
+				"	bit 3(+4)=border\n"
+				"<button> 0..%i (X use 1-9)\n"
+				"	button 0xf is special: this is key"
 				"\ndefault map:",MAX_BUTTON);
 			initmap();
 			_print_bmap(0, 0, &bmap);
 			printf("\n\nRoute 'hold' button 3 to 'd-n-d' button 2: 013:2\n"
 				"Use default on-TouchEnd bit - oneshot buttons:\n"
 				"  2-fingers swipe right to 8 button: 0277:0 0377:0x88\n"
+				"  Audio prev/next keys to 2-left/right: 0277:0x8f:XF86AudioNext 0377:0x8f:XF86AudioNext 0266:0x8f:XF86AudioPrev 0366:0x8f:XF86AudioPrev\n"
+				"   - same for 1-left/right from screeen border: 057:0x8f:XF86AudioNext 057:0x8f:XF86AudioNext 56:0x8f:XF86AudioPrev 56:0x8f:XF86AudioPrev\n"
 				);
 			return 0;
 		}
@@ -682,12 +689,20 @@ int main(int argc, char **argv){
 		pi[i] = atoi(optarg);
 	}
 	initmap();
-
+#endif
+	opendpy();
+#ifdef XTG
 	char **a;
 	for (a=argv+optind; *a; a++) {
 		int x, y;
-		if (sscanf(*a,"%i:%i",&x,&y)==2) {
-			SET_BMAP(x,y);
+		unsigned int z = 0;
+		char k[128];
+		switch (sscanf(*a,"%i:%i:%127s",&x,&y,&k)) {
+		    case 3:
+			z = XKeysymToKeycode(dpy,XStringToKeysym(&k));
+			fprintf(stderr,"key = %i %s\n",z,&k);
+		    case 2:
+			SET_BMAP(x,y,z);
 			continue;
 		}
 		fprintf(stderr,"Error: invalid map item '%s', -h to help\n",*a);
@@ -695,7 +710,7 @@ int main(int argc, char **argv){
 	}
 	resX = resY = pf[p_res] < 0 ? 1 : pf[p_res];
 #endif
-	opendpy();
+
 	if (!dpy) return 1;
 	init();
 	printGrp();
@@ -764,7 +779,7 @@ ev:
 					to->y = y1 = y2;
 					to->tail = 0;
 					to->g = g;
-					to->g1 = 0;
+					to->g1 = g;
 					_short nt;
 					to->n = nt = 1;
 					if (T <= timeSkip) goto invalidateT;
@@ -851,9 +866,9 @@ invalidate1:
 				if (!m) goto gest;
 				g = m->g;
 found:
-				if (g & pi[p_end]) {
+				if (g & END_BIT) {
 					if (g != BAD_BUTTON) {
-						g ^= pi[p_end];
+						g ^= END_BIT;
 						xx = 0;
 					}
 					for(i=P; i!=N; i=TOUCH_N(i)) {
@@ -876,6 +891,12 @@ gest:
 next_dnd:
 					XTestFakeMotionEvent(dpy,screen,x2,y2,0);
 					if (end) XTestFakeButtonEvent(dpy,BUTTON_DND,0,0);
+					break;
+				    case BUTTON_KEY:
+					XTestFakeMotionEvent(dpy,screen,x1,y1,0);
+					XTestFakeKeyEvent(dpy,m->key,1,0);
+					XTestFakeMotionEvent(dpy,screen,x2,y2,0);
+					XTestFakeKeyEvent(dpy,m->key,0,0);
 					break;
 #if BUTTON_HOLD != BUTTON_DND
 				    case BUTTON_HOLD:
