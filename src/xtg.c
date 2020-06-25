@@ -818,7 +818,6 @@ invalidate1:
 					to->g = BAD_BUTTON;
 					goto evfree;
 				}
-				g = 0;
 				x1 = to->x;
 				y1 = to->y;
 				switch (to->g) {
@@ -851,19 +850,26 @@ invalidate1:
 					if (t >= pi[p_hold]) bx = BUTTON_HOLD;
 					else if (end) bx = 1;
 					else if (_delay(pi[p_hold] - t)) bx = BUTTON_HOLD;
+					else goto skip;
 				}
 				if (bx) to->g1 = bx;
 				to->g = bx;
+
+				// no skip more! or move before "skip" again
+				TIME(to->time,T);
+				to->x = x2;
+				to->y = y2;
+
 				for (i=P; i!=N; i=TOUCH_N(i)) {
 					Touch *t1 = &touch[i];
 					if (t1->deviceid != to->deviceid) continue;
 					if (t1->g == BUTTON_DND) continue;
 					m = m->gg[t1->g & 7];
-					if (!m) goto gest;
+					if (!m) goto gest0;
 				}
 				ph |= end + 2;
 				m = m->gg[ph];
-				if (!m) goto gest;
+				if (!m) goto gest0;
 				g = m->g;
 found:
 				if (g & END_BIT) {
@@ -882,6 +888,7 @@ gest:
 				switch (g) {
 				    case BAD_BUTTON:
 				    case 0:
+gest0:
 					if (end && TOUCH_CNT == 1)
 						XTestFakeMotionEvent(dpy,screen,x2,y2,0);
 					goto skip;
@@ -919,9 +926,6 @@ next_dnd:
 					XTestFakeButtonEvent(dpy,g,0,0);
 				}
 //				XFlush(dpy);
-				TIME(to->time,T);
-				to->x = x2;
-				to->y = y2;
 				to->tail = xx;
 skip:
 				if (!end) goto evfree;
