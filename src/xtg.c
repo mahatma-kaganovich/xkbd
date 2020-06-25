@@ -896,8 +896,8 @@ next_dnd:
 					XTestFakeMotionEvent(dpy,screen,x1,y1,0);
 					XTestFakeKeyEvent(dpy,m->key,1,0);
 					for (xx-=res;xx>=res;xx-=res) {
-						XTestFakeButtonEvent(dpy,m->key,0,0);
-						XTestFakeButtonEvent(dpy,m->key,1,0);
+						XTestFakeKeyEvent(dpy,m->key,0,0);
+						XTestFakeKeyEvent(dpy,m->key,1,0);
 					}
 					XTestFakeMotionEvent(dpy,screen,x2,y2,0);
 					XTestFakeKeyEvent(dpy,m->key,0,0);
