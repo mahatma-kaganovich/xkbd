@@ -853,8 +853,8 @@ re_crts:
 			if (e->sourceid != e->deviceid && DeviceIdMask == XIAllDevices) break;
 			// protect from fusion button/touch events
 			static int lastid = -1;
-			int ex = e->event_x + .5;
-			int ey = e->event_y + .5;
+			int ex = e->event_x;
+			int ey = e->event_y;
 			switch(ev.xcookie.evtype) {
 			    case XI_ButtonRelease: type++;
 			    case XI_Motion: type++; // always detail==0

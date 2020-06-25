@@ -131,10 +131,8 @@ Time timeSkip = 0;
 #define BAD_BUTTON MAX_BUTTON
 #define DEF_END_BIT ((MAX_BUTTON+1)>>1)
 typedef struct _TouchTree {
-	union {
 	void *gg[8];
 	_short g;
-	}
 } TouchTree;
 TouchTree bmap = {};
 static void SET_BMAP(_int i, _short x){
@@ -161,10 +159,11 @@ static void _print_bmap(_int x, _short n, TouchTree *m) {
 #define p_xy 4
 #define p_res 5
 #define p_end 6
-#define MAX_PAR 7
+#define p_round 7
+#define MAX_PAR 8
 char *pa[MAX_PAR] = {};
 // android: 125ms tap, 500ms long
-#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, DEF_END_BIT }
+#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, DEF_END_BIT, 0 }
 int pi[] = PAR_DEFS;
 double pf[] = PAR_DEFS;
 char *ph[MAX_PAR] = {
@@ -174,11 +173,10 @@ char *ph[MAX_PAR] = {
 	"button 2|3 hold time, ms",
 	"min swipe x/y or y/x",
 	"swipe size (>0 - dots, <0 - -mm)",
-#if DEF_END_BIT
 	"on-TouchEnd bit(s) (=send once)",
-#endif
+	"add to coordinates (to round to integer)",
 };
-char pc[] = "d:m:M:t:x:r:e:b:h";
+char pc[] = "d:m:M:t:x:r:e:b:i:h";
 #else
 #define TIME(T,t)
 #endif
@@ -661,7 +659,12 @@ int main(int argc, char **argv){
 		for (i=0; i<MAX_PAR && pc[i<<1] != opt; i++);
 		if (i>=MAX_PAR) {
 			printf("Usage: %s {<option>} {<value>:<button>}\n",argv[0]);
-			for(i=0; i<MAX_PAR; i++) printf("	-%c %2.f %s\n",pc[i<<1],pf[i],ph[i]);
+			for(i=0; i<MAX_PAR; i++) {
+				printf("	-%c ",pc[i<<1]);
+				if (pf[i] == pi[i]) printf("%i",pi[i]);
+				else printf("%.1f",pf[i]);
+				printf(" %s\n",ph[i]);
+			}
 			printf("<value> is octal combination, starting from x>0, where x is last event type:\n	1=begin, 2=update, 3=end\n"
 				"<button> 0..%i\n"
 				"\ndefault map:",MAX_BUTTON);
@@ -735,7 +738,7 @@ ev:
 				TouchTree *m = &bmap;
 				_short end = (ev.xcookie.evtype == XI_TouchEnd
 						|| (e->flags & XITouchPendingEnd));
-				double x1, y1, x2 = e->root_x + .5, y2 = e->root_y + .5;
+				double x1, y1, x2 = e->root_x + pf[p_round], y2 = e->root_y + pf[p_round];
 				for(i=P; i!=N; i=TOUCH_N(i)){
 					Touch *t1 = &touch[i];
 					if (t1->touchid != e->detail || t1->deviceid != e->deviceid) continue;
@@ -747,7 +750,7 @@ ev:
 					if (pf[p_res]<0) getRes(x2,y2);
 					resDev = e->deviceid;
 				}
-				g = ((int)x2 == scrX1) ? BUTTON_RIGHT : ((int)x2 == scrX2) ? BUTTON_LEFT : ((int)y2 == scrY1) ? BUTTON_UP : ((int)y2 == scrY2) ? BUTTON_DOWN : 0;
+				g = ((int)x2 == scrX1) ? BUTTON_RIGHT : ((int)x2 >= scrX2) ? BUTTON_LEFT : ((int)y2 == scrY1) ? BUTTON_UP : ((int)y2 >= scrY2) ? BUTTON_DOWN : 0;
 				if (g) ph |= PH_BORDER;
 				if (ev.xcookie.evtype == XI_TouchBegin) {
 					if (to) goto evfree;
