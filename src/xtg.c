@@ -742,10 +742,10 @@ ev:
 					to = t1;
 					break;
 				}
-				if (resDev != to->deviceid) {
+				if (resDev != e->deviceid) {
 					// slow for multiple touchscreens
 					if (pf[p_res]<0) getRes(x2,y2);
-					resDev = to->deviceid;
+					resDev = e->deviceid;
 				}
 				g = ((int)x2 == scrX1) ? BUTTON_RIGHT : ((int)x2 == scrX2) ? BUTTON_LEFT : ((int)y2 == scrY1) ? BUTTON_UP : ((int)y2 == scrY2) ? BUTTON_DOWN : 0;
 				if (g) ph |= PH_BORDER;
@@ -782,14 +782,9 @@ ev:
 					if (nt1 != nt) goto invalidate;
 					to->n = nt;
 					if (!m) goto evfree;
-					if (nt != 1) goto evfree;
-					if (_delay(pi[p_hold])) to->g = BUTTON_HOLD;
-					if (!(m=m->gg[to->g])) goto evfree;
-					ph |= 1;
-					m = m->gg[ph];
-					if (!m) goto evfree;
-					g = m->g;
-					if (g) goto found;
+					if (nt == 1 && _delay(pi[p_hold])) to->g = BUTTON_HOLD;
+					if ((m = m->gg[to->g]) && (m = m->gg[ph|=1]) && (g = m->g))
+						goto found;
 					goto evfree;
 invalidate:
 					for (i=P; i!=N; i=TOUCH_N(i)) {
