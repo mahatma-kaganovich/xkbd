@@ -750,7 +750,7 @@ ev:
 					if (pf[p_res]<0) getRes(x2,y2);
 					resDev = e->deviceid;
 				}
-				g = ((int)x2 == scrX1) ? BUTTON_RIGHT : ((int)x2 >= scrX2) ? BUTTON_LEFT : ((int)y2 == scrY1) ? BUTTON_UP : ((int)y2 >= scrY2) ? BUTTON_DOWN : 0;
+				g = ((int)x2 <= scrX1) ? BUTTON_RIGHT : ((int)x2 >= scrX2) ? BUTTON_LEFT : ((int)y2 <= scrY1) ? BUTTON_UP : ((int)y2 >= scrY2) ? BUTTON_DOWN : 0;
 				if (g) ph |= PH_BORDER;
 				if (ev.xcookie.evtype == XI_TouchBegin) {
 					if (to) goto evfree;
