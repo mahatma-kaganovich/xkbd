@@ -839,7 +839,6 @@ invalidate1:
 					res = resY;
 				}
 
-
 				if (bx) {
 				    if (bx == to->g1) xx += to->tail;
 				    if (xx < res || xx/(yy?:1) < pf[p_xy]) bx = 0;
@@ -854,11 +853,6 @@ invalidate1:
 				}
 				if (bx) to->g1 = bx;
 				to->g = bx;
-
-				// no skip more! or move before "skip" again
-				TIME(to->time,T);
-				to->x = x2;
-				to->y = y2;
 
 				for (i=P; i!=N; i=TOUCH_N(i)) {
 					Touch *t1 = &touch[i];
@@ -927,12 +921,18 @@ next_dnd:
 				}
 //				XFlush(dpy);
 				to->tail = xx;
+				TIME(to->time,T);
+				to->x = x2;
+				to->y = y2;
 skip:
 				if (!end) goto evfree;
 #ifdef TOUCH_ORDER
 				_short t = (to - &touch[0]);
-				for(i=TOUCH_N(t); i!=N; i=TOUCH_N(t = i)) touch[t] = touch[i];
-				N=TOUCH_P(N);
+				if (t == P) TOUCH_N(P);
+				else {
+					for(i=TOUCH_N(t); i!=N; i=TOUCH_N(t = i)) touch[t] = touch[i];
+					N=TOUCH_P(N);
+				}
 #else
 				N=TOUCH_P(N);
 				Touch *t1 = &touch[N];
