@@ -774,6 +774,7 @@ ev:
 					if (N==P) P=TOUCH_N(P);
 					to->touchid = e->detail;
 					to->deviceid = e->deviceid;
+					XFreeEventData(dpy, &ev.xcookie);
 					TIME(to->time,T);
 					to->x = x1 = x2;
 					to->y = y1 = y2;
@@ -799,11 +800,12 @@ ev:
 					}
 					if (nt1 != nt) goto invalidate;
 					to->n = nt;
-					if (!m) goto evfree;
+					if (!m) goto ev;
 					if (nt == 1 && _delay(pi[p_hold])) to->g = BUTTON_HOLD;
 					if ((m = m->gg[to->g]) && (m = m->gg[ph|=1]) && (g = m->g))
 						goto found;
-					goto evfree;
+					if (oldShowPtr) continue;
+					goto ev;
 invalidate:
 					for (i=P; i!=N; i=TOUCH_N(i)) {
 						Touch *t1 = &touch[i];
@@ -811,13 +813,20 @@ invalidate:
 						if (t1->g == BUTTON_DND) continue;
 						t1->g = BAD_BUTTON;
 					}
-					goto evfree;
+					goto ev;
 invalidateT:
 					timeSkip = T; // allow bad time value, after XSS only once
+					to->g = BAD_BUTTON;
+					// oldShowPtr can be changed only on single touch Begin
+					// so, if checked at least 1 more touch - skip this
+touch1:
+					if (oldShowPtr) continue;
+					goto ev;
 invalidate1:
 					to->g = BAD_BUTTON;
-					goto evfree;
+					goto ev;
 				}
+				XFreeEventData(dpy, &ev.xcookie);
 				x1 = to->x;
 				y1 = to->y;
 				switch (to->g) {
@@ -925,7 +934,7 @@ next_dnd:
 				to->x = x2;
 				to->y = y2;
 skip:
-				if (!end) goto evfree;
+				if (!end) goto ev;
 #ifdef TOUCH_ORDER
 				_short t = (to - &touch[0]);
 				if (t == P) TOUCH_N(P);
@@ -938,11 +947,12 @@ skip:
 				Touch *t1 = &touch[N];
 				if (to != t1) *to = *t1;
 #endif
-evfree:
-				XFreeEventData(dpy, &ev.xcookie);
-				if (oldShowPtr) continue;
 			}
 			goto ev;
+evfree:
+			XFreeEventData(dpy, &ev.xcookie);
+			goto ev;
+
 #endif
 #ifdef XSS
 #undef e
