@@ -784,7 +784,6 @@ ev:
 					_short nt;
 					to->n = nt = 1;
 					if (T <= timeSkip) goto invalidateT;
-					//if (pi[p_maxfingers] && nt > pi[p_maxfingers]) goto invalidate;
 					_short n = TOUCH_P(N);
 					_short nt1 = 1;
 					for (i=P; i!=n; i=TOUCH_N(i)) {
@@ -807,23 +806,21 @@ ev:
 					if (oldShowPtr) continue;
 					goto ev;
 invalidate:
-					for (i=P; i!=N; i=TOUCH_N(i)) {
+					for (i=P; i!=n; i=TOUCH_N(i)) {
 						Touch *t1 = &touch[i];
 						if (t1->deviceid != to->deviceid) continue;
 						if (t1->g == BUTTON_DND) continue;
 						t1->g = BAD_BUTTON;
 					}
+invalidate1:
+					to->g = BAD_BUTTON;
 					goto ev;
 invalidateT:
 					timeSkip = T; // allow bad time value, after XSS only once
 					to->g = BAD_BUTTON;
 					// oldShowPtr can be changed only on single touch Begin
 					// so, if checked at least 1 more touch - skip this
-touch1:
 					if (oldShowPtr) continue;
-					goto ev;
-invalidate1:
-					to->g = BAD_BUTTON;
 					goto ev;
 				}
 				XFreeEventData(dpy, &ev.xcookie);
