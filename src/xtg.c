@@ -94,6 +94,8 @@ int xkbEventType, xkbError, n1, revert;
 XEvent ev;
 unsigned char *ret;
 
+#define AnyTIME
+
 #ifdef XTG
 int xiopcode, xierror;
 #define MASK_LEN XIMaskLen(XI_LASTEVENT)
@@ -127,7 +129,7 @@ int resDev = 0;
 int xrr, xrevent, xrerror;
 
 int xssevent, xsserror;
-Time timeSkip = 0;
+Time timeSkip = 0, timeHold = 0;
 
 #define MAX_BUTTON 255
 #define BAD_BUTTON MAX_BUTTON
@@ -286,11 +288,17 @@ static void WMState(Atom *states, short nn){
 #define TDIV1000(x) (x>>10)
 #endif
 
-//static Time ms(){
-//	struct timeval tv;
-//	X_GETTIMEOFDAY(&tv);
-//	return TMUL1000(tv.tv_sec) + TDIV1000(tv.tv_usec);
-//}
+#if 0
+// by unknown (2me) reason this time incompatible with event time
+// just ignore timless events
+static Time ms(){
+	struct timeval tv;
+	X_GETTIMEOFDAY(&tv);
+	return TMUL1000(tv.tv_sec) + TDIV1000(tv.tv_usec);
+}
+#undef AnyTIME
+#define AnyTIME TIME(T,ms())
+#endif
 
 static int _delay(Time delay){
 	if (XPending(dpy)) return 0;
@@ -634,9 +642,8 @@ static void init(){
 		xssevent += ScreenSaverNotify;
 		XScreenSaverSelectInput(dpy, wa.root, ScreenSaverNotifyMask);
 		XScreenSaverInfo *x = XScreenSaverAllocInfo();
-		if (x && XScreenSaverQueryInfo(dpy, wa.root, x) == Success && x->state == ScreenSaverOn) {
-			timeSkip = ~(Time)0;
-		}
+		if (x && XScreenSaverQueryInfo(dpy, wa.root, x) == Success && x->state == ScreenSaverOn)
+			timeSkip--;
 		XFree(x);
 	} else xssevent = -1;
 #endif
@@ -656,6 +663,7 @@ int main(int argc, char **argv){
 #ifdef XTG
 	_int i;
 	int opt;
+	Touch *to;
 
 	while((opt=getopt(argc, argv, pc))>=0){
 		for (i=0; i<MAX_PAR && pc[i<<1] != opt; i++);
@@ -724,6 +732,19 @@ int main(int argc, char **argv){
 		if (showPtr != oldShowPtr) setShowCursor();
 #endif
 ev:
+#ifdef XTG
+		if (timeHold) {
+			Time t = T - timeHold;
+			if (t >= pi[p_hold] || _delay(pi[p_hold] - t)) {
+				XTestFakeMotionEvent(dpy,screen,to->x,to->y,0);
+				XTestFakeButtonEvent(dpy,BUTTON_HOLD,1,0);
+				XTestFakeButtonEvent(dpy,BUTTON_HOLD,0,0);
+				to->g = BAD_BUTTON;
+				timeHold = 0;
+			}
+		}
+ev2:
+#endif
 		XNextEvent(dpy, &ev);
 		switch (ev.type) {
 #ifdef XTG
@@ -747,13 +768,13 @@ ev:
 #define e ((XIDeviceEvent*)ev.xcookie.data)
 				TIME(T,e->time);
 				double res = resX;
-				Touch *to = NULL;
 				_short i, fin = 0;
 				_short g, ph = 0;
 				TouchTree *m = &bmap;
 				_short end = (ev.xcookie.evtype == XI_TouchEnd
 						|| (e->flags & XITouchPendingEnd));
 				double x1, y1, x2 = e->root_x + pf[p_round], y2 = e->root_y + pf[p_round];
+				to = NULL;
 				for(i=P; i!=N; i=TOUCH_N(i)){
 					Touch *t1 = &touch[i];
 					if (t1->touchid != e->detail || t1->deviceid != e->deviceid) continue;
@@ -769,6 +790,7 @@ ev:
 				if (g) ph |= PH_BORDER;
 				if (ev.xcookie.evtype == XI_TouchBegin) {
 					if (to) goto evfree;
+					timeHold = 0;
 					to = &touch[N];
 					N=TOUCH_N(N);
 					if (N==P) P=TOUCH_N(P);
@@ -799,12 +821,15 @@ ev:
 					}
 					if (nt1 != nt) goto invalidate;
 					to->n = nt;
-					if (!m) goto ev;
-					if (nt == 1 && _delay(pi[p_hold])) to->g = BUTTON_HOLD;
+					if (!m) goto ev2;
+					if (nt == 1) {
+						timeHold = T;
+						if (oldShowPtr) continue;
+						goto ev;
+					}
 					if ((m = m->gg[to->g]) && (m = m->gg[ph|=1]) && (g = m->g))
 						goto found;
-					if (oldShowPtr) continue;
-					goto ev;
+					goto ev2;
 invalidate:
 					for (i=P; i!=n; i=TOUCH_N(i)) {
 						Touch *t1 = &touch[i];
@@ -814,14 +839,14 @@ invalidate:
 					}
 invalidate1:
 					to->g = BAD_BUTTON;
-					goto ev;
+					goto ev2;
 invalidateT:
 					timeSkip = T; // allow bad time value, after XSS only once
 					to->g = BAD_BUTTON;
 					// oldShowPtr can be changed only on single touch Begin
 					// so, if checked at least 1 more touch - skip this
 					if (oldShowPtr) continue;
-					goto ev;
+					goto ev2;
 				}
 				XFreeEventData(dpy, &ev.xcookie);
 				x1 = to->x;
@@ -851,14 +876,12 @@ invalidateT:
 				}
 
 				if (!bx && !to->g1 && to->n==1) {
-					Time t = T - to->time;
-					if (t >= pi[p_hold]) bx = BUTTON_HOLD;
-					else if (end) bx = 1;
-					else if (_delay(pi[p_hold] - t)) bx = BUTTON_HOLD;
-					else goto skip;
+					if (!end) goto ev;
+					bx = 1;
 				}
 				if (bx) to->g1 = bx;
 				to->g = bx;
+				timeHold = 0;
 
 				for (i=P; i!=N; i=TOUCH_N(i)) {
 					Touch *t1 = &touch[i];
@@ -909,10 +932,8 @@ next_dnd:
 					XTestFakeMotionEvent(dpy,screen,x2,y2,0);
 					XTestFakeKeyEvent(dpy,m->key,0,0);
 					break;
-#if BUTTON_HOLD != BUTTON_DND
 				    case BUTTON_HOLD:
 					to->g = BAD_BUTTON;
-#endif
 				    case 1:
 					xx = 0;
 				    default:
@@ -931,7 +952,7 @@ next_dnd:
 				to->x = x2;
 				to->y = y2;
 skip:
-				if (!end) goto ev;
+				if (!end) goto ev2;
 #ifdef TOUCH_ORDER
 				_short t = (to - &touch[0]);
 				if (t == P) TOUCH_N(P);
@@ -944,20 +965,18 @@ skip:
 				Touch *t1 = &touch[N];
 				if (to != t1) *to = *t1;
 #endif
-				// this line only while check for BUTTON_HOLD on TouchBegin
-				if (oldShowPtr) continue;
+				goto ev2;
 			}
 			goto ev;
 evfree:
 			XFreeEventData(dpy, &ev.xcookie);
 			goto ev;
-
 #endif
 #ifdef XSS
 #undef e
 #define e (ev.xclient)
 		    case ClientMessage:
-			//TIME(T,ms()); // broken
+			AnyTIME;
 			if (e.message_type == aWMState){
 				if (e.window==win)
 					WMState(&e.data.l[1],e.data.l[0]);
@@ -967,7 +986,7 @@ evfree:
 #undef e
 #define e (ev.xproperty)
 		    case PropertyNotify:
-			//TIME(T,e.time);
+			TIME(T,e.time);
 			//fprintf(stderr,"Prop %s\n",XGetAtomName(dpy,e.atom));
 			//if (e.window!=wa.root) break;
 			if (e.atom==aActWin) {
@@ -987,7 +1006,7 @@ evfree:
 #undef e
 #define e ((XkbEvent)ev)
 			if (ev.type == xkbEventType) {
-				//TIME(T,e.any.time);
+				TIME(T,e.any.time);
 				switch (e.any.xkb_type) {
 #undef e
 #define e (((XkbEvent)ev).state)
@@ -1002,14 +1021,20 @@ evfree:
 #ifdef XSS
 #undef e
 #define e ((XScreenSaverNotifyEvent*)&ev)
-			else if (ev.type == xssevent) switch (e->state) {
-//			    case ScreenSaverDisabled:
-			    case ScreenSaverOff:
-				timeSkip = e->time;
-				break;
+			else if (ev.type == xssevent) {
+				TIME(T,e->time); // no sense for touch
+				switch (e->state) {
+//				    case ScreenSaverDisabled:
+				    case ScreenSaverOff:
+					timeSkip = e->time;
+					break;
+				}
 			}
 #endif
-			else if (ev.type == xrevent) resDev = 0;
+			else if (ev.type == xrevent) {
+				AnyTIME;
+				resDev = 0;
+			}
 #endif
 //			else fprintf(stderr,"ev? %i\n",ev.type);
 			break;
