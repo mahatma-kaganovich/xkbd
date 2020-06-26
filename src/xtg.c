@@ -947,6 +947,8 @@ skip:
 				Touch *t1 = &touch[N];
 				if (to != t1) *to = *t1;
 #endif
+				// this line only while check for BUTTON_HOLD on TouchBegin
+				if (oldShowPtr) continue;
 			}
 			goto ev;
 evfree:
