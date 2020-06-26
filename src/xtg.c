@@ -1,5 +1,5 @@
 /*
-	xtg v1.21 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.22 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -93,8 +93,6 @@ unsigned long rulLen, n;
 int xkbEventType, xkbError, n1, revert;
 XEvent ev;
 unsigned char *ret;
-
-#define AnyTIME
 
 #ifdef XTG
 int xiopcode, xierror;
@@ -286,18 +284,6 @@ static void WMState(Atom *states, short nn){
 #else
 #define TMUL1000(x) (x<<10)
 #define TDIV1000(x) (x>>10)
-#endif
-
-#if 0
-// by unknown (2me) reason this time incompatible with event time
-// just ignore timless events
-static Time ms(){
-	struct timeval tv;
-	X_GETTIMEOFDAY(&tv);
-	return TMUL1000(tv.tv_sec) + TDIV1000(tv.tv_usec);
-}
-#undef AnyTIME
-#define AnyTIME TIME(T,ms())
 #endif
 
 static int _delay(Time delay){
@@ -661,9 +647,13 @@ static void init(){
 
 int main(int argc, char **argv){
 #ifdef XTG
-	_int i;
+	_short i;
 	int opt;
 	Touch *to;
+	double x1,y1,x2,y2,xx,yy,res;
+	_short end,g,tt;
+	_int bx,by;
+	TouchTree *m;
 
 	while((opt=getopt(argc, argv, pc))>=0){
 		for (i=0; i<MAX_PAR && pc[i<<1] != opt; i++);
@@ -736,11 +726,9 @@ ev:
 		if (timeHold) {
 			Time t = T - timeHold;
 			if (t >= pi[p_hold] || _delay(pi[p_hold] - t)) {
-				XTestFakeMotionEvent(dpy,screen,to->x,to->y,0);
-				XTestFakeButtonEvent(dpy,BUTTON_HOLD,1,0);
-				XTestFakeButtonEvent(dpy,BUTTON_HOLD,0,0);
-				to->g = BAD_BUTTON;
+				to->g = BUTTON_HOLD;
 				timeHold = 0;
+				goto hold;
 			}
 		}
 ev2:
@@ -767,13 +755,12 @@ ev2:
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
 				TIME(T,e->time);
-				double res = resX;
-				_short i, fin = 0;
-				_short g, ph = 0;
-				TouchTree *m = &bmap;
-				_short end = (ev.xcookie.evtype == XI_TouchEnd
+				res = resX;
+				tt = 0;
+				m = &bmap;
+				end = (ev.xcookie.evtype == XI_TouchEnd
 						|| (e->flags & XITouchPendingEnd));
-				double x1, y1, x2 = e->root_x + pf[p_round], y2 = e->root_y + pf[p_round];
+				x2 = e->root_x + pf[p_round], y2 = e->root_y + pf[p_round];
 				to = NULL;
 				for(i=P; i!=N; i=TOUCH_N(i)){
 					Touch *t1 = &touch[i];
@@ -787,7 +774,7 @@ ev2:
 					resDev = e->deviceid;
 				}
 				g = ((int)x2 <= scrX1) ? BUTTON_RIGHT : ((int)x2 >= scrX2) ? BUTTON_LEFT : ((int)y2 <= scrY1) ? BUTTON_UP : ((int)y2 >= scrY2) ? BUTTON_DOWN : 0;
-				if (g) ph |= PH_BORDER;
+				if (g) tt |= PH_BORDER;
 				if (ev.xcookie.evtype == XI_TouchBegin) {
 					if (to) goto evfree;
 					timeHold = 0;
@@ -827,7 +814,8 @@ ev2:
 						if (oldShowPtr) continue;
 						goto ev;
 					}
-					if ((m = m->gg[to->g]) && (m = m->gg[ph|=1]) && (g = m->g))
+hold:
+					if ((m = m->gg[to->g]) && (m = m->gg[tt|=1]) && (g = m->g))
 						goto found;
 					goto ev2;
 invalidate:
@@ -856,8 +844,10 @@ invalidateT:
 				    case BUTTON_DND: goto next_dnd;
 				}
 
-				double xx = x2 - x1, yy = y2 - y1;
-				int bx = 0, by = 0;
+				xx = x2 - x1;
+				yy = y2 - y1;
+				bx = 0;
+				by = 0;
 				if (xx<0) {xx = -xx; bx = BUTTON_LEFT;}
 				else if (xx>0) bx = BUTTON_RIGHT;
 				if (yy<0) {yy = -yy; by = BUTTON_UP;}
@@ -879,6 +869,7 @@ invalidateT:
 					if (!end) goto ev;
 					bx = 1;
 				}
+
 				if (bx) to->g1 = bx;
 				to->g = bx;
 				timeHold = 0;
@@ -890,8 +881,8 @@ invalidateT:
 					m = m->gg[t1->g & 7];
 					if (!m) goto gest0;
 				}
-				ph |= end + 2;
-				m = m->gg[ph];
+				tt |= end + 2;
+				m = m->gg[tt];
 				if (!m) goto gest0;
 				g = m->g;
 found:
@@ -976,7 +967,7 @@ evfree:
 #undef e
 #define e (ev.xclient)
 		    case ClientMessage:
-			AnyTIME;
+			// no time
 			if (e.message_type == aWMState){
 				if (e.window==win)
 					WMState(&e.data.l[1],e.data.l[0]);
@@ -1031,8 +1022,10 @@ evfree:
 				}
 			}
 #endif
+#undef e
+#define e ((XRRScreenChangeNotifyEvent*)&ev)
 			else if (ev.type == xrevent) {
-				AnyTIME;
+				TIME(T,e->timestamp > e->config_timestamp ? e->timestamp : e->config_timestamp);
 				resDev = 0;
 			}
 #endif
