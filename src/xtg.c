@@ -135,7 +135,7 @@ typedef struct _TouchTree {
 	uint64_t g;
 } TouchTree;
 TouchTree bmap = {};
-static void SET_BMAP(_int i, _short x, _int key){
+static void SET_BMAP(_int i, unsigned char x, _int key){
 	static TouchTree *bmap_ = &bmap;;
 	TouchTree **m = &bmap_;
 	for(; i; i>>=3) {
