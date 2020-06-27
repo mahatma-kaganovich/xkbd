@@ -132,27 +132,29 @@ Time timeSkip = 0, timeHold = 0;
 #define END_BIT ((MAX_BUTTON+1)>>1)
 typedef struct _TouchTree {
 	void *gg[8];
-	uint64_t g;
+	_int k;
+	_short g;
 } TouchTree;
 TouchTree bmap = {};
-static void SET_BMAP(_int i, unsigned char x, _int key){
+static void SET_BMAP(_int i, _short x, _int key){
 	static TouchTree *bmap_ = &bmap;;
 	TouchTree **m = &bmap_;
 	for(; i; i>>=3) {
 		m = &((*m)->gg[i&7]);
 		if (!*m) *m = calloc(1, sizeof(**m));
 	}
-	(*m)->g = x | ((uint64_t) key << 32);
+	(*m)->g = x;
+	(*m)->k = key;
 }
 static void opendpy();
 static void _print_bmap(_int x, _short n, TouchTree *m) {
 	_short i;
-	unsigned long long l = m->g;
-	if (l) printf(" 0%o:%s%llx",x,l>9?"0x":"",l);
-	l = m->g >> 32;
+	unsigned int l = m->g;
+	if (l) printf(" 0%o:%s%x",x,l>9?"0x":"",l);
+	l = m->k;
 	if (l) {
 		if (!dpy) opendpy();
-		printf(":%s",dpy ? XKeysymToString(XkbKeycodeToKeysym(dpy,l,0,0)) : "?");
+		printf(":%s[0x%x]",dpy ? XKeysymToString(XkbKeycodeToKeysym(dpy,l,0,0)) : "",l);
 	}
 	for(i=0; i<8; i++) {
 		if (m->gg[i]) _print_bmap(x|(i<<n),n+3,m->gg[i]);
@@ -819,7 +821,7 @@ ev2:
 						goto ev;
 					}
 hold:
-					if ((m = m->gg[to->g]) && (m = m->gg[tt|=1]) && (g = (unsigned char) m->g))
+					if ((m = m->gg[to->g]) && (m = m->gg[tt|=1]) && (g = m->g))
 						goto found;
 					goto ev2;
 invalidate:
@@ -888,7 +890,7 @@ invalidateT:
 				tt |= end + 2;
 				m = m->gg[tt];
 				if (!m) goto gest0;
-				g = (unsigned char) m->g;
+				g = m->g;
 found:
 				if (g & END_BIT) {
 					if (g != BAD_BUTTON) {
@@ -918,7 +920,7 @@ next_dnd:
 					if (end) XTestFakeButtonEvent(dpy,BUTTON_DND,0,0);
 					break;
 				    case BUTTON_KEY:
-					k = m->g >> 32;
+					k = m->k;
 					XTestFakeMotionEvent(dpy,screen,x1,y1,0);
 					XTestFakeKeyEvent(dpy,k,1,0);
 					for (xx-=res;xx>=res;xx-=res) {
