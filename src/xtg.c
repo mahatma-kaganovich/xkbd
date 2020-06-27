@@ -75,10 +75,10 @@
 
 #define PH_BORDER (1<<2)
 
-typedef unsigned short _short;
-typedef uint32_t _int;
+typedef uint_fast8_t _short;
+typedef uint_fast32_t _int;
 
-Display *dpy;
+Display *dpy = 0;
 Window win, win1;
 int screen;
 XWindowAttributes wa;
@@ -113,14 +113,12 @@ Time T;
 typedef struct _Touch {
 	int touchid,deviceid;
 	Time time;
-	_short n,g,g1;
+	_short n, g, g1;
 	double x,y;
 	double tail;
-//	double xy;
 } Touch;
 Touch touch[TOUCH_MAX];
 _short P=0,N=0;
-_short st = 0;
 
 double resX, resY;
 int resDev = 0;
@@ -134,23 +132,28 @@ Time timeSkip = 0, timeHold = 0;
 #define END_BIT ((MAX_BUTTON+1)>>1)
 typedef struct _TouchTree {
 	void *gg[8];
-	_short g;
-	unsigned int key;
+	uint64_t g;
 } TouchTree;
 TouchTree bmap = {};
-static void SET_BMAP(_int i, _short x, unsigned int key){
+static void SET_BMAP(_int i, _short x, _int key){
 	static TouchTree *bmap_ = &bmap;;
 	TouchTree **m = &bmap_;
 	for(; i; i>>=3) {
 		m = &((*m)->gg[i&7]);
 		if (!*m) *m = calloc(1, sizeof(**m));
 	}
-	(*m)->g = x;
-	(*m)->key = key;
+	(*m)->g = x | ((uint64_t) key << 32);
 }
+static void opendpy();
 static void _print_bmap(_int x, _short n, TouchTree *m) {
 	_short i;
-	if (m->g) printf(" 0%o:%i",x,m->g);
+	unsigned long long l = m->g;
+	if (l) printf(" 0%o:%s%llx",x,l>9?"0x":"",l);
+	l = m->g >> 32;
+	if (l) {
+		if (!dpy) opendpy();
+		printf(":%s",dpy ? XKeysymToString(XkbKeycodeToKeysym(dpy,l,0,0)) : "?");
+	}
 	for(i=0; i<8; i++) {
 		if (m->gg[i]) _print_bmap(x|(i<<n),n+3,m->gg[i]);
 	}
@@ -350,7 +353,8 @@ static void getRes(int x, int y){
 }
 
 int xtestPtr, xtestKbd;
-short showPtr = 1, oldShowPtr = 3, tdevs = 0, tdevs2=0, curShow = 1;
+_short showPtr = 1, oldShowPtr = 3, curShow = 1;
+_int tdevs = 0, tdevs2=0;
 static void getHierarchy(int st){
 	static XIAttachSlaveInfo ca = {.type=XIAttachSlave};
 	static XIDetachSlaveInfo cf = {.type=XIDetachSlave};
@@ -651,8 +655,8 @@ int main(int argc, char **argv){
 	int opt;
 	Touch *to;
 	double x1,y1,x2,y2,xx,yy,res;
-	_short end,g,tt;
-	_int bx,by;
+	_short end,tt,g,bx,by;
+	_int k;
 	TouchTree *m;
 
 	while((opt=getopt(argc, argv, pc))>=0){
@@ -815,7 +819,7 @@ ev2:
 						goto ev;
 					}
 hold:
-					if ((m = m->gg[to->g]) && (m = m->gg[tt|=1]) && (g = m->g))
+					if ((m = m->gg[to->g]) && (m = m->gg[tt|=1]) && (g = (unsigned char) m->g))
 						goto found;
 					goto ev2;
 invalidate:
@@ -884,7 +888,7 @@ invalidateT:
 				tt |= end + 2;
 				m = m->gg[tt];
 				if (!m) goto gest0;
-				g = m->g;
+				g = (unsigned char) m->g;
 found:
 				if (g & END_BIT) {
 					if (g != BAD_BUTTON) {
@@ -914,14 +918,15 @@ next_dnd:
 					if (end) XTestFakeButtonEvent(dpy,BUTTON_DND,0,0);
 					break;
 				    case BUTTON_KEY:
+					k = m->g >> 32;
 					XTestFakeMotionEvent(dpy,screen,x1,y1,0);
-					XTestFakeKeyEvent(dpy,m->key,1,0);
+					XTestFakeKeyEvent(dpy,k,1,0);
 					for (xx-=res;xx>=res;xx-=res) {
-						XTestFakeKeyEvent(dpy,m->key,0,0);
-						XTestFakeKeyEvent(dpy,m->key,1,0);
+						XTestFakeKeyEvent(dpy,k,0,0);
+						XTestFakeKeyEvent(dpy,k,1,0);
 					}
 					XTestFakeMotionEvent(dpy,screen,x2,y2,0);
-					XTestFakeKeyEvent(dpy,m->key,0,0);
+					XTestFakeKeyEvent(dpy,k,0,0);
 					break;
 				    case BUTTON_HOLD:
 					to->g = BAD_BUTTON;
