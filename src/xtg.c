@@ -704,7 +704,6 @@ int main(int argc, char **argv){
 		switch (sscanf(*a,"%i:%i:%127s",&x,&y,&k)) {
 		    case 3:
 			z = XKeysymToKeycode(dpy,XStringToKeysym(&k));
-			fprintf(stderr,"key = %i %s\n",z,&k);
 		    case 2:
 			SET_BMAP(x,y,z);
 			continue;
