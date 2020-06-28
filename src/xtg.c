@@ -144,6 +144,7 @@ static void SET_BMAP(_int i, _short x, _int key){
 		if (!*m) *m = calloc(1, sizeof(**m));
 	}
 	(*m)->g = x;
+fprintf(stderr,"%i\n",key);
 	(*m)->k = key;
 }
 static void opendpy();
@@ -814,7 +815,7 @@ ev2:
 					if (nt1 != nt) goto invalidate;
 					to->n = nt;
 					if (!m) goto ev2;
-					if (nt == 1) {
+					if (!g && nt == 1) {
 						timeHold = T;
 						if (oldShowPtr) continue;
 						goto ev;
