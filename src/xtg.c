@@ -128,8 +128,8 @@ int xssevent, xsserror;
 Time timeSkip = 0, timeHold = 0;
 
 #define MAX_BUTTON 255
-#define BAD_BUTTON MAX_BUTTON
 #define END_BIT ((MAX_BUTTON+1)>>1)
+#define BAD_BUTTON END_BIT
 typedef struct _TouchTree {
 	void *gg[8];
 	_int k;
@@ -892,10 +892,8 @@ invalidateT:
 				g = m->g;
 found:
 				if (g & END_BIT) {
-					if (g != BAD_BUTTON) {
-						g ^= END_BIT;
-						xx = 0;
-					}
+					g ^= END_BIT;
+					xx = 0;
 					for(i=P; i!=N; i=TOUCH_N(i)) {
 						Touch *t1 = &touch[i];
 						if (t1->deviceid != to->deviceid) continue;
@@ -903,9 +901,7 @@ found:
 						t1->g = BAD_BUTTON;
 					}
 				}
-gest:
 				switch (g) {
-				    case BAD_BUTTON:
 				    case 0:
 gest0:
 					if (end && TOUCH_CNT == 1)
