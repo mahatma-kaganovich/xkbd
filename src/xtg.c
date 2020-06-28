@@ -144,7 +144,6 @@ static void SET_BMAP(_int i, _short x, _int key){
 		if (!*m) *m = calloc(1, sizeof(**m));
 	}
 	(*m)->g = x;
-fprintf(stderr,"%i\n",key);
 	(*m)->k = key;
 }
 static void opendpy();
