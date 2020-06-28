@@ -684,7 +684,7 @@ int main(int argc, char **argv){
 				"Use default on-TouchEnd bit - oneshot buttons:\n"
 				"  2-fingers swipe right to 8 button: 0277:0 0377:0x88\n"
 				"  Audio prev/next keys to 2-left/right: 0277:0x8f:XF86AudioNext 0377:0x8f:XF86AudioNext 0266:0x8f:XF86AudioPrev 0366:0x8f:XF86AudioPrev\n"
-				"   - same for 1-left/right from screeen border: 057:0x8f:XF86AudioNext 057:0x8f:XF86AudioNext 56:0x8f:XF86AudioPrev 56:0x8f:XF86AudioPrev\n"
+				"   - same for 1-left/right from screeen border: 057:0x8f:XF86AudioNext 056:0x8f:XF86AudioPrev\n"
 				);
 			return 0;
 		}
