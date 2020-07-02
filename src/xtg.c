@@ -809,7 +809,7 @@ ev2:
 						}
 						if (nt1++ == 1) nt = ++t1->n;
 						else if (++t1->n != nt) goto invalidate;
-						if (m) m = m->gg[t1->g];
+						if (m) m = m->gg[t1->g&7];
 					}
 					if (nt1 != nt) goto invalidate;
 					to->n = nt;
@@ -820,7 +820,7 @@ ev2:
 						goto ev;
 					}
 hold:
-					if ((m = m->gg[to->g]) && (m = m->gg[tt|=1]) && (g = m->g))
+					if ((m = m->gg[to->g&7]) && (m = m->gg[tt|=1]) && (g = m->g))
 						goto found;
 					goto ev2;
 invalidate:
