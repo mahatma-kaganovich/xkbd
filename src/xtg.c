@@ -842,6 +842,7 @@ invalidateT:
 					goto ev2;
 				}
 				XFreeEventData(dpy, &ev.xcookie);
+				if (!to) goto ev2; // untracked touch
 				x1 = to->x;
 				y1 = to->y;
 				switch (to->g) {
