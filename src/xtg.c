@@ -53,7 +53,6 @@
 #include <X11/extensions/XInput2.h>
 
 #include <X11/extensions/XTest.h>
-#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 //#include <sys/time.h>
@@ -354,46 +353,50 @@ static void getRes(int x, int y){
 	}
 }
 
-int xtestPtr, xtestKbd;
+int xtestPtr;
 _short showPtr = 1, oldShowPtr = 3, curShow = 1;
 _int tdevs = 0, tdevs2=0;
-static void getHierarchy(int st){
+#define floating 1
+static void getHierarchy(){
 	static XIAttachSlaveInfo ca = {.type=XIAttachSlave};
 	static XIDetachSlaveInfo cf = {.type=XIDetachSlave};
-	int i,j,ndevs2,nrel,nkbd;
+	int i,j,ndevs2,nrel,nkbd,m=0,m0=0,k0=0;
 	XIDeviceInfo *info2 = XIQueryDevice(dpy, XIAllDevices, &ndevs2);
 
-	ca.new_master = 0;
-	xtestPtr = xtestKbd = 0;
+	if (!floating) {
+	    for (i=0; i<ndevs2; i++) {
+		XIDeviceInfo *d2 = &info2[i];
+		switch (d2->use) {
+		    case XIMasterPointer:
+			if (!m0) m0 = d2->deviceid;
+			else if (!m) m = d2->deviceid;
+			break;
+		    case XIMasterKeyboard:
+			if (!k0) k0 = d2->deviceid;
+			break;
+		}
+	    }
+	    ca.new_master = m;
+	}
+	xtestPtr = 0;
 	tdevs2 = tdevs = 0;
 	for (i=0; i<ndevs2; i++) {
 		XIDeviceInfo *d2 = &info2[i];
 		short t = 0, rel = 0, abs = 0, scroll = 0;
 		switch (d2->use) {
-		    case XIMasterPointer:
-			if (!ca.new_master) ca.new_master = d2->deviceid;
-		    case XIMasterKeyboard:
-			continue;
+		    case XIFloatingSlave: break;
 		    case XISlavePointer:
 			if (ev.xcookie.extension == xiopcode && P != N && touch[N].deviceid == d2->deviceid) N=TOUCH_P(N);
-			if (!xtestPtr
-//			    && !strcmp(d2->name,"Virtual core XTEST pointer")
-			    ) {
+			if (!floating && !xtestPtr && !strcmp(d2->name,"TouchScreen XTEST pointer")) {
 				xtestPtr = d2->deviceid;
 				continue;
 			}
-			if (!strcmp(d2->name,"Virtual core XTEST pointer")) continue;
-			break;
 		    case XISlaveKeyboard:
-			if (!xtestKbd
-//			    && !strcmp(d2->name,"Virtual core XTEST keyboard")
-			    ) {
-				xtestKbd = d2->deviceid;
-				continue;
-			}
-			if (!strcmp(d2->name,"Virtual core XTEST keyboard")) continue;
+			if (strstr(d2->name," XTEST ")) continue;
+//			if (!strcmp(d2->name,"Virtual core XTEST keyboard")) continue;
 			break;
-
+		    default:
+			continue;
 		}
 		for (j=0; j<d2->num_classes; j++) {
 			XIAnyClassInfo *cl = d2->classes[j];
@@ -437,16 +440,20 @@ static void getHierarchy(int st){
 		switch (d2->use) {
 		    case XIFloatingSlave:
 			if (!t && !scroll) continue;
-			if (st) {
-				tdevs2++;
-				ximask.mask = (void*)&ximaskTouch;
-			} else c=&ca;
+			if (floating) tdevs2++;
+			else if (m) c = &ca;
 			break;
 		    case XISlavePointer:
 			if (!t) ximask.mask = (void*)(showPtr ? &ximask0 : &ximaskButton);
-			else if (!scroll) c=&cf;
-			else ximask.mask = (void*)(showPtr ? &ximaskTouch : &ximask0);
-//			else ximask.mask = (void*)(showPtr ? &ximaskButton : &ximask0);
+			else if (scroll) ximask.mask = (void*)(showPtr ? &ximaskTouch : &ximask0);
+			else if (floating) {
+				tdevs2++;
+				ximask.mask=&ximaskTouch;
+				ximask.deviceid=d2->deviceid;
+				XIGrabDevice(dpy,d2->deviceid,wa.root,0,None,XIGrabModeSync,XIGrabModeTouch,False,&ximask);
+				ximask.mask=NULL;
+			} else if (d2->attachment == m) tdevs2++;
+			else if (m) c = &ca;
 			break;
 		    case XISlaveKeyboard:
 			nkbd++;
@@ -456,6 +463,16 @@ static void getHierarchy(int st){
 		if (c) XIChangeHierarchy(dpy, c, 1);
 		if (ximask.mask) XISelectEvents(dpy, wa.root, &ximask, 1);
 	}
+	if (!floating) {
+		static XIAddMasterInfo cm = {.type = XIAddMaster, .name = "TouchScreen", .send_core = 0, .enable = 1};
+		if (!m) XIChangeHierarchy(dpy, &cm, 1);
+		else if (m) {
+//			XIUndefineCursor(dpy,m,wa.root);
+			ximask.mask = (void*)&ximaskTouch;
+			ximask.deviceid = m;
+			XISelectEvents(dpy, wa.root, &ximask, 1);
+		}
+	}
 	XIFreeDeviceInfo(info2);
 	XFlush(dpy);
 	tdevs -= tdevs2;
@@ -463,7 +480,7 @@ static void getHierarchy(int st){
 
 static inline void setShowCursor(){
 	oldShowPtr = showPtr;
-	getHierarchy(1);
+	getHierarchy();
 	if ((oldShowPtr & 2) && !showPtr) return;
 #if 0
 #undef e
@@ -475,20 +492,6 @@ static inline void setShowCursor(){
 	curShow = showPtr;
 	if (showPtr) XFixesShowCursor(dpy, wa.root);
 	else XFixesHideCursor(dpy, wa.root);
-}
-
-static void _signals(void *sig) {
-	signal(SIGTERM,sig);
-	signal(SIGINT,sig);
-	signal(SIGABRT,sig);
-	signal(SIGQUIT,sig);
-}
-
-static void sigterm(int sig) {
-	_signals(SIG_DFL);
-	opendpy();
-	if (dpy) getHierarchy(0);
-	exit(1);
 }
 
 static void _set_bmap(_int g, _short i, _int j){
@@ -624,7 +627,6 @@ static void init(){
 	XISetMask(ximask0, XI_HierarchyChanged);
 	XISelectEvents(dpy, wa.root, &ximask, 1);
 	XIClearMask(ximask0, XI_HierarchyChanged);
-	_signals(sigterm);
 	if (pf[p_res]<0 && (xrr = XRRQueryExtension(dpy, &xrevent, &xrerror))) {
 		xrevent += RRScreenChangeNotify;
 		XRRSelectInput(dpy, wa.root, RRScreenChangeNotifyMask);
@@ -753,12 +755,18 @@ ev2:
 					continue;
 				    default:
 					showPtr = 1;
+					if (XGetEventData(dpy, &ev.xcookie)) {
+#undef e
+#define e ((XIDeviceEvent*)ev.xcookie.data)
+					XFreeEventData(dpy, &ev.xcookie);
+					}
 					continue;
 				}
 				showPtr = 0;
 				if (!tdevs2 || !XGetEventData(dpy, &ev.xcookie)) goto ev;
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
+//				fprintf(stderr,"ev2 %i %i\n",e->deviceid,ev.xcookie.evtype);
 				TIME(T,e->time);
 				res = resX;
 				tt = 0;
@@ -780,8 +788,8 @@ ev2:
 				}
 				g = ((int)x2 <= scrX1) ? BUTTON_RIGHT : ((int)x2 >= scrX2) ? BUTTON_LEFT : ((int)y2 <= scrY1) ? BUTTON_UP : ((int)y2 >= scrY2) ? BUTTON_DOWN : 0;
 				if (g) tt |= PH_BORDER;
-				if (ev.xcookie.evtype == XI_TouchBegin) {
-					if (to) goto evfree;
+				if (!to) {
+					if (end) goto evfree;
 					timeHold = 0;
 					to = &touch[N];
 					N=TOUCH_N(N);
@@ -842,7 +850,6 @@ invalidateT:
 					goto ev2;
 				}
 				XFreeEventData(dpy, &ev.xcookie);
-				if (!to) goto ev2; // untracked touch
 				x1 = to->x;
 				y1 = to->y;
 				switch (to->g) {
