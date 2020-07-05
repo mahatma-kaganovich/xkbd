@@ -1,5 +1,5 @@
 /*
-	xtg v1.22 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.23 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -167,10 +167,11 @@ static void _print_bmap(_int x, _short n, TouchTree *m) {
 #define p_xy 4
 #define p_res 5
 #define p_round 6
-#define MAX_PAR 7
+#define p_floating 7
+#define MAX_PAR 8
 char *pa[MAX_PAR] = {};
 // android: 125ms tap, 500ms long
-#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0 }
+#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0 , 1}
 int pi[] = PAR_DEFS;
 double pf[] = PAR_DEFS;
 char *ph[MAX_PAR] = {
@@ -181,8 +182,9 @@ char *ph[MAX_PAR] = {
 	"min swipe x/y or y/x",
 	"swipe size (>0 - dots, <0 - -mm)",
 	"add to coordinates (to round to integer)",
+	"1=floating devices, 0=master device (visual artefacts, but enable native masters touch clients)"
 };
-char pc[] = "d:m:M:t:x:r:e:i:h";
+char pc[] = "d:m:M:t:x:r:e:f:h";
 #else
 #define TIME(T,t)
 #endif
@@ -353,10 +355,10 @@ static void getRes(int x, int y){
 	}
 }
 
-int xtestPtr;
+int xtestPtr, xtestPtr0;
 _short showPtr = 1, oldShowPtr = 3, curShow = 1;
 _int tdevs = 0, tdevs2=0;
-#define floating 1
+#define floating pi[p_floating]
 static void getHierarchy(){
 	static XIAttachSlaveInfo ca = {.type=XIAttachSlave};
 	static XIDetachSlaveInfo cf = {.type=XIDetachSlave};
@@ -369,7 +371,11 @@ static void getHierarchy(){
 		switch (d2->use) {
 		    case XIMasterPointer:
 			if (!m0) m0 = d2->deviceid;
-			else if (!m) m = d2->deviceid;
+			else if (!m && !strncmp(d2->name,"TouchScreen ",12)) {
+				m = d2->deviceid;
+//				XIUndefineCursor(dpy,m,wa.root);
+//				XIDefineCursor(dpy,m,wa.root,None);
+			}
 			break;
 		    case XIMasterKeyboard:
 			if (!k0) k0 = d2->deviceid;
@@ -378,7 +384,7 @@ static void getHierarchy(){
 	    }
 	    ca.new_master = m;
 	}
-	xtestPtr = 0;
+	xtestPtr0 = xtestPtr = 0;
 	tdevs2 = tdevs = 0;
 	for (i=0; i<ndevs2; i++) {
 		XIDeviceInfo *d2 = &info2[i];
@@ -387,14 +393,13 @@ static void getHierarchy(){
 		    case XIFloatingSlave: break;
 		    case XISlavePointer:
 			if (ev.xcookie.extension == xiopcode && P != N && touch[N].deviceid == d2->deviceid) N=TOUCH_P(N);
-			if (!floating && !xtestPtr && !strcmp(d2->name,"TouchScreen XTEST pointer")) {
-				xtestPtr = d2->deviceid;
-				continue;
-			}
-		    case XISlaveKeyboard:
-			if (strstr(d2->name," XTEST ")) continue;
-//			if (!strcmp(d2->name,"Virtual core XTEST keyboard")) continue;
-			break;
+			if (!strstr(d2->name," XTEST ")) break;
+			if (d2->attachment == m0) xtestPtr0 = d2->deviceid;
+			else if (d2->attachment == m) xtestPtr = d2->deviceid;
+			continue;
+//		    case XISlaveKeyboard:
+//			if (strstr(d2->name," XTEST ")) continue;
+//			break;
 		    default:
 			continue;
 		}
@@ -446,31 +451,27 @@ static void getHierarchy(){
 		    case XISlavePointer:
 			if (!t) ximask.mask = (void*)(showPtr ? &ximask0 : &ximaskButton);
 			else if (scroll) ximask.mask = (void*)(showPtr ? &ximaskTouch : &ximask0);
-			else if (floating) {
+			else {
 				tdevs2++;
-				ximask.mask=&ximaskTouch;
-				ximask.deviceid=d2->deviceid;
-				XIGrabDevice(dpy,d2->deviceid,wa.root,0,None,XIGrabModeSync,XIGrabModeTouch,False,&ximask);
-				ximask.mask=NULL;
-			} else if (d2->attachment == m) tdevs2++;
-			else if (m) c = &ca;
+				if (floating) {
+					ximask.mask=&ximaskTouch;
+					XIGrabDevice(dpy,d2->deviceid,wa.root,0,None,XIGrabModeSync,XIGrabModeTouch,False,&ximask);
+					ximask.mask=NULL;
+				} else if (m && m != d2->attachment) c = &ca;
+			}
 			break;
-		    case XISlaveKeyboard:
-			nkbd++;
-		    default:
-			continue;
+//		    case XISlaveKeyboard:
+//			nkbd++;
+//		    default:
+//			continue;
 		}
 		if (c) XIChangeHierarchy(dpy, c, 1);
 		if (ximask.mask) XISelectEvents(dpy, wa.root, &ximask, 1);
 	}
 	if (!floating) {
-		static XIAddMasterInfo cm = {.type = XIAddMaster, .name = "TouchScreen", .send_core = 0, .enable = 1};
-		if (!m) XIChangeHierarchy(dpy, &cm, 1);
-		else if (m) {
-//			XIUndefineCursor(dpy,m,wa.root);
-			ximask.mask = (void*)&ximaskTouch;
-			ximask.deviceid = m;
-			XISelectEvents(dpy, wa.root, &ximask, 1);
+		if (!m) {
+			static XIAddMasterInfo cm = {.type = XIAddMaster, .name = "TouchScreen", .send_core = 0, .enable = 1};
+			XIChangeHierarchy(dpy, &cm, 1);
 		}
 	}
 	XIFreeDeviceInfo(info2);
@@ -482,16 +483,13 @@ static inline void setShowCursor(){
 	oldShowPtr = showPtr;
 	getHierarchy();
 	if ((oldShowPtr & 2) && !showPtr) return;
-#if 0
-#undef e
-#define e ((XIDeviceEvent*)ev.xcookie.data)
-	if (e) XWarpPointer(dpy, None, wa.root, 0, 0, 0, 0, e->root_x+0.5, e->root_y+0.5);
-#endif
 	// "Hide" must be first!
-	if (showPtr == curShow) return;
-	curShow = showPtr;
-	if (showPtr) XFixesShowCursor(dpy, wa.root);
-	else XFixesHideCursor(dpy, wa.root);
+	if (showPtr != curShow) {
+		curShow = showPtr;
+		if (!floating) return;
+		if (showPtr) XFixesShowCursor(dpy, wa.root);
+		else XFixesHideCursor(dpy, wa.root);
+	}
 }
 
 static void _set_bmap(_int g, _short i, _int j){
@@ -627,6 +625,13 @@ static void init(){
 	XISetMask(ximask0, XI_HierarchyChanged);
 	XISelectEvents(dpy, wa.root, &ximask, 1);
 	XIClearMask(ximask0, XI_HierarchyChanged);
+
+	if (!floating) {
+		ximask.mask=&ximaskTouch;
+		ximask.deviceid=XIAllMasterDevices;
+		XISelectEvents(dpy, wa.root, &ximask, 1);
+	}
+
 	if (pf[p_res]<0 && (xrr = XRRQueryExtension(dpy, &xrevent, &xrerror))) {
 		xrevent += RRScreenChangeNotify;
 		XRRSelectInput(dpy, wa.root, RRScreenChangeNotifyMask);
@@ -754,15 +759,12 @@ ev2:
 					oldShowPtr |= 2;
 					continue;
 				    default:
-					showPtr = 1;
-					if (XGetEventData(dpy, &ev.xcookie)) {
-#undef e
-#define e ((XIDeviceEvent*)ev.xcookie.data)
-					XFreeEventData(dpy, &ev.xcookie);
+					if (!showPtr) {
+						showPtr = 1;
+						if (!floating) XFixesShowCursor(dpy, wa.root);
 					}
 					continue;
 				}
-				showPtr = 0;
 				if (!tdevs2 || !XGetEventData(dpy, &ev.xcookie)) goto ev;
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
@@ -774,6 +776,16 @@ ev2:
 				end = (ev.xcookie.evtype == XI_TouchEnd
 						|| (e->flags & XITouchPendingEnd));
 				x2 = e->root_x + pf[p_round], y2 = e->root_y + pf[p_round];
+				if (showPtr) {
+					showPtr = 0;
+					if (!floating) {
+						XFixesHideCursor(dpy, wa.root);
+						// reduce artefacts from cursors race
+						XFlush(dpy);
+						XWarpPointer(dpy, None, wa.root, 0, 0, 0, 0, x2, y2);
+						XFlush(dpy);
+					}
+				}
 				to = NULL;
 				for(i=P; i!=N; i=TOUCH_N(i)){
 					Touch *t1 = &touch[i];
@@ -912,8 +924,8 @@ found:
 				switch (g) {
 				    case 0:
 gest0:
-					if (end && TOUCH_CNT == 1)
-						XTestFakeMotionEvent(dpy,screen,x2,y2,0);
+//					if (end && TOUCH_CNT == 1)
+//						XTestFakeMotionEvent(dpy,screen,x2,y2,0);
 					goto skip;
 				    case BUTTON_DND:
 					XTestFakeMotionEvent(dpy,screen,x1,y1,0);
