@@ -1,5 +1,5 @@
 /*
-	xtg v1.23 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.24 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -49,6 +49,7 @@
 
 #ifdef XTG
 #include <X11/extensions/Xrandr.h>
+#include <X11/extensions/randr.h>
 //#include <X11/extensions/XInput.h>
 #include <X11/extensions/XInput2.h>
 
@@ -95,6 +96,7 @@ unsigned char *ret;
 
 #ifdef XTG
 int xiopcode, xierror;
+Atom aFloat,aMatrix;
 #define MASK_LEN XIMaskLen(XI_LASTEVENT)
 typedef unsigned char xiMask[MASK_LEN];
 xiMask ximaskButton = {}, ximaskTouch = {}, ximask0 = {};
@@ -168,10 +170,12 @@ static void _print_bmap(_int x, _short n, TouchTree *m) {
 #define p_res 5
 #define p_round 6
 #define p_floating 7
-#define MAX_PAR 8
+#define p_mon 8
+#define p_touch_add 9
+#define MAX_PAR 10
 char *pa[MAX_PAR] = {};
 // android: 125ms tap, 500ms long
-#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0 , 1}
+#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, 0, 0}
 int pi[] = PAR_DEFS;
 double pf[] = PAR_DEFS;
 char *ph[MAX_PAR] = {
@@ -182,9 +186,11 @@ char *ph[MAX_PAR] = {
 	"min swipe x/y or y/x",
 	"swipe size (>0 - dots, <0 - -mm)",
 	"add to coordinates (to round to integer)",
-	"1=floating devices, 0=master device (visual artefacts, but enable native masters touch clients)"
+	"1=floating devices, 0=master device (visual artefacts, but enable native masters touch clients)",
+	"RandR monitor name or number 1+ for (all|-d) absolute pointers (=xinput map-to-output)",
+	"map-to-output add field around screen, mm (if -R)",
 };
-char pc[] = "d:m:M:t:x:r:e:f:h";
+char pc[] = "d:m:M:t:x:r:e:f:R:a:h";
 #else
 #define TIME(T,t)
 #endif
@@ -305,9 +311,10 @@ static int _delay(Time delay){
 }
 
 int scrX1,scrY1,scrX2,scrY2;
+int width, height, mwidth, mheight, rotation;
+_short mon;
 static void getRes(int x, int y){
 	int i;
-	int width, height, mwidth, mheight;
 
 	mwidth = DisplayWidthMM(dpy, screen);
 	mheight = DisplayHeightMM(dpy, screen);
@@ -315,21 +322,25 @@ static void getRes(int x, int y){
 	height = wa.height;
 	scrX1 = 0;
 	scrY1 = 0;
+	
 	if (xrr) {
 		XRRScreenResources *xrrr = XRRGetScreenResources(dpy,wa.root);
 		_short found = 0;
 		if (xrrr)
 		for (i = 0; i < xrrr->noutput && !found; i++) {
 			XRROutputInfo *oinf = XRRGetOutputInfo(dpy, xrrr, xrrr->outputs[i]);
-			if (oinf && oinf->crtc && oinf->connection == RR_Connected) {
+			if (oinf
+			    && (!mon || (pa[p_mon] && !strcmp(oinf->name,pa[p_mon]) || pi[p_mon] == i+1))
+			    && oinf->crtc && oinf->connection == RR_Connected) {
 				XRRCrtcInfo *cinf = XRRGetCrtcInfo (dpy, xrrr, oinf->crtc);
-				if (cinf && x >= cinf->x && y >= cinf->y && x < cinf->x + cinf->width && y < cinf->y + cinf->height) {
+				if (mon || (cinf && x >= cinf->x && y >= cinf->y && x < cinf->x + cinf->width && y < cinf->y + cinf->height)) {
 					scrX1 = cinf->x;
 					scrY1 = cinf->y;
 					mwidth=oinf->mm_width;
 					mheight=oinf->mm_height;
 					width = cinf->width;
 					height = cinf->height;
+					rotation = cinf->rotation;
 					found = 1;
 				}
 				XRRFreeCrtcInfo(cinf);
@@ -365,6 +376,10 @@ static void getHierarchy(){
 	int i,j,ndevs2,nrel,nkbd,m=0,m0=0,k0=0;
 	XIDeviceInfo *info2 = XIQueryDevice(dpy, XIAllDevices, &ndevs2);
 
+	if (mon && !resDev) {
+		resDev=1;
+		getRes(0,0);
+	}
 	if (!floating) {
 	    for (i=0; i<ndevs2; i++) {
 		XIDeviceInfo *d2 = &info2[i];
@@ -434,8 +449,68 @@ static void getHierarchy(){
 			} else {
 				scroll = 1;
 				//t = 0;
+				goto skip_map;
 			}
 		}
+		if (abs && mon) {
+			// map-to-output
+			float x=scrX1,y=scrY1,w=width,h=height;
+			_short m = 1;
+			if (pf[p_touch_add] != 0) {
+				float b;
+				b=(w/mwidth)*pf[p_touch_add];
+				x-=b;
+				w+=b*2;
+				b=(h/mheight)*pf[p_touch_add];
+				y-=b;
+				h+=b*2;
+			}
+			x/=wa.width;
+			y/=wa.height;
+			w/=wa.width;
+			h/=wa.height;
+			switch (rotation) {
+			    case RR_Reflect_X|RR_Rotate_0:
+			    case RR_Reflect_Y|RR_Rotate_180:
+				x+=w; w=-w;
+				break;
+			    case RR_Reflect_Y|RR_Rotate_0:
+			    case RR_Reflect_X|RR_Rotate_180:
+				y+=h; h=-h;
+				break;
+			    case RR_Rotate_90:
+			    case RR_Rotate_270|RR_Reflect_X|RR_Reflect_Y:
+				x+=w; w=-w; m=0;
+				break;
+			    case RR_Rotate_270:
+			    case RR_Rotate_90|RR_Reflect_X|RR_Reflect_Y:
+				y+=h; h=-h; m=0;
+				break;
+			    case RR_Rotate_90|RR_Reflect_X:
+			    case RR_Rotate_270|RR_Reflect_Y:
+				m=0;
+				break;
+			    case RR_Rotate_90|RR_Reflect_Y:
+			    case RR_Rotate_270|RR_Reflect_X:
+				m=0;
+			    case RR_Rotate_180:
+			    case RR_Reflect_X|RR_Reflect_Y|RR_Rotate_0:
+				x+=w; y+=h; w=-w; h=-h;
+				break;
+			}
+			float matrix[9] = {0,0,x,0,0,y,0,0,1};
+			matrix[1-m]=w;
+			matrix[3+m]=h;
+			Atom t;
+			int f;
+			unsigned long n,b;
+			void *d = NULL;
+			if (XIGetProperty(dpy,d2->deviceid,aMatrix,0,9,False,aFloat,&t,&f,&n,&b,&d) == Success
+			    && t==aFloat && f==32 && n == 9 && !b)
+				XIChangeProperty(dpy,d2->deviceid,aMatrix,aFloat,32,PropModeReplace,(void*)&matrix,9);
+			XFree(d);
+		}
+skip_map:
 		tdevs+=t;
 		nrel+=rel && !(abs || t);
 		// exclude touchscreen with scrolling
@@ -613,6 +688,8 @@ static void init(){
 	XkbSelectEventDetails(dpy,XkbUseCoreKbd,XkbStateNotify,
 		XkbAllStateComponentsMask,XkbGroupStateMask);
 #ifdef XTG
+	aFloat = XInternAtom(dpy, "FLOAT", False);
+	aMatrix = XInternAtom(dpy, "Coordinate Transformation Matrix", False);
 	XISetMask(ximaskButton, XI_ButtonPress);
 	XISetMask(ximaskButton, XI_ButtonRelease);
 	XISetMask(ximaskButton, XI_Motion);
@@ -719,6 +796,7 @@ int main(int argc, char **argv){
 		return 1;
 	}
 	resX = resY = pf[p_res] < 0 ? 1 : pf[p_res];
+	mon = pa[p_mon] && *pa[p_mon];
 #endif
 
 	if (!dpy) return 1;
@@ -753,9 +831,7 @@ ev2:
 				if (ev.xcookie.evtype < XI_TouchBegin) switch (ev.xcookie.evtype) {
 				    case XI_PropertyEvent:
 					resDev = 0;
-//					continue;
 				    case XI_HierarchyChanged:
-					// time?
 					oldShowPtr |= 2;
 					continue;
 				    default:
@@ -795,7 +871,7 @@ ev2:
 				}
 				if (resDev != e->deviceid) {
 					// slow for multiple touchscreens
-					if (pf[p_res]<0) getRes(x2,y2);
+					if (pf[p_res]<0 && !mon) getRes(x2,y2);
 					resDev = e->deviceid;
 				}
 				g = ((int)x2 <= scrX1) ? BUTTON_RIGHT : ((int)x2 >= scrX2) ? BUTTON_LEFT : ((int)y2 <= scrY1) ? BUTTON_UP : ((int)y2 >= scrY2) ? BUTTON_DOWN : 0;
@@ -1049,6 +1125,7 @@ evfree:
 			else if (ev.type == xrevent) {
 				TIME(T,e->timestamp > e->config_timestamp ? e->timestamp : e->config_timestamp);
 				resDev = 0;
+				oldShowPtr |= 2;
 			}
 #endif
 //			else fprintf(stderr,"ev? %i\n",ev.type);
