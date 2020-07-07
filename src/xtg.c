@@ -316,6 +316,7 @@ _short mon;
 static void getRes(int x, int y){
 	int i;
 
+	XGetWindowAttributes(dpy, DefaultRootWindow(dpy), &wa);
 	mwidth = DisplayWidthMM(dpy, screen);
 	mheight = DisplayHeightMM(dpy, screen);
 	width = wa.width;
