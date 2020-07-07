@@ -35,6 +35,9 @@
 //#define TOUCH_ORDER
 #endif
 
+// fixme: no physical size, only map-to-output on unknown case
+#undef USE_XINERAMA
+
 #include <stdio.h>
 #include <stdint.h>
 
@@ -50,6 +53,9 @@
 #ifdef XTG
 #include <X11/extensions/Xrandr.h>
 #include <X11/extensions/randr.h>
+#ifdef USE_XINERAMA
+#include <X11/extensions/Xinerama.h>
+#endif
 //#include <X11/extensions/XInput.h>
 #include <X11/extensions/XInput2.h>
 
@@ -124,6 +130,9 @@ _short P=0,N=0;
 double resX, resY;
 int resDev = 0;
 int xrr, xrevent, xrerror;
+#ifdef USE_XINERAMA
+int xir, xirevent, xirerror;
+#endif
 
 int xssevent, xsserror;
 Time timeSkip = 0, timeHold = 0;
@@ -315,6 +324,7 @@ int width, height, mwidth, mheight, rotation;
 _short mon;
 static void getRes(int x, int y){
 	int i;
+	_short found = 0;
 
 	XGetWindowAttributes(dpy, DefaultRootWindow(dpy), &wa);
 	mwidth = DisplayWidthMM(dpy, screen);
@@ -326,7 +336,6 @@ static void getRes(int x, int y){
 	
 	if (xrr) {
 		XRRScreenResources *xrrr = XRRGetScreenResources(dpy,wa.root);
-		_short found = 0;
 		if (xrrr)
 		for (i = 0; i < xrrr->noutput && !found; i++) {
 			XRROutputInfo *oinf = XRRGetOutputInfo(dpy, xrrr, xrrr->outputs[i]);
@@ -350,6 +359,21 @@ static void getRes(int x, int y){
 		}
 		XRRFreeScreenResources(xrrr);
 	}
+#ifdef USE_XINERAMA
+	if (!found && xir && XineramaIsActive(dpy) && pi[p_mon]) {
+		int n = 0;
+		i=pi[p_mon]-1;
+		XineramaScreenInfo *s = XineramaQueryScreens(dpy, &n);
+		if (i>=0 && i<n) {
+			scrX1 = s[i].x_org;
+			scrY1 = s[i].y_org;
+			width = s[i].width;
+			height = s[i].height;
+			rotation = 0;
+		}
+		XFree(s);
+	}
+#endif
 	scrX2 = scrX1 + width - 1;
 	scrY2 = scrY1 + height - 1;
 	if (mwidth > mheight && width < height && mheight) {
@@ -710,10 +734,20 @@ static void init(){
 		XISelectEvents(dpy, wa.root, &ximask, 1);
 	}
 
-	if (pf[p_res]<0 && (xrr = XRRQueryExtension(dpy, &xrevent, &xrerror))) {
-		xrevent += RRScreenChangeNotify;
-		XRRSelectInput(dpy, wa.root, RRScreenChangeNotifyMask);
-	} else xrevent = -1;
+	xrevent = xrerror
+#ifdef USE_XINERAMA
+	    = xirevent = xirerror
+#endif
+	    = -1;
+	if (pf[p_res]<0 || mon) {
+		if (xrr = XRRQueryExtension(dpy, &xrevent, &xrerror)) {
+			xrevent += RRScreenChangeNotify;
+			XRRSelectInput(dpy, wa.root, RRScreenChangeNotifyMask);
+		};
+#ifdef USE_XINERAMA
+		xir = XineramaQueryExtension(dpy, &xirevent, &xirerror);
+#endif
+	}
 #ifdef XSS
 	if (XScreenSaverQueryExtension(dpy, &xssevent, &xsserror)) {
 		xssevent += ScreenSaverNotify;
