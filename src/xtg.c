@@ -534,7 +534,9 @@ static void getHierarchy(){
 
 	if (!resDev) {
 		if (mon) getRes(0,0,1);
+#ifdef USE_EVDEV
 		else if (mon_sz != 0) resXY = 0;
+#endif
 	}
 	if (!floating) {
 	    for (i=0; i<ndevs2; i++) {
@@ -612,9 +614,11 @@ static void getHierarchy(){
 		}
 		if (abs && !resDev) {
 			if (mon) map_to();
+#ifdef USE_EVDEV
 			else if (mon_sz != 0) {
 				if (getRes(0,0,2) != 1) resXY = pf[p_res]<0;
 			}
+#endif
 		}
 skip_map:
 		tdevs+=t;
@@ -916,7 +920,11 @@ int main(int argc, char **argv){
 		return 1;
 	}
 	resX = resY = pf[p_res] < 0 ? 1 : pf[p_res];
-	if (pi[p_mon] < 0) mon_sz = -pi[p_mon];
+	if (pi[p_mon] < 0)
+#ifdef USE_EVDEV
+		mon_sz = -pi[p_mon]
+#endif
+		;
 	else if (pa[p_mon] && *pa[p_mon]) mon = 1;
 	resXY = !mon && pf[p_res]<0;
 #endif
