@@ -33,6 +33,7 @@
 #define XSS
 #define XTG
 //#define TOUCH_ORDER
+//#define USE_EVDEV
 #endif
 
 // fixme: no physical size, only map-to-output on unknown case
@@ -57,6 +58,9 @@
 #include <X11/extensions/Xinerama.h>
 #endif
 //#include <X11/extensions/XInput.h>
+#ifdef USE_EVDEV
+#include <libevdev/libevdev.h>
+#endif
 #include <X11/extensions/XInput2.h>
 
 #include <X11/extensions/XTest.h>
@@ -101,8 +105,12 @@ XEvent ev;
 unsigned char *ret;
 
 #ifdef XTG
+int devid = 0;
 int xiopcode, xierror;
 Atom aFloat,aMatrix;
+#ifdef USE_EVDEV
+Atom aNode;
+#endif
 #define MASK_LEN XIMaskLen(XI_LASTEVENT)
 typedef unsigned char xiMask[MASK_LEN];
 xiMask ximaskButton = {}, ximaskTouch = {}, ximask0 = {};
@@ -171,6 +179,12 @@ static void _print_bmap(_int x, _short n, TouchTree *m) {
 	}
 }
 
+#ifdef USE_EVDEV
+#define DEF_RR -1
+#else
+#define DEF_RR 0
+#endif
+
 #define p_device 0
 #define p_minfingers 1
 #define p_maxfingers 2
@@ -184,7 +198,7 @@ static void _print_bmap(_int x, _short n, TouchTree *m) {
 #define MAX_PAR 10
 char *pa[MAX_PAR] = {};
 // android: 125ms tap, 500ms long
-#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, 0, 0}
+#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0}
 int pi[] = PAR_DEFS;
 double pf[] = PAR_DEFS;
 char *ph[MAX_PAR] = {
@@ -196,7 +210,12 @@ char *ph[MAX_PAR] = {
 	"swipe size (>0 - dots, <0 - -mm)",
 	"add to coordinates (to round to integer)",
 	"1=floating devices, 0=master device (visual artefacts, but enable native masters touch clients)",
-	"RandR monitor name or number 1+ for (all|-d) absolute pointers (=xinput map-to-output)",
+	"RandR monitor name\n"
+	"		or number 1+\n"
+#ifdef USE_EVDEV
+	"		or negative -<x> to find monitor, using evdev touch input size, grow +x\n"
+#endif
+	"			for (all|-d) absolute pointers (=xinput map-to-output)",
 	"map-to-output add field around screen, mm (if -R)",
 };
 char pc[] = "d:m:M:t:x:r:e:f:R:a:h";
@@ -299,6 +318,11 @@ static void WMState(Atom *states, short nn){
 
 #ifdef XTG
 
+int scrX1,scrY1,scrX2,scrY2;
+int width, height, mwidth, mheight, rotation;
+_short mon = 0;
+_int mon_sz = 0;
+
 #if 0
 #define TMUL1000(x) (x*1000)
 #define TDIV1000(x) (x/1000)
@@ -319,12 +343,98 @@ static int _delay(Time delay){
 	return !Select(fd+1, &rs, 0, 0, &tv);
 }
 
-int scrX1,scrY1,scrX2,scrY2;
-int width, height, mwidth, mheight, rotation;
-_short mon;
-static void getRes(int x, int y){
+#ifdef USE_EVDEV
+double devX = 0, devY = 0;
+static double _evsize(struct libevdev *dev, int c) {
+	double r = 0;
+	struct input_absinfo *x = libevdev_get_abs_info(dev, c);
+	if (x) r = (r + x->maximum - x->minimum)/x->resolution;
+	return r;
+}
+static void getEvRes(){
+	Atom t;
+	char *name;
+	int f;
+	unsigned long n,b;
+	devX = devY = 0;
+	if (XIGetProperty(dpy,devid,aNode,0,1024,False,XA_STRING,&t,&f,&n,&b,&name) != Success) return;
+	int fd = open(name, O_RDONLY|O_NONBLOCK);
+	XFree(name);
+	if (fd < 0) return;
+	struct libevdev *device;
+	if (!libevdev_new_from_fd(fd, &device)){
+		devX = _evsize(device,ABS_X);
+		devY = _evsize(device,ABS_Y);
+		libevdev_free(device);
+	}
+	close(fd);
+}
+#endif
+
+static void map_to(){
+	float x=scrX1,y=scrY1,w=width,h=height;
+	_short m = 1;
+	if (pf[p_touch_add] != 0) {
+		float b;
+		b=(w/mwidth)*pf[p_touch_add];
+		x-=b;
+		w+=b*2;
+		b=(h/mheight)*pf[p_touch_add];
+		y-=b;
+		h+=b*2;
+	}
+	x/=wa.width;
+	y/=wa.height;
+	w/=wa.width;
+	h/=wa.height;
+	switch (rotation) {
+	    case RR_Reflect_X|RR_Rotate_0:
+	    case RR_Reflect_Y|RR_Rotate_180:
+		x+=w; w=-w;
+		break;
+	    case RR_Reflect_Y|RR_Rotate_0:
+	    case RR_Reflect_X|RR_Rotate_180:
+		y+=h; h=-h;
+		break;
+	    case RR_Rotate_90:
+	    case RR_Rotate_270|RR_Reflect_X|RR_Reflect_Y:
+		x+=w; w=-w; m=0;
+		break;
+	    case RR_Rotate_270:
+	    case RR_Rotate_90|RR_Reflect_X|RR_Reflect_Y:
+		y+=h; h=-h; m=0;
+		break;
+	    case RR_Rotate_90|RR_Reflect_X:
+	    case RR_Rotate_270|RR_Reflect_Y:
+		m=0;
+		break;
+	    case RR_Rotate_90|RR_Reflect_Y:
+	    case RR_Rotate_270|RR_Reflect_X:
+		m=0;
+	    case RR_Rotate_180:
+	    case RR_Reflect_X|RR_Reflect_Y|RR_Rotate_0:
+		x+=w; y+=h; w=-w; h=-h;
+		break;
+	}
+	float matrix[9] = {0,0,x,0,0,y,0,0,1};
+	matrix[1-m]=w;
+	matrix[3+m]=h;
+	Atom t;
+	int f;
+	unsigned long n,b;
+	void *d = NULL;
+	if (XIGetProperty(dpy,devid,aMatrix,0,9,False,aFloat,&t,&f,&n,&b,&d) == Success
+	    && t==aFloat && f==32 && n == 9 && !b)
+		XIChangeProperty(dpy,devid,aMatrix,aFloat,32,PropModeReplace,(void*)&matrix,9);
+	XFree(d);
+}
+
+// mode: 0 - x,y, 1 - mon, 2 - mon_sz
+// mode 0 need only for scroll resolution
+// mode 1 & 2 - for map-to-output too
+static _int getRes(int x, int y, _short mode){
 	int i;
-	_short found = 0;
+	_int found = 0;
 
 	XGetWindowAttributes(dpy, DefaultRootWindow(dpy), &wa);
 	mwidth = DisplayWidthMM(dpy, screen);
@@ -333,25 +443,42 @@ static void getRes(int x, int y){
 	height = wa.height;
 	scrX1 = 0;
 	scrY1 = 0;
-	
+#ifdef USE_EVDEV
+	if (mode == 2) {
+		getEvRes();
+		if (devX == 0 || devY == 0) goto notfound;
+		// if (mode==0) ... get real resolution from matrix and return
+	}
+#endif
 	if (xrr) {
 		XRRScreenResources *xrrr = XRRGetScreenResources(dpy,wa.root);
 		if (xrrr)
-		for (i = 0; i < xrrr->noutput && !found; i++) {
+		for (i = 0; i < xrrr->noutput && (!found || mon_sz != 0); i++) {
 			XRROutputInfo *oinf = XRRGetOutputInfo(dpy, xrrr, xrrr->outputs[i]);
-			if (oinf
-			    && (!mon || (pa[p_mon] && !strcmp(oinf->name,pa[p_mon]) || pi[p_mon] == i+1))
-			    && oinf->crtc && oinf->connection == RR_Connected) {
+			if (oinf && oinf->crtc && oinf->connection == RR_Connected
+			    && (!mode
+#ifdef USE_EVDEV
+			      || (mode == 2 && (
+				(oinf->mm_width <= (int) devX && devX - oinf->mm_width < mon_sz
+				    && oinf->mm_height <= (int) devY && devY - oinf->mm_height < mon_sz)
+				|| (oinf->mm_height <= (int) devX && devX - oinf->mm_height < mon_sz
+				    && oinf->mm_width <= (int) devY && devY - oinf->mm_width < mon_sz)
+			      ))
+#endif
+			      || (mode == 1 && ((pa[p_mon] && !strcmp(oinf->name,pa[p_mon]) || pi[p_mon] == i+1)))
+			    )) {
 				XRRCrtcInfo *cinf = XRRGetCrtcInfo (dpy, xrrr, oinf->crtc);
-				if (mon || (cinf && x >= cinf->x && y >= cinf->y && x < cinf->x + cinf->width && y < cinf->y + cinf->height)) {
-					scrX1 = cinf->x;
-					scrY1 = cinf->y;
-					mwidth=oinf->mm_width;
-					mheight=oinf->mm_height;
-					width = cinf->width;
-					height = cinf->height;
-					rotation = cinf->rotation;
-					found = 1;
+				if (mon || mon_sz != 0 || (cinf && x >= cinf->x && y >= cinf->y && x < cinf->x + cinf->width && y < cinf->y + cinf->height)) {
+					if (!found++) {
+						// now not used, but first=embedded screen preferred
+						scrX1 = cinf->x;
+						scrY1 = cinf->y;
+						mwidth=oinf->mm_width;
+						mheight=oinf->mm_height;
+						width = cinf->width;
+						height = cinf->height;
+						rotation = cinf->rotation;
+					}
 				}
 				XRRFreeCrtcInfo(cinf);
 			}
@@ -374,6 +501,8 @@ static void getRes(int x, int y){
 		XFree(s);
 	}
 #endif
+	if (found==1 && mode==2) map_to();
+notfound:
 	scrX2 = scrX1 + width - 1;
 	scrY2 = scrY1 + height - 1;
 	if (mwidth > mheight && width < height && mheight) {
@@ -389,10 +518,12 @@ static void getRes(int x, int y){
 		resY = mheight ? (0.+wa.height)/mheight*(-pf[p_res]) : resX;
 		if (!mwidth) resX = resY;
 	}
+	return found;
 }
 
+
 int xtestPtr, xtestPtr0;
-_short showPtr = 1, oldShowPtr = 3, curShow = 1;
+_short showPtr = 1, oldShowPtr = 3, curShow = 1, resXY;
 _int tdevs = 0, tdevs2=0;
 #define floating pi[p_floating]
 static void getHierarchy(){
@@ -401,24 +532,25 @@ static void getHierarchy(){
 	int i,j,ndevs2,nrel,nkbd,m=0,m0=0,k0=0;
 	XIDeviceInfo *info2 = XIQueryDevice(dpy, XIAllDevices, &ndevs2);
 
-	if (mon && !resDev) {
-		resDev=1;
-		getRes(0,0);
+	if (!resDev) {
+		if (mon) getRes(0,0,1);
+		else if (mon_sz != 0) resXY = 0;
 	}
 	if (!floating) {
 	    for (i=0; i<ndevs2; i++) {
 		XIDeviceInfo *d2 = &info2[i];
+		devid = d2->deviceid;
 		switch (d2->use) {
 		    case XIMasterPointer:
-			if (!m0) m0 = d2->deviceid;
+			if (!m0) m0 = devid;
 			else if (!m && !strncmp(d2->name,"TouchScreen ",12)) {
-				m = d2->deviceid;
+				m = devid;
 //				XIUndefineCursor(dpy,m,wa.root);
 //				XIDefineCursor(dpy,m,wa.root,None);
 			}
 			break;
 		    case XIMasterKeyboard:
-			if (!k0) k0 = d2->deviceid;
+			if (!k0) k0 = devid;
 			break;
 		}
 	    }
@@ -428,14 +560,15 @@ static void getHierarchy(){
 	tdevs2 = tdevs = 0;
 	for (i=0; i<ndevs2; i++) {
 		XIDeviceInfo *d2 = &info2[i];
+		devid = d2->deviceid;
 		short t = 0, rel = 0, abs = 0, scroll = 0;
 		switch (d2->use) {
 		    case XIFloatingSlave: break;
 		    case XISlavePointer:
-			if (ev.xcookie.extension == xiopcode && P != N && touch[N].deviceid == d2->deviceid) N=TOUCH_P(N);
+			if (ev.xcookie.extension == xiopcode && P != N && touch[N].deviceid == devid) N=TOUCH_P(N);
 			if (!strstr(d2->name," XTEST ")) break;
-			if (d2->attachment == m0) xtestPtr0 = d2->deviceid;
-			else if (d2->attachment == m) xtestPtr = d2->deviceid;
+			if (d2->attachment == m0) xtestPtr0 = devid;
+			else if (d2->attachment == m) xtestPtr = devid;
 			continue;
 //		    case XISlaveKeyboard:
 //			if (strstr(d2->name," XTEST ")) continue;
@@ -468,7 +601,7 @@ static void getHierarchy(){
 			}
 		}
 		if (pa[p_device] && *pa[p_device]) {
-			if (!strcmp(pa[p_device],d2->name) || pi[p_device] == d2->deviceid) {
+			if (!strcmp(pa[p_device],d2->name) || pi[p_device] == devid) {
 				scroll = 0;
 				t = 1;
 			} else {
@@ -477,70 +610,18 @@ static void getHierarchy(){
 				goto skip_map;
 			}
 		}
-		if (abs && mon) {
-			// map-to-output
-			float x=scrX1,y=scrY1,w=width,h=height;
-			_short m = 1;
-			if (pf[p_touch_add] != 0) {
-				float b;
-				b=(w/mwidth)*pf[p_touch_add];
-				x-=b;
-				w+=b*2;
-				b=(h/mheight)*pf[p_touch_add];
-				y-=b;
-				h+=b*2;
+		if (abs && !resDev) {
+			if (mon) map_to();
+			else if (mon_sz != 0) {
+				if (getRes(0,0,2) != 1) resXY = pf[p_res]<0;
 			}
-			x/=wa.width;
-			y/=wa.height;
-			w/=wa.width;
-			h/=wa.height;
-			switch (rotation) {
-			    case RR_Reflect_X|RR_Rotate_0:
-			    case RR_Reflect_Y|RR_Rotate_180:
-				x+=w; w=-w;
-				break;
-			    case RR_Reflect_Y|RR_Rotate_0:
-			    case RR_Reflect_X|RR_Rotate_180:
-				y+=h; h=-h;
-				break;
-			    case RR_Rotate_90:
-			    case RR_Rotate_270|RR_Reflect_X|RR_Reflect_Y:
-				x+=w; w=-w; m=0;
-				break;
-			    case RR_Rotate_270:
-			    case RR_Rotate_90|RR_Reflect_X|RR_Reflect_Y:
-				y+=h; h=-h; m=0;
-				break;
-			    case RR_Rotate_90|RR_Reflect_X:
-			    case RR_Rotate_270|RR_Reflect_Y:
-				m=0;
-				break;
-			    case RR_Rotate_90|RR_Reflect_Y:
-			    case RR_Rotate_270|RR_Reflect_X:
-				m=0;
-			    case RR_Rotate_180:
-			    case RR_Reflect_X|RR_Reflect_Y|RR_Rotate_0:
-				x+=w; y+=h; w=-w; h=-h;
-				break;
-			}
-			float matrix[9] = {0,0,x,0,0,y,0,0,1};
-			matrix[1-m]=w;
-			matrix[3+m]=h;
-			Atom t;
-			int f;
-			unsigned long n,b;
-			void *d = NULL;
-			if (XIGetProperty(dpy,d2->deviceid,aMatrix,0,9,False,aFloat,&t,&f,&n,&b,&d) == Success
-			    && t==aFloat && f==32 && n == 9 && !b)
-				XIChangeProperty(dpy,d2->deviceid,aMatrix,aFloat,32,PropModeReplace,(void*)&matrix,9);
-			XFree(d);
 		}
 skip_map:
 		tdevs+=t;
 		nrel+=rel && !(abs || t);
 		// exclude touchscreen with scrolling
 		void *c = NULL;
-		cf.deviceid = ca.deviceid = ximask.deviceid = d2->deviceid;
+		cf.deviceid = ca.deviceid = ximask.deviceid = devid;
 		ximask.mask = NULL;
 		switch (d2->use) {
 		    case XIFloatingSlave:
@@ -555,7 +636,7 @@ skip_map:
 				tdevs2++;
 				if (floating) {
 					ximask.mask=&ximaskTouch;
-					XIGrabDevice(dpy,d2->deviceid,wa.root,0,None,XIGrabModeSync,XIGrabModeTouch,False,&ximask);
+					XIGrabDevice(dpy,devid,wa.root,0,None,XIGrabModeSync,XIGrabModeTouch,False,&ximask);
 					ximask.mask=NULL;
 				} else if (m && m != d2->attachment) c = &ca;
 			}
@@ -577,6 +658,7 @@ skip_map:
 	XIFreeDeviceInfo(info2);
 	XFlush(dpy);
 	tdevs -= tdevs2;
+	if (!resDev) resDev=1;
 }
 
 static inline void setShowCursor(){
@@ -747,6 +829,9 @@ static void init(){
 #ifdef USE_XINERAMA
 		xir = XineramaQueryExtension(dpy, &xirevent, &xirerror);
 #endif
+#ifdef USE_EVDEV
+	aNode = XInternAtom(dpy, "Device Node", False);
+#endif
 	}
 #ifdef XSS
 	if (XScreenSaverQueryExtension(dpy, &xssevent, &xsserror)) {
@@ -831,7 +916,9 @@ int main(int argc, char **argv){
 		return 1;
 	}
 	resX = resY = pf[p_res] < 0 ? 1 : pf[p_res];
-	mon = pa[p_mon] && *pa[p_mon];
+	if (pi[p_mon] < 0) mon_sz = -pi[p_mon];
+	else if (pa[p_mon] && *pa[p_mon]) mon = 1;
+	resXY = !mon && pf[p_res]<0;
 #endif
 
 	if (!dpy) return 1;
@@ -884,6 +971,7 @@ ev2:
 				res = resX;
 				tt = 0;
 				m = &bmap;
+				devid = e->deviceid;
 				end = (ev.xcookie.evtype == XI_TouchEnd
 						|| (e->flags & XITouchPendingEnd));
 				x2 = e->root_x + pf[p_round], y2 = e->root_y + pf[p_round];
@@ -900,14 +988,14 @@ ev2:
 				to = NULL;
 				for(i=P; i!=N; i=TOUCH_N(i)){
 					Touch *t1 = &touch[i];
-					if (t1->touchid != e->detail || t1->deviceid != e->deviceid) continue;
+					if (t1->touchid != e->detail || t1->deviceid != devid) continue;
 					to = t1;
 					break;
 				}
-				if (resDev != e->deviceid) {
+				if (resDev != devid) {
 					// slow for multiple touchscreens
-					if (pf[p_res]<0 && !mon) getRes(x2,y2);
-					resDev = e->deviceid;
+					if (resXY) getRes(x2,y2,0);
+					resDev = devid;
 				}
 				g = ((int)x2 <= scrX1) ? BUTTON_RIGHT : ((int)x2 >= scrX2) ? BUTTON_LEFT : ((int)y2 <= scrY1) ? BUTTON_UP : ((int)y2 >= scrY2) ? BUTTON_DOWN : 0;
 				if (g) tt |= PH_BORDER;
@@ -918,7 +1006,7 @@ ev2:
 					N=TOUCH_N(N);
 					if (N==P) P=TOUCH_N(P);
 					to->touchid = e->detail;
-					to->deviceid = e->deviceid;
+					to->deviceid = devid;
 					XFreeEventData(dpy, &ev.xcookie);
 					TIME(to->time,T);
 					to->x = x1 = x2;

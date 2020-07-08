@@ -8,13 +8,27 @@ AC_CONFIG_MACRO_DIRS([m4])
 _set_pkg(){
 	CPPFLAGS="$CPPFLAGS $2"
 	if test x$PKG_CONFIG != xno && $PKG_CONFIG --exists $1; then
-		X_LIBS="$X_LIBS $(pkg-config --libs $1)"
-		CFLAGS="$CFLAGS $(pkg-config --cflags $1)"
+		X_LIBS="$X_LIBS $($PKG_CONFIG --libs $1)"
+		CFLAGS="$CFLAGS $($PKG_CONFIG --cflags $1)"
 	else
 		if test x$PKG_CONFIG != xno; then
 			AC_MSG_WARN([*** Could not find pkg-config entry for $1 in your path, build may fail***])
 		fi
 		X_LIBS="$X_LIBS $3"
+	fi
+}
+
+_set_pkg_xtg(){
+	CPPFLAGS="$CPPFLAGS $2"
+	if test x$PKG_CONFIG != xno && $PKG_CONFIG --exists $1; then
+		X_EXTRA_LIBS="$X_EXTRA_LIBS $($PKG_CONFIG --libs $1)"
+		CFLAGS="$CFLAGS $($PKG_CONFIG --cflags $1)"
+	else
+		if test x$PKG_CONFIG != xno; then
+			AC_MSG_WARN([*** Could not find pkg-config entry for $1 in your path, build may fail***])
+		fi
+		CFLAGS="$CFLAGS $4"
+		X_EXTRA_LIBS="$X_EXTRA_LIBS $3"
 	fi
 }
 
@@ -59,6 +73,14 @@ AC_ARG_ENABLE(xrandr,
 
 if test x$enable_xrandr != xno; then
 	_set_pkg xrandr -DUSE_XR -lXrandr
+fi
+
+AC_ARG_ENABLE(evdev,
+  [  --disable-evdev         disable libevdev support for xtg, [default=no]],
+  enable_xrandr=$enableval, enable_evdev=yes)
+
+if test x$enable_evdev != xno; then
+	_set_pkg_xtg libevdev -DUSE_EVDEV -levdev -I/usr/include/libevdev-1.0
 fi
 
 AC_ARG_ENABLE(minimal,
