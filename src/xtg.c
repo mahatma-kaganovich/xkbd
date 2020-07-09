@@ -454,7 +454,11 @@ static void getRes(int x, int y, _short mode){
 	XRRScreenResources *xrrr;
 	if (xrr && (xrrr = XRRGetScreenResources(dpy,wa.root))) {
 		int n = 0;
-		for (i = 0; i < xrrr->noutput && (!found || (mon_sz != 0 && found == 1)); i++) {
+		for (i = 0; i < xrrr->noutput && (!found
+#ifdef USE_EVDEV
+		    || (mon_sz != 0 && found == 1)
+#endif
+		    ); i++) {
 			XRROutputInfo *oinf = XRRGetOutputInfo(dpy, xrrr, xrrr->outputs[i]);
 			if (!oinf) continue;
 			XRRCrtcInfo *cinf;
@@ -512,10 +516,12 @@ found:
 		mwidth = mheight;
 		mheight = i;
 	}
+#ifdef USE_EVDEV
 	if (mode==2) {
 		 if (found==1) map_to();
 		 else resXY = pf[p_res]<0;
 	}
+#endif
 	if (pf[p_res]<0) {
 		if (!mwidth && !mheight) {
 			resX = resY = -pf[p_res];
