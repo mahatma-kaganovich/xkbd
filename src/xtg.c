@@ -426,7 +426,7 @@ static void map_to(){
 	unsigned long n,b;
 	void *d = NULL;
 	if (XIGetProperty(dpy,devid,aMatrix,0,9,False,aFloat,&t,&f,&n,&b,&d) == Success
-	    && t==aFloat && f==32 && n == 9 && !b)
+	    && t==aFloat && f==32 && n == 9 && !b && memcmp(&matrix,d,sizeof(matrix)))
 		XIChangeProperty(dpy,devid,aMatrix,aFloat,32,PropModeReplace,(void*)&matrix,9);
 	XFree(d);
 }
@@ -823,10 +823,14 @@ static void init(){
 	XISetMask(ximaskTouch, XI_PropertyEvent);
 
 	XISetMask(ximask0, XI_HierarchyChanged);
+#ifdef DEV_CHANGED
 	XISetMask(ximask0, XI_DeviceChanged);
+#endif
 	XISelectEvents(dpy, wa.root, &ximask, 1);
 	XIClearMask(ximask0, XI_HierarchyChanged);
+#ifdef DEV_CHANGED
 	XIClearMask(ximask0, XI_DeviceChanged);
+#endif
 
 	if (!floating) {
 		ximask.mask=&ximaskTouch;
@@ -969,7 +973,7 @@ ev2:
 		    case GenericEvent:
 			if (ev.xcookie.extension == xiopcode) {
 				if (ev.xcookie.evtype < XI_TouchBegin) switch (ev.xcookie.evtype) {
-/*
+#ifdef DEV_CHANGED
 				    case XI_DeviceChanged:
 					if (XGetEventData(dpy, &ev.xcookie)) {
 #undef e
@@ -979,7 +983,7 @@ ev2:
 						XFreeEventData(dpy, &ev.xcookie);
 						if (r == XISlaveSwitch) goto ev2;
 					}
-*/
+#endif
 				    case XI_PropertyEvent:
 				    case XI_HierarchyChanged:
 					resDev = 0;
