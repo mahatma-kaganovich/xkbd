@@ -1,5 +1,5 @@
 /*
-	xtg v1.24 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.25 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -320,6 +320,7 @@ static void WMState(Atom *states, short nn){
 
 int scrX1,scrY1,scrX2,scrY2;
 int width, height, mwidth, mheight, rotation;
+_short resXY;
 _short mon = 0;
 _int mon_sz = 0;
 
@@ -432,7 +433,7 @@ static void map_to(){
 // mode: 0 - x,y, 1 - mon, 2 - mon_sz
 // mode 0 need only for scroll resolution
 // mode 1 & 2 - for map-to-output too
-static _int getRes(int x, int y, _short mode){
+static void getRes(int x, int y, _short mode){
 	int i;
 	_int found = 0;
 
@@ -446,31 +447,33 @@ static _int getRes(int x, int y, _short mode){
 #ifdef USE_EVDEV
 	if (mode == 2) {
 		getEvRes();
-		if (devX == 0 || devY == 0) goto notfound;
+		if (devX == 0 || devY == 0) goto found;
 		// if (mode==0) ... get real resolution from matrix and return
 	}
 #endif
-	if (xrr) {
-		XRRScreenResources *xrrr = XRRGetScreenResources(dpy,wa.root);
-		if (xrrr)
-		for (i = 0; i < xrrr->noutput && (!found || mon_sz != 0); i++) {
+	XRRScreenResources *xrrr;
+	if (xrr && (xrrr = XRRGetScreenResources(dpy,wa.root))) {
+		int n = 0;
+		for (i = 0; i < xrrr->noutput && (!found || (mon_sz != 0 && found == 1)); i++) {
 			XRROutputInfo *oinf = XRRGetOutputInfo(dpy, xrrr, xrrr->outputs[i]);
-			if (oinf && oinf->crtc && oinf->connection == RR_Connected
-			    && (!mode
+			if (!oinf) continue;
+			XRRCrtcInfo *cinf;
+			if (oinf->crtc && oinf->connection == RR_Connected
+			    && ((!mode && !found)
 #ifdef USE_EVDEV
-			      || (mode == 2 && (
-				(oinf->mm_width <= (int) devX && devX - oinf->mm_width < mon_sz
-				    && oinf->mm_height <= (int) devY && devY - oinf->mm_height < mon_sz)
-				|| (oinf->mm_height <= (int) devX && devX - oinf->mm_height < mon_sz
-				    && oinf->mm_width <= (int) devY && devY - oinf->mm_width < mon_sz)
+			      || (mon_sz != 0 && (
+				(oinf->mm_width <= devX && devX - oinf->mm_width < mon_sz
+				    && oinf->mm_height <= devY && devY - oinf->mm_height < mon_sz)
+				|| (oinf->mm_height <= devX && devX - oinf->mm_height < mon_sz
+				    && oinf->mm_width <= devY && devY - oinf->mm_width < mon_sz)
 			      ))
 #endif
-			      || (mode == 1 && ((pa[p_mon] && !strcmp(oinf->name,pa[p_mon]) || pi[p_mon] == i+1)))
-			    )) {
-				XRRCrtcInfo *cinf = XRRGetCrtcInfo (dpy, xrrr, oinf->crtc);
-				if (mon || mon_sz != 0 || (cinf && x >= cinf->x && y >= cinf->y && x < cinf->x + cinf->width && y < cinf->y + cinf->height)) {
-					if (!found++) {
-						// now not used, but first=embedded screen preferred
+			      || (mode == 1 && (pi[p_mon] == ++n || (pa[p_mon] && !strcmp(oinf->name,pa[p_mon]))))
+			    )
+			    && (cinf = XRRGetCrtcInfo(dpy, xrrr, oinf->crtc))
+			    ) {
+				if (mode || (x >= cinf->x && y >= cinf->y && x < cinf->x + cinf->width && y < cinf->y + cinf->height)) {
+					if(!found++ || !mode) {
 						scrX1 = cinf->x;
 						scrY1 = cinf->y;
 						mwidth=oinf->mm_width;
@@ -501,8 +504,7 @@ static _int getRes(int x, int y, _short mode){
 		XFree(s);
 	}
 #endif
-	if (found==1 && mode==2) map_to();
-notfound:
+found:
 	scrX2 = scrX1 + width - 1;
 	scrY2 = scrY1 + height - 1;
 	if (mwidth > mheight && width < height && mheight) {
@@ -510,20 +512,25 @@ notfound:
 		mwidth = mheight;
 		mheight = i;
 	}
-	if (!mwidth && !mheight) {
-		resX = resY = -pf[p_res];
-		fprintf(stderr,"Screen dimensions in mm unknown. Use resolution in dots.\n");
-	} else {
-		if (mwidth) resX = (0.+wa.width)/mwidth*(-pf[p_res]);
-		resY = mheight ? (0.+wa.height)/mheight*(-pf[p_res]) : resX;
-		if (!mwidth) resX = resY;
+	if (mode==2) {
+		 if (found==1) map_to();
+		 else resXY = pf[p_res]<0;
 	}
-	return found;
+	if (pf[p_res]<0) {
+		if (!mwidth && !mheight) {
+			resX = resY = -pf[p_res];
+			fprintf(stderr,"Screen dimensions in mm unknown. Use resolution in dots.\n");
+		} else {
+			if (mwidth) resX = (0.+wa.width)/mwidth*(-pf[p_res]);
+			resY = mheight ? (0.+wa.height)/mheight*(-pf[p_res]) : resX;
+			if (!mwidth) resX = resY;
+		}
+	}
 }
 
 
 int xtestPtr, xtestPtr0;
-_short showPtr = 1, oldShowPtr = 3, curShow = 1, resXY;
+_short showPtr = 1, oldShowPtr = 3, curShow = 1;
 _int tdevs = 0, tdevs2=0;
 #define floating pi[p_floating]
 static void getHierarchy(){
@@ -615,9 +622,7 @@ static void getHierarchy(){
 		if (abs && !resDev) {
 			if (mon) map_to();
 #ifdef USE_EVDEV
-			else if (mon_sz != 0) {
-				if (getRes(0,0,2) != 1) resXY = pf[p_res]<0;
-			}
+			else if (mon_sz != 0) getRes(0,0,2);
 #endif
 		}
 skip_map:
@@ -825,7 +830,7 @@ static void init(){
 	    = xirevent = xirerror
 #endif
 	    = -1;
-	if (pf[p_res]<0 || mon) {
+	if (pf[p_res]<0 || mon || mon_sz != 0) {
 		if (xrr = XRRQueryExtension(dpy, &xrevent, &xrerror)) {
 			xrevent += RRScreenChangeNotify;
 			XRRSelectInput(dpy, wa.root, RRScreenChangeNotifyMask);
