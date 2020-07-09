@@ -320,9 +320,8 @@ static void WMState(Atom *states, short nn){
 
 int scrX1,scrY1,scrX2,scrY2;
 int width, height, mwidth, mheight, rotation;
-_short resXY;
-_short mon = 0;
-_int mon_sz = 0;
+_short resXY,mon,mon_sz;
+double mon_grow;
 
 #if 0
 #define TMUL1000(x) (x*1000)
@@ -349,7 +348,7 @@ double devX = 0, devY = 0;
 static double _evsize(struct libevdev *dev, int c) {
 	double r = 0;
 	struct input_absinfo *x = libevdev_get_abs_info(dev, c);
-	if (x) r = (r + x->maximum - x->minimum)/x->resolution;
+	if (x && x->resolution) r = (r + x->maximum - x->minimum)/x->resolution;
 	return r;
 }
 static void getEvRes(){
@@ -366,6 +365,8 @@ static void getEvRes(){
 	if (!libevdev_new_from_fd(fd, &device)){
 		devX = _evsize(device,ABS_X);
 		devY = _evsize(device,ABS_Y);
+		//struct input_absinfo *z = libevdev_get_abs_info(&device, ABS_Z);
+		//if (z) fprintf(stderr,"ABS_Z: %i %i %i\n",z->minimum,z->maximum,z->resolution);
 		libevdev_free(device);
 	}
 	close(fd);
@@ -456,7 +457,7 @@ static void getRes(int x, int y, _short mode){
 		int n = 0;
 		for (i = 0; i < xrrr->noutput && (!found
 #ifdef USE_EVDEV
-		    || (mon_sz != 0 && found == 1)
+		    || (mon_sz && found == 1)
 #endif
 		    ); i++) {
 			XRROutputInfo *oinf = XRRGetOutputInfo(dpy, xrrr, xrrr->outputs[i]);
@@ -465,11 +466,11 @@ static void getRes(int x, int y, _short mode){
 			if (oinf->crtc && oinf->connection == RR_Connected
 			    && ((!mode && !found)
 #ifdef USE_EVDEV
-			      || (mon_sz != 0 && (
-				(oinf->mm_width <= devX && devX - oinf->mm_width < mon_sz
-				    && oinf->mm_height <= devY && devY - oinf->mm_height < mon_sz)
-				|| (oinf->mm_height <= devX && devX - oinf->mm_height < mon_sz
-				    && oinf->mm_width <= devY && devY - oinf->mm_width < mon_sz)
+			      || (mon_sz && (
+				(oinf->mm_width <= devX && devX - oinf->mm_width < mon_grow
+				    && oinf->mm_height <= devY && devY - oinf->mm_height < mon_grow)
+				|| (oinf->mm_height <= devX && devX - oinf->mm_height < mon_grow
+				    && oinf->mm_width <= devY && devY - oinf->mm_width < mon_grow)
 			      ))
 #endif
 			      || (mode == 1 && (pi[p_mon] == ++n || (pa[p_mon] && !strcmp(oinf->name,pa[p_mon]))))
@@ -548,7 +549,7 @@ static void getHierarchy(){
 	if (!resDev) {
 		if (mon) getRes(0,0,1);
 #ifdef USE_EVDEV
-		else if (mon_sz != 0) resXY = 0;
+		else if (mon_sz) resXY = 0;
 #endif
 	}
 	if (!floating) {
@@ -628,7 +629,7 @@ static void getHierarchy(){
 		if (abs && !resDev) {
 			if (mon) map_to();
 #ifdef USE_EVDEV
-			else if (mon_sz != 0) getRes(0,0,2);
+			else if (mon_sz) getRes(0,0,2);
 #endif
 		}
 skip_map:
@@ -822,8 +823,10 @@ static void init(){
 	XISetMask(ximaskTouch, XI_PropertyEvent);
 
 	XISetMask(ximask0, XI_HierarchyChanged);
+	XISetMask(ximask0, XI_DeviceChanged);
 	XISelectEvents(dpy, wa.root, &ximask, 1);
 	XIClearMask(ximask0, XI_HierarchyChanged);
+	XIClearMask(ximask0, XI_DeviceChanged);
 
 	if (!floating) {
 		ximask.mask=&ximaskTouch;
@@ -836,7 +839,7 @@ static void init(){
 	    = xirevent = xirerror
 #endif
 	    = -1;
-	if (pf[p_res]<0 || mon || mon_sz != 0) {
+	if (pf[p_res]<0 || mon || mon_sz) {
 		if (xrr = XRRQueryExtension(dpy, &xrevent, &xrerror)) {
 			xrevent += RRScreenChangeNotify;
 			XRRSelectInput(dpy, wa.root, RRScreenChangeNotifyMask);
@@ -931,15 +934,11 @@ int main(int argc, char **argv){
 		return 1;
 	}
 	resX = resY = pf[p_res] < 0 ? 1 : pf[p_res];
-	if (pi[p_mon] < 0)
-#ifdef USE_EVDEV
-		mon_sz = -pi[p_mon]
-#endif
-		;
-	else if (pa[p_mon] && *pa[p_mon]) mon = 1;
+	mon_sz = pi[p_mon] < 0;
+	mon_grow = -pf[p_mon];
+	mon = !mon_sz && pa[p_mon] && *pa[p_mon];
 	resXY = !mon && pf[p_res]<0;
 #endif
-
 	if (!dpy) return 1;
 	init();
 	printGrp();
@@ -970,9 +969,20 @@ ev2:
 		    case GenericEvent:
 			if (ev.xcookie.extension == xiopcode) {
 				if (ev.xcookie.evtype < XI_TouchBegin) switch (ev.xcookie.evtype) {
+/*
+				    case XI_DeviceChanged:
+					if (XGetEventData(dpy, &ev.xcookie)) {
+#undef e
+#define e ((XIDeviceChangedEvent*)ev.xcookie.data)
+						int r = e->reason;
+						//devid = e->deviceid;
+						XFreeEventData(dpy, &ev.xcookie);
+						if (r == XISlaveSwitch) goto ev2;
+					}
+*/
 				    case XI_PropertyEvent:
-					resDev = 0;
 				    case XI_HierarchyChanged:
+					resDev = 0;
 					oldShowPtr |= 2;
 					continue;
 				    default:
