@@ -209,9 +209,9 @@ char *ph[MAX_PAR] = {
 	"min swipe x/y or y/x",
 	"swipe size (>0 - dots, <0 - -mm)",
 	"add to coordinates (to round to integer)",
-	"1=floating devices"
-	"		0=master (visual artefacts, but enable native masters touch clients)",
-	"		2=master & floating (firefox segfaults)",
+	"	1=floating devices\n"
+	"		0=master (visual artefacts, but enable native masters touch clients)\n"
+	"		2=dynamic master/floating (firefox segfaults)",
 	"RandR monitor name\n"
 	"		or number 1+\n"
 #ifdef USE_EVDEV
