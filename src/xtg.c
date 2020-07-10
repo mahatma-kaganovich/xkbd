@@ -512,6 +512,18 @@ static void getRes(int x, int y, _short mode){
 	}
 #endif
 found:
+#ifdef USE_EVDEV
+	// workaround for some broken video drivers
+	// we can
+	if ((!found || !mwidth || !mheight)
+	    && (pf[p_touch_add] != 0 || pf[p_res]<0)
+	    ) {
+		if (mode != 2) getEvRes();
+		// +.5 ?
+		if (devX) mwidth = devX;
+		if (devY) mheight = devY;
+	}
+#endif
 	scrX2 = scrX1 + width - 1;
 	scrY2 = scrY1 + height - 1;
 	if (mwidth > mheight && width < height && mheight) {
@@ -519,12 +531,10 @@ found:
 		mwidth = mheight;
 		mheight = i;
 	}
-#ifdef USE_EVDEV
 	if (mode==2) {
 		 if (found==1) map_to();
 		 else resXY = pf[p_res]<0;
 	}
-#endif
 	if (pf[p_res]<0) {
 		if (!mwidth && !mheight) {
 			resX = resY = -pf[p_res];
