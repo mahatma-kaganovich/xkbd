@@ -593,10 +593,9 @@ static void getHierarchy(){
 		switch (d2->use) {
 		    case XIFloatingSlave: break;
 		    case XISlavePointer:
-			if (ev.xcookie.extension == xiopcode && P != N && touch[N].deviceid == devid) N=TOUCH_P(N);
 			if (!strstr(d2->name," XTEST ")) break;
 			if (d2->attachment == m0) xtestPtr0 = devid;
-			else if (d2->attachment == m) xtestPtr = devid;
+			else if (m && d2->attachment == m) xtestPtr = devid;
 			continue;
 //		    case XISlaveKeyboard:
 //			if (strstr(d2->name," XTEST ")) continue;
@@ -700,6 +699,7 @@ skip_map:
 		if (c) XIChangeHierarchy(dpy, c, 1);
 		if (ximask.mask) XISelectEvents(dpy, wa.root, &ximask, 1);
 	}
+	static int m1 = 0;
 	switch (pi[p_floating]) {
 	    case 2:
 		if (showPtr) {
@@ -710,9 +710,17 @@ skip_map:
 		}
 	    case 0:
 		if (m) break;
+//		if (m1 != m) {
+//		}
+		if (curShow) {
+			curShow = 0;
+			XFixesHideCursor(dpy, wa.root);
+			XFlush(dpy);
+		}
 		static XIAddMasterInfo cm = {.type = XIAddMaster, .name = "TouchScreen", .send_core = 0, .enable = 1};
 		XIChangeHierarchy(dpy, &cm, 1);
 	}
+//	m1 = m;
 	XIFreeDeviceInfo(info2);
 	XFlush(dpy);
 	tdevs -= tdevs2;
@@ -721,23 +729,14 @@ skip_map:
 
 static void setShowCursor(){
 	oldShowPtr = showPtr;
-	if (pi[p_floating] != 1 && showPtr != curShow) {
-		if (showPtr) XFixesShowCursor(dpy, wa.root);
-		else {
-			XFixesHideCursor(dpy, wa.root);
-//			XFlush(dpy);
-//			XWarpPointer(dpy, None, wa.root, 0, 0, 0, 0, x2, y2);
-//			XFlush(dpy);
-		}
-	}
 	getHierarchy();
 	if ((oldShowPtr & 2) && !showPtr) return;
 	// "Hide" must be first!
-	if (pi[p_floating] != 0 && showPtr != curShow) {
+	if (showPtr != curShow) {
+		curShow = showPtr;
 		if (showPtr) XFixesShowCursor(dpy, wa.root);
 		else XFixesHideCursor(dpy, wa.root);
 	}
-	curShow = showPtr;
 }
 
 static void _set_bmap(_int g, _short i, _int j){
@@ -882,12 +881,6 @@ static void init(){
 	XIClearMask(ximask0, XI_DeviceChanged);
 #endif
 
-	if (pi[p_floating] != 1) {
-		ximask.mask=&ximaskTouch;
-		ximask.deviceid=XIAllMasterDevices;
-		XISelectEvents(dpy, wa.root, &ximask, 1);
-	}
-
 	xrevent = xrerror
 #ifdef USE_XINERAMA
 	    = xirevent = xirerror
@@ -1002,11 +995,9 @@ int main(int argc, char **argv){
 			if (win1 != win) getWinGrp();
 			else if (grp1 != grp) setWinGrp();
 		} while (win1 != win); // error handled
-#ifdef XTG
-		if (showPtr != oldShowPtr) setShowCursor();
-#endif
 ev:
 #ifdef XTG
+		if (showPtr != oldShowPtr) setShowCursor();
 		if (timeHold) {
 			Time t = T - timeHold;
 			if (t >= pi[p_hold] || _delay(pi[p_hold] - t)) {
@@ -1022,6 +1013,7 @@ ev2:
 #ifdef XTG
 		    case GenericEvent:
 			if (ev.xcookie.extension == xiopcode) {
+				//fprintf(stderr,"ev %i\n",ev.xcookie.evtype);
 				if (ev.xcookie.evtype < XI_TouchBegin) switch (ev.xcookie.evtype) {
 #ifdef DEV_CHANGED
 				    case XI_DeviceChanged:
@@ -1040,13 +1032,11 @@ ev2:
 					oldShowPtr |= 2;
 					continue;
 				    default:
-					if (!showPtr) {
-						showPtr = 1;
-						setShowCursor();
-					}
+					showPtr = 1;
 					goto ev;
 				}
 				if (!tdevs2 || !XGetEventData(dpy, &ev.xcookie)) goto ev;
+				showPtr = 0;
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
 //				fprintf(stderr,"ev2 %i %i\n",e->deviceid,ev.xcookie.evtype);
@@ -1058,19 +1048,18 @@ ev2:
 				end = (ev.xcookie.evtype == XI_TouchEnd
 						|| (e->flags & XITouchPendingEnd));
 				x2 = e->root_x + pf[p_round], y2 = e->root_y + pf[p_round];
-				if (showPtr) {
-					showPtr = 0;
-					//XWarpPointer(dpy, None, wa.root, 0, 0, 0, 0, x2, y2);
-					//XFlush(dpy);
-					setShowCursor();
-				}
 				to = NULL;
 				for(i=P; i!=N; i=TOUCH_N(i)){
 					Touch *t1 = &touch[i];
 					if (t1->touchid != e->detail || t1->deviceid != devid) continue;
 					to = t1;
-					break;
+					goto tfound;
 				}
+				if (oldShowPtr && N!=P) {
+					fprintf(stderr,"Drop %i touches\n",TOUCH_CNT);
+					N=P;
+				}
+tfound:
 				if (resDev != devid) {
 					// slow for multiple touchscreens
 					if (resXY) getRes(x2,y2,0);
@@ -1235,6 +1224,7 @@ next_dnd:
 					}
 					XTestFakeMotionEvent(dpy,screen,x2,y2,0);
 					XTestFakeButtonEvent(dpy,g,0,0);
+					//fprintf(stderr,"button %i\n",g);
 				}
 //				XFlush(dpy);
 				to->tail = xx;
