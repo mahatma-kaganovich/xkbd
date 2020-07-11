@@ -555,7 +555,9 @@ _int tdevs = 0, tdevs2=0;
 static void getHierarchy(){
 	static XIAttachSlaveInfo ca = {.type=XIAttachSlave};
 	static XIDetachSlaveInfo cf = {.type=XIDetachSlave};
-	int i,j,ndevs2,nrel,nkbd,m=0,m0=0,k0=0;
+	static XIAddMasterInfo cm = {.type = XIAddMaster, .name = "TouchScreen", .send_core = 0, .enable = 1};
+	static XIRemoveMasterInfo cr = {.type = XIRemoveMaster, .return_mode = XIFloating};
+	int i,j,ndevs2,nrel,nkbd,m=0;
 	XIDeviceInfo *info2 = XIQueryDevice(dpy, XIAllDevices, &ndevs2);
 
 	if (!resDev) {
@@ -570,8 +572,8 @@ static void getHierarchy(){
 		devid = d2->deviceid;
 		switch (d2->use) {
 		    case XIMasterPointer:
-			if (!m0) m0 = devid;
-			else if (!m && !strncmp(d2->name,"TouchScreen ",12)) {
+			if (!cr.return_pointer) cr.return_pointer = devid;
+			else if (cr.return_pointer != devid && !strncmp(d2->name,cm.name,11)) {
 				m = devid;
 				if (ca.new_master != m) {
 					ximask.mask = &ximaskTouch;
@@ -583,11 +585,11 @@ static void getHierarchy(){
 			}
 			break;
 		    case XIMasterKeyboard:
-			if (!k0) k0 = devid;
+			if (!cr.return_keyboard) cr.return_keyboard = devid;
 			break;
 		}
 	    }
-	    ca.new_master = m;
+	    cr.deviceid = ca.new_master = m;
 	}
 	xtestPtr0 = xtestPtr = 0;
 	tdevs2 = tdevs = 0;
@@ -599,7 +601,7 @@ static void getHierarchy(){
 		    case XIFloatingSlave: break;
 		    case XISlavePointer:
 			if (!strstr(d2->name," XTEST ")) break;
-			if (d2->attachment == m0) xtestPtr0 = devid;
+			if (d2->attachment == cr.return_pointer) xtestPtr0 = devid;
 			else if (m && d2->attachment == m) xtestPtr = devid;
 			continue;
 //		    case XISlaveKeyboard:
@@ -691,7 +693,7 @@ skip_map:
 					if (m && m != d2->attachment) c = &ca;
 					break;
 				    case 2:
-					if (d2->attachment == m0) c = &cf;
+					if (d2->attachment == cr.return_pointer) c = &cf;
 					break;
 				}
 			}
@@ -708,7 +710,7 @@ skip_map:
 	    case 2:
 		if (showPtr) {
 			if (!m) break;
-			XIRemoveMasterInfo cr = {.type = XIRemoveMaster, .return_mode = XIFloating, .deviceid = m, .return_pointer = m0, .return_keyboard = k0};
+//			XIRemoveMasterInfo cr = {.type = XIRemoveMaster, .return_mode = XIFloating, .deviceid = m, .return_pointer = m0, .return_keyboard = k0};
 			XIChangeHierarchy(dpy, &cr, 1);
 			break;
 		}
@@ -720,7 +722,6 @@ skip_map:
 //			XFlush(dpy);
 			if (!showPtr) fprintf(stderr,"hide\n");
 		}
-		static XIAddMasterInfo cm = {.type = XIAddMaster, .name = "TouchScreen", .send_core = 0, .enable = 1};
 		XIChangeHierarchy(dpy, &cm, 1);
 	}
 	XIFreeDeviceInfo(info2);
