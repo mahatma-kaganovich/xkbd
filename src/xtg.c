@@ -999,7 +999,6 @@ int main(int argc, char **argv){
 		} while (win1 != win); // error handled
 ev:
 #ifdef XTG
-		if (showPtr != oldShowPtr) setShowCursor();
 		if (timeHold) {
 			Time t = T - timeHold;
 			if (t >= pi[p_hold] || _delay(pi[p_hold] - t)) {
@@ -1009,6 +1008,7 @@ ev:
 			}
 		}
 ev2:
+		if (showPtr != oldShowPtr) setShowCursor();
 #endif
 		XNextEvent(dpy, &ev);
 		switch (ev.type) {
@@ -1035,7 +1035,8 @@ ev2:
 					continue;
 				    default:
 					showPtr = 1;
-					goto ev;
+					timeHold = 0;
+					goto ev2;
 				}
 				if (!tdevs2 || !XGetEventData(dpy, &ev.xcookie)) goto ev;
 				showPtr = 0;
@@ -1050,7 +1051,13 @@ ev2:
 				end = (ev.xcookie.evtype == XI_TouchEnd
 						|| (e->flags & XITouchPendingEnd));
 				x2 = e->root_x + pf[p_round], y2 = e->root_y + pf[p_round];
-				to = NULL;
+				g = ((int)x2 <= scrX1) ? BUTTON_RIGHT : ((int)x2 >= scrX2) ? BUTTON_LEFT : ((int)y2 <= scrY1) ? BUTTON_UP : ((int)y2 >= scrY2) ? BUTTON_DOWN : 0;
+				if (g) tt |= PH_BORDER;
+				if (resDev != devid) {
+					// slow for multiple touchscreens
+					if (resXY) getRes(x2,y2,0);
+					resDev = devid;
+				}
 				for(i=P; i!=N; i=TOUCH_N(i)){
 					Touch *t1 = &touch[i];
 					if (t1->touchid != e->detail || t1->deviceid != devid) continue;
@@ -1061,17 +1068,10 @@ ev2:
 					fprintf(stderr,"Drop %i touches\n",TOUCH_CNT);
 					N=P;
 				}
-tfound:
-				if (resDev != devid) {
-					// slow for multiple touchscreens
-					if (resXY) getRes(x2,y2,0);
-					resDev = devid;
-				}
-				g = ((int)x2 <= scrX1) ? BUTTON_RIGHT : ((int)x2 >= scrX2) ? BUTTON_LEFT : ((int)y2 <= scrY1) ? BUTTON_UP : ((int)y2 >= scrY2) ? BUTTON_DOWN : 0;
-				if (g) tt |= PH_BORDER;
-				if (!to) {
-					if (end) goto evfree;
+//				{
+					// new touch
 					timeHold = 0;
+					if (end) goto evfree;
 					to = &touch[N];
 					N=TOUCH_N(N);
 					if (N==P) P=TOUCH_N(P);
@@ -1128,7 +1128,8 @@ invalidateT:
 					// so, if checked at least 1 more touch - skip this
 					if (oldShowPtr) continue;
 					goto ev2;
-				}
+//				}
+tfound:
 				XFreeEventData(dpy, &ev.xcookie);
 				x1 = to->x;
 				y1 = to->y;
@@ -1136,7 +1137,6 @@ invalidateT:
 				    case BAD_BUTTON: goto skip;
 				    case BUTTON_DND: goto next_dnd;
 				}
-
 				xx = x2 - x1;
 				yy = y2 - y1;
 				bx = 0;
