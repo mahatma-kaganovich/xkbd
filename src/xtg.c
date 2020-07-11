@@ -115,6 +115,7 @@ Atom aNode;
 typedef unsigned char xiMask[MASK_LEN];
 xiMask ximaskButton = {}, ximaskTouch = {}, ximask0 = {};
 XIEventMask ximask = { .deviceid = XIAllDevices, .mask_len = MASK_LEN, .mask = (void*)&ximask0 };
+//#define MASK(m) ((void*)ximask.mask=m)
 
 Time T;
 #define TIME(T,t) (T = (t))
@@ -158,7 +159,7 @@ static void SET_BMAP(_int i, _short x, _int key){
 	static TouchTree *bmap_ = &bmap;;
 	TouchTree **m = &bmap_;
 	for(; i; i>>=3) {
-		m = &((*m)->gg[i&7]);
+		m = (void*) &((*m)->gg[i&7]);
 		if (!*m) *m = calloc(1, sizeof(**m));
 	}
 	(*m)->g = x;
@@ -359,7 +360,7 @@ static void getEvRes(){
 	int f;
 	unsigned long n,b;
 	devX = devY = 0;
-	if (XIGetProperty(dpy,devid,aNode,0,1024,False,XA_STRING,&t,&f,&n,&b,&name) != Success) return;
+	if (XIGetProperty(dpy,devid,aNode,0,1024,False,XA_STRING,&t,&f,&n,&b,(void*)&name) != Success) return;
 	int fd = open(name, O_RDONLY|O_NONBLOCK);
 	XFree(name);
 	if (fd < 0) return;
@@ -426,7 +427,7 @@ static void map_to(){
 	Atom t;
 	int f;
 	unsigned long n,b;
-	void *d = NULL;
+	unsigned char *d = NULL;
 	if (XIGetProperty(dpy,devid,aMatrix,0,9,False,aFloat,&t,&f,&n,&b,&d) == Success
 	    && t==aFloat && f==32 && n == 9 && !b && memcmp(&matrix,d,sizeof(matrix)))
 		XIChangeProperty(dpy,devid,aMatrix,aFloat,32,PropModeReplace,(void*)&matrix,9);
@@ -576,8 +577,8 @@ static void getHierarchy(){
 			else if (cr.return_pointer != devid && !strncmp(d2->name,cm.name,11)) {
 				m = devid;
 				if (ca.new_master != m) {
-					ximask.mask = &ximaskTouch;
-					ximask.deviceid = m;
+					ximask.mask=(void*)&ximaskTouch;
+					ximask.deviceid=m;
 					XISelectEvents(dpy, wa.root, &ximask, 1);
 //					XIUndefineCursor(dpy,m,wa.root);
 //					XIDefineCursor(dpy,m,wa.root,None);
@@ -671,9 +672,9 @@ skip_map:
 				tdevs2++;
 				if (m) {
 					c = &ca;
-					ximask.mask=&ximask0;
+					ximask.mask=(void*)&ximask0;
 				} else {
-					ximask.mask=&ximaskTouch;
+					ximask.mask=(void*)&ximaskTouch;
 				}
 				break;
 			}
@@ -685,7 +686,7 @@ skip_map:
 				tdevs2++;
 				switch (pi[p_floating]) {
 				    case 1:
-					ximask.mask=&ximaskTouch;
+					ximask.mask=(void*)&ximaskTouch;
 					XIGrabDevice(dpy,devid,wa.root,0,None,XIGrabModeSync,XIGrabModeTouch,False,&ximask);
 					ximask.mask=NULL;
 					break;
@@ -711,7 +712,7 @@ skip_map:
 		if (showPtr) {
 			if (!m) break;
 //			XIRemoveMasterInfo cr = {.type = XIRemoveMaster, .return_mode = XIFloating, .deviceid = m, .return_pointer = m0, .return_keyboard = k0};
-			XIChangeHierarchy(dpy, &cr, 1);
+			XIChangeHierarchy(dpy, (void*)&cr, 1);
 			break;
 		}
 	    case 0:
@@ -722,7 +723,7 @@ skip_map:
 //			XFlush(dpy);
 			if (!showPtr) fprintf(stderr,"hide\n");
 		}
-		XIChangeHierarchy(dpy, &cm, 1);
+		XIChangeHierarchy(dpy, (void*)&cm, 1);
 	}
 	XIFreeDeviceInfo(info2);
 	XFlush(dpy);
