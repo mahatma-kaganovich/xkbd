@@ -573,8 +573,13 @@ static void getHierarchy(){
 			if (!m0) m0 = devid;
 			else if (!m && !strncmp(d2->name,"TouchScreen ",12)) {
 				m = devid;
-//				XIUndefineCursor(dpy,m,wa.root);
-//				XIDefineCursor(dpy,m,wa.root,None);
+				if (ca.new_master != m) {
+					ximask.mask = &ximaskTouch;
+					ximask.deviceid = m;
+					XISelectEvents(dpy, wa.root, &ximask, 1);
+//					XIUndefineCursor(dpy,m,wa.root);
+//					XIDefineCursor(dpy,m,wa.root,None);
+				}
 			}
 			break;
 		    case XIMasterKeyboard:
@@ -699,7 +704,6 @@ skip_map:
 		if (c) XIChangeHierarchy(dpy, c, 1);
 		if (ximask.mask) XISelectEvents(dpy, wa.root, &ximask, 1);
 	}
-	static int m1 = 0;
 	switch (pi[p_floating]) {
 	    case 2:
 		if (showPtr) {
@@ -710,17 +714,15 @@ skip_map:
 		}
 	    case 0:
 		if (m) break;
-//		if (m1 != m) {
-//		}
 		if (curShow) {
-			curShow = 0;
-			XFixesHideCursor(dpy, wa.root);
-			XFlush(dpy);
+//			curShow = 0;
+//			XFixesHideCursor(dpy, wa.root);
+//			XFlush(dpy);
+			if (!showPtr) fprintf(stderr,"hide\n");
 		}
 		static XIAddMasterInfo cm = {.type = XIAddMaster, .name = "TouchScreen", .send_core = 0, .enable = 1};
 		XIChangeHierarchy(dpy, &cm, 1);
 	}
-//	m1 = m;
 	XIFreeDeviceInfo(info2);
 	XFlush(dpy);
 	tdevs -= tdevs2;
