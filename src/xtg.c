@@ -214,12 +214,15 @@ char *ph[MAX_PAR] = {
 	"		0=master (visual artefacts, but enable native masters touch clients)\n"
 	"		2=dynamic master/floating (firefox segfaults)",
 	"RandR monitor name\n"
-	"		or number 1+\n"
+	"		or number 1+"
 #ifdef USE_EVDEV
-	"		or negative -<x> to find monitor, using evdev touch input size, grow +x\n"
+	"\n		or negative -<x> to find monitor, using evdev touch input size, grow +x\n"
 #endif
 	"			for (all|-d) absolute pointers (=xinput map-to-output)",
-	"map-to-output add field around screen, mm (if -R)",
+	"map-to-output add field around screen, mm (if -R)"
+#ifdef USE_EVDEV
+	"\n		or \"~\" to use input-output size diff (may be just float-int truncation)",
+#endif
 };
 char pc[] = "d:m:M:t:x:r:e:f:R:a:h";
 #else
@@ -377,14 +380,19 @@ static void getEvRes(){
 #endif
 
 static void map_to(){
-	float x=scrX1,y=scrY1,w=width,h=height;
+	float x=scrX1,y=scrY1,w=width,h=height,dx=pf[p_touch_add],dy=pf[p_touch_add];
 	_short m = 1;
-	if (pf[p_touch_add] != 0) {
-		float b;
-		b=(w/mwidth)*pf[p_touch_add];
+	if (pa[p_touch_add] && pa[p_touch_add][0] == '~' && pa[p_touch_add][1] == 0) {
+		if (mwidth && devX!=0) dx = (devX - mwidth)/2;
+		if (mheight && devY!=0) dy = (devY - mheight)/2;
+	}
+	if (dx!=0 && mwidth) {
+		float b = (w/mwidth)*dx;
 		x-=b;
 		w+=b*2;
-		b=(h/mheight)*pf[p_touch_add];
+	}
+	if (dy!=0 && mheight) {
+		float b = (h/mheight)*dy;
 		y-=b;
 		h+=b*2;
 	}
