@@ -221,7 +221,7 @@ char *ph[MAX_PAR] = {
 	"			for (all|-d) absolute pointers (=xinput map-to-output)",
 	"map-to-output add field around screen, mm (if -R)"
 #ifdef USE_EVDEV
-	"\n		or \"~\" to use input-output size diff (may be just float-int truncation)",
+	"\n		or \"+\" to use input-output size diff (may be just float-int truncation)",
 #endif
 };
 char pc[] = "d:m:M:t:x:r:e:f:R:a:h";
@@ -382,7 +382,7 @@ static void getEvRes(){
 static void map_to(){
 	float x=scrX1,y=scrY1,w=width,h=height,dx=pf[p_touch_add],dy=pf[p_touch_add];
 	_short m = 1;
-	if (pa[p_touch_add] && pa[p_touch_add][0] == '~' && pa[p_touch_add][1] == 0) {
+	if (pa[p_touch_add] && pa[p_touch_add][0] == '+' && pa[p_touch_add][1] == 0) {
 		if (mwidth && devX!=0) dx = (devX - mwidth)/2;
 		if (mheight && devY!=0) dy = (devY - mheight)/2;
 	}
