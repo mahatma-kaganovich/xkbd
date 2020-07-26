@@ -240,6 +240,11 @@ static void _propAtom32(Atom prop, char *data){
 	_prop(32,prop,XA_ATOM,&a,1,PropModeAppend);
 }
 
+static void _propAtom32Rep(Atom prop, char *data){
+	Atom a=_atom(data);
+	_prop(32,prop,XA_ATOM,&a,1,PropModeAppend);
+}
+
 static void _propCard32(Atom prop, void *data, int n){
 	_prop(32,prop,XA_CARDINAL,data,n,PropModeReplace);
 }
@@ -352,6 +357,23 @@ static void _hide(int sig) {
 	}
 }
 
+static short remapped = 0;
+Atom atype, aActions, aDock;
+static int unmapWin(){
+		if (!(dock & 2048) || remapped) return 0;
+		// unmap (remap) with DOCK.
+		// Let WM apply offsets first to respect other docks/panels
+		remapped = 1;
+		XUnmapWindow(display, win);
+		XFlush(display);
+		XDeleteProperty(display,win,aActions);
+		XDeleteProperty(display,win,aStrut);
+		XDeleteProperty(display,win,aStrutPartial);
+		_prop(32,atype,XA_ATOM,&aDock,1,PropModeReplace);
+		XFlush(display);
+		return 1;
+}
+
 int main(int argc, char **argv)
 {
    char *window_name = iam;
@@ -399,8 +421,12 @@ int main(int argc, char **argv)
 	8=_NET_WM_WINDOW_TYPE_TOOLBAR, 16=_NET_WM_STATE_STICKY,\n\
 	32=resize (slock), 64=strut horizontal, 128=_NET_WM_STATE_SKIP_TASKBAR,\n\
 	256=_NET_WM_STATE_ABOVE + RaiseWindow(), 512=_NET_WM_DESKTOP=0xffffffff,\n\
-	1024=_NET_WM_STATE_SKIP_PAGER, 2048=pending _NET_WM_WINDOW_TYPE_DOCK.\n\
-		(_NET_WM_WINDOW_TYPE_DOCK is hardwired, but can hide\n\
+	1024=_NET_WM_STATE_SKIP_PAGER,\n\
+	2048=remap: pending _NET_WM_WINDOW_TYPE_DOCK"
+#ifdef USE_XR
+	" + cached Xrandr/rotation"
+#endif
+	".\n		(_NET_WM_WINDOW_TYPE_DOCK is hardwired, but can hide\n\
 		other toolbar/panel, so use pending hack where possible)\n\
 	For OpenBox I use 4018 = $[2+16+32+128+256+512+1024+2048]," },
 	{ 'i', IAM ".fake_touch", 2, 0, &fake_touch,"event type bitmask: "
@@ -517,19 +543,6 @@ stop_argv:
 
    display = XOpenDisplay(display_name);
    if (!display) goto no_dpy;
-   screen = DefaultScreen(display);
-   rootWin = RootWindow(display, screen);
-   scr_mwidth=DisplayWidthMM(display, screen);
-   scr_mheight=DisplayHeightMM(display, screen);
-
-   XGetWindowAttributes(display,rootWin,&wa0);
-
-   X1=wa0.x; Y1=wa0.y; X2=wa0.x+wa0.width-1; Y2=wa0.y+wa0.height-1;
-   if (scr_mwidth > scr_mheight && scr_width < scr_height && scr_mheight) {
-	unsigned long sw = scr_mwidth;
-	scr_mwidth = scr_mheight;
-	scr_mheight = sw;
-   }
 
    char *rs;
 
@@ -564,11 +577,62 @@ stop_argv:
   }
   XFree(rs);
 
+      Atom wm_protocols[]={
+	_atom("WM_DELETE_WINDOW"),
+	_atom("WM_PROTOCOLS"),
+	_atom("WM_NORMAL_HINTS"),
+      };
+      atype = _atom("_NET_WM_WINDOW_TYPE");
+      Atom astate = _atom("_NET_WM_STATE");
+      aStrut = _atom("_NET_WM_STRUT");
+      aStrutPartial = _atom("_NET_WM_STRUT_PARTIAL");
+      aDock = _atom("_NET_WM_WINDOW_TYPE_DOCK");
+      if(dock & 2048) aActions = _atom("_NET_WM_ALLOWED_ACTIONS");
+
+#ifdef USE_XR
+	int xrevent, xrerror, xrr;
+	static struct _Geometry {
+		void *next;
+		unsigned long w,h,mw,mh;
+		keyboard *kb;
+	} *geo0 = NULL, *geo = NULL;
+	xrr = XRRQueryExtension(display, &xrevent, &xrerror);
+#endif
+#ifdef USE_XI
+	int xiopcode, xievent = 0, xierror, xi, ximajor = 2, ximinor = 2;
+	xi = !(fake_touch&1)
+		&& XQueryExtension(display, "XInputExtension", &xiopcode, &xievent, &xierror)
+		&& XIQueryVersion(display, &ximajor, &ximinor) != BadRequest;
+	
+#endif
+#ifndef MINIMAL
+	// not found how to get keymap change on XInput, so keep Xkb events
+	int xkbError, reason_rtrn, xkbmjr = XkbMajorVersion, xkbmnr = XkbMinorVersion, xkbop;
+	int DeviceIdMask = (fake_touch&2) ? XIAllMasterDevices : XIAllDevices;
+	if (!XkbQueryExtension(display,&xkbop,&xkbEventType,&xkbError,&xkbmjr,&xkbmnr)) xkbEventType = 0;
+#endif
+
+chScreen:
+   screen = DefaultScreen(display);
+   rootWin = RootWindow(display, screen);
+   scr_mwidth=DisplayWidthMM(display, screen);
+   scr_mheight=DisplayHeightMM(display, screen);
+
+   XGetWindowAttributes(display,rootWin,&wa0);
+
+   X1=wa0.x; Y1=wa0.y; X2=wa0.x+wa0.width-1; Y2=wa0.y+wa0.height-1;
+   scr_mwidth=DisplayWidthMM(display, screen);
+   scr_mheight=DisplayHeightMM(display, screen);
+   if (scr_mwidth > scr_mheight && scr_width < scr_height && scr_mheight) {
+	unsigned long sw = scr_mwidth;
+	scr_mwidth = scr_mheight;
+	scr_mheight = sw;
+   }
+
 #ifdef USE_XR
 	// find actual output;
 	// if no geometry, try to avoid strut in the middle of overlapped outputs (-> top/left).
-	int xrevent, xrerror, xrr;
-	if ((xrr = XRRQueryExtension(display, &xrevent, &xrerror))) {
+	if (xrr) {
 		int found=0, repeat=0;
 		XRRScreenResources *xrrr = XRRGetScreenResources(display,rootWin);
 re_crts:
@@ -676,48 +740,45 @@ re_crts:
 
       /* check for user selected keyboard conf file */
 
-
-      if (conf_file == NULL)
-	{
+      if (!remapped) {
+        if (conf_file == NULL) {
 	  strcpy(userconffile,getenv("HOME"));
 	  strcat(userconffile, "/.");
 	  strcat(userconffile, iam);
 
-	  if ((fp = fopen(userconffile, "r")) != NULL)
-	    {
-	      conf_file = (char *)malloc(sizeof(char)*512);
-	      if (fgets(conf_file, 512, fp) != NULL)
-		{
-		  fclose(fp);
-		  if ( conf_file[strlen(conf_file)-1] == '\n')
-		    conf_file[strlen(conf_file)-1] = '\0';
+	  if ((fp = fopen(userconffile, "r")) != NULL) {
+		conf_file = (char *)malloc(sizeof(char)*512);
+		if (fgets(conf_file, 512, fp) != NULL) {
+			fclose(fp);
+			if ( conf_file[strlen(conf_file)-1] == '\n')
+				conf_file[strlen(conf_file)-1] = '\0';
 		}
-	    }
-	  else
-	    {
-	      conf_file = DEFAULTCONFIG;
-	    }
+	  } else conf_file = DEFAULTCONFIG;
 	}
-
-      win = XCreateSimpleWindow(display, rootWin, x, y, w, h,
-	0, WhitePixel(display, screen), BlackPixel(display, screen));
-
-      XSetStandardProperties(display, win, window_name,
-			     icon_name, None,
-			     argv, argc, None);
-
-
-#ifdef USE_XR
-      if (xrr) {
-	XRRSelectInput(display, win, RRScreenChangeNotifyMask);
-      }
-#endif
+	win = XCreateSimpleWindow(display, rootWin, x, y, w, h,
+		0, WhitePixel(display, screen), BlackPixel(display, screen));
+	XSetStandardProperties(display, win, window_name,
+		icon_name, None, argv, argc, None);
 
       _reset();
       _signals(signal_exit);
+      }
+#ifdef USE_XR
+      else {
+        kb = NULL;
+	for (geo = geo0; geo; geo = geo->next) {
+		if (geo->w == scr_width && geo->h == scr_height && geo->mw == scr_mwidth && geo->mh == scr_mheight) {
+			kb = geo->kb;
+			break;
+		}
+	}
+      }
+#endif
 
-      kb = kb_new(win, display, screen, 0, 0, width, height, conf_file, font_name, font_name1);
-      kb_size(kb);
+      if (!kb) {
+	kb = kb_new(win, display, screen, 0, 0, width, height, conf_file, font_name, font_name1);
+	kb_size(kb);
+      }
       i=kb->vbox->act_width;
       j=kb->vbox->act_height;
       if (width != i || height != j) {
@@ -732,15 +793,12 @@ re_crts:
 	_move(x,y,width,height); // +hints
 //      if (cache_pix) kb_repaint(kb); // reduce blinking on start
 
-      Atom atype = _atom("_NET_WM_WINDOW_TYPE");
-      Atom astate = _atom("_NET_WM_STATE");
-      aStrut = _atom("_NET_WM_STRUT");
-      aStrutPartial = _atom("_NET_WM_STRUT_PARTIAL");
+      if (remapped) goto _remapped;
 
 	hide_enabled = 1;
       //hide_enabled = dock & (4|2048);
       if(dock & 4)
-	_propAtom32(atype,"_NET_WM_WINDOW_TYPE_DOCK");
+        _prop(32,atype,XA_ATOM,&aDock,1,PropModeAppend);
       if (dock & 8)
 	_propAtom32(atype,"_NET_WM_WINDOW_TYPE_TOOLBAR");
       if (dock & 16)
@@ -771,34 +829,27 @@ re_crts:
       }
       XSetWMHints(display, win, &wm_hints);
 
-      Atom wm_protocols[]={
-	_atom("WM_DELETE_WINDOW"),
-	_atom("WM_PROTOCOLS"),
-	_atom("WM_NORMAL_HINTS"),
-      };
       XSetWMProtocols(display, win, wm_protocols, sizeof(wm_protocols) /
 		      sizeof(Atom));
 
 #ifndef MINIMAL
 	// not found how to get keymap change on XInput, so keep Xkb events
-	int xkbError, reason_rtrn, xkbmjr = XkbMajorVersion, xkbmnr = XkbMinorVersion, xkbop;
-	if (XkbQueryExtension(display,&xkbop,&xkbEventType,&xkbError,&xkbmjr,&xkbmnr)) {
+	if (xkbEventType) {
 		unsigned int m = XkbNewKeyboardNotifyMask;
 		if (Xkb_sync) m|=XkbStateNotifyMask;
 		XkbSelectEvents(display,XkbUseCoreKbd,XkbAllEventsMask,m);
 		if (m & XkbStateNotifyMask)
 			XkbSelectEventDetails(display,XkbUseCoreKbd,XkbStateNotifyMask,XkbAllStateComponentsMask,XkbModifierStateMask|XkbModifierLatchMask|XkbModifierLockMask|XkbModifierBaseMask);
-	} else xkbEventType = 0;
+	}
+#endif
+
+#ifdef USE_XR
+      if (xrr) XRRSelectInput(display, win, RRScreenChangeNotifyMask);
 #endif
 
 #ifdef USE_XI
-      int xiopcode, xievent = 0, xierror, xi = 0;
-      int ximajor = 2, ximinor = 2;
       // keep it constant to compile-out unused event filtering
-      int DeviceIdMask = (fake_touch&2) ? XIAllMasterDevices : XIAllDevices;
-      if(!(fake_touch&1) && XQueryExtension(display, "XInputExtension", &xiopcode, &xievent, &xierror) &&
-		XIQueryVersion(display, &ximajor, &ximinor) != BadRequest) {
-
+      if(xi) {
 	static unsigned char mask_[XIMaskLen(XI_TouchEnd)] = {};
 	static XIEventMask mask = { .mask_len = sizeof(mask_), .mask = (unsigned char *)&mask_ };
 	mask.deviceid = DeviceIdMask;
@@ -812,7 +863,6 @@ re_crts:
 	XISetMask(mask.mask, XI_TouchEnd);
 
 	XISelectEvents(display, win, &mask, 1);
-	xi = 1;
       } else
 #endif
 	// may be lost "release" on libinput
@@ -823,18 +873,19 @@ re_crts:
 
       XSelectInput(display, win, evmask);
 
+      signal(SIGUSR1, handle_sig); /* for extenal mapping / unmapping */
+      signal(SIG_HIDE, _hide);
+      signal(SIG_SHOW, _hide);
+
+      XSetErrorHandler(xerrh);
+
+_remapped:
       if (embed) {
 	 fprintf(stdout, "%li\n", win);
 	 fclose(stdout);
       } else {
 	XMapWindow(display, win);
       }
-      signal(SIGUSR1, handle_sig); /* for extenal mapping / unmapping */
-
-      signal(SIG_HIDE, _hide);
-      signal(SIG_SHOW, _hide);
-
-      XSetErrorHandler(xerrh);
       XFlush(display);
 
       while (1)
@@ -939,16 +990,8 @@ re_crts:
 		break;
 	    case Expose:
 		if (resized) break;
-		if (dock & 2048) {
-			// remap with DOCK.
-			// Let WM apply offsets first to respect other docks/panels
-			dock ^= 2048;
-			XUnmapWindow(display, win);
-			XFlush(display);
-			XDeleteProperty(display,win,_atom("_NET_WM_ALLOWED_ACTIONS"));
-			_propAtom32(atype,"_NET_WM_WINDOW_TYPE_DOCK");
+		if (unmapWin()) {
 			XMapWindow(display, win);
-			XFlush(display);
 			continue;
 		}
 		XGetWindowAttributes(display,rootWin,&wa);
@@ -1010,7 +1053,22 @@ re_crts:
 		}
 #endif
 #ifdef USE_XR
-		if (xrr && ev.type == xrevent + RRScreenChangeNotify) restart();
+		if (xrr && ev.type == xrevent + RRScreenChangeNotify) {
+			remapped = 0;
+			if (!unmapWin()) restart();
+			x = y = width = height = 0;
+			if (!geo) {
+				geo = malloc(sizeof(*geo));
+				geo->w = scr_width;
+				geo->h = scr_height;
+				geo->mw = scr_mwidth;
+				geo->mh = scr_mheight;
+				geo->kb = kb;
+				geo->next = geo0;
+				geo0 = geo;
+			}
+			goto chScreen;
+		}
 #endif
 	    }
 	    while (kb_do_repeat(kb, active_but) && !XPending(display))
