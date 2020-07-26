@@ -69,7 +69,8 @@ char *display_name = NULL;
 
 CARD32 prop[12] = {2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 int crts=0, X1,Y1,X2,Y2, top=0, left=0;
-unsigned int dock = 1974;
+//unsigned int dock = 1974;
+unsigned int dock = 4018;
 
 #define UNSIZE 1
 int resized = 0;
