@@ -68,6 +68,7 @@
 #include <string.h>
 //#include <sys/time.h>
 #include <X11/Xpoll.h>
+#include <math.h>
 #endif
 
 #define NO_GRP 99
@@ -91,7 +92,7 @@ typedef uint_fast32_t _int;
 Display *dpy = 0;
 Window win, win1;
 int screen;
-XWindowAttributes wa;
+Window root;
 Atom aActWin, aKbdGrp, aXkbRules;
 #ifdef XSS
 Atom aWMState, aFullScreen;
@@ -139,6 +140,7 @@ _short P=0,N=0;
 double resX, resY;
 int resDev = 0;
 int xrr, xrevent, xrerror;
+Atom aMonName = None;
 #ifdef USE_XINERAMA
 int xir, xirevent, xirerror;
 #endif
@@ -196,10 +198,15 @@ static void _print_bmap(_int x, _short n, TouchTree *m) {
 #define p_floating 7
 #define p_mon 8
 #define p_touch_add 9
-#define MAX_PAR 10
+
+#define p_min_native_mon 10
+#define p_max_native_mon 11
+#define p_min_dpi 12
+#define p_max_dpi 13
+#define MAX_PAR 14
 char *pa[MAX_PAR] = {};
 // android: 125ms tap, 500ms long
-#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0}
+#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0,  14, 32, 72, 0}
 int pi[] = PAR_DEFS;
 double pf[] = PAR_DEFS;
 char *ph[MAX_PAR] = {
@@ -223,8 +230,12 @@ char *ph[MAX_PAR] = {
 #ifdef USE_EVDEV
 	"\n		or \"+\" to use input-output size diff (may be just float-int truncation)",
 #endif
+	"min native dpi monitor (<0 - -horizontal mm, >0 -  diagonal \")",
+	"max ...",
+	"min dpi",
+	"nax dpi",
 };
-char pc[] = "d:m:M:t:x:r:e:f:R:a:h";
+char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:h";
 #else
 #define TIME(T,t)
 #endif
@@ -249,7 +260,7 @@ static Bool getRules(){
 	rul = NULL;
 	rulLen = 0;
 	n1 = 0;
-	if (XGetWindowProperty(dpy,wa.root,aXkbRules,0,256,False,XA_STRING,&t,&f,&rulLen,&b,&rul)==Success && rul && rulLen>1 && t==XA_STRING) {
+	if (XGetWindowProperty(dpy,root,aXkbRules,0,256,False,XA_STRING,&t,&f,&rulLen,&b,&rul)==Success && rul && rulLen>1 && t==XA_STRING) {
 		rul2 = rul;
 		return True;
 	}
@@ -324,8 +335,14 @@ static void WMState(Atom *states, short nn){
 
 #ifdef XTG
 
+int scr_width, scr_height, scr_mwidth, scr_mheight, scr_rotation;
 int scrX1,scrY1,scrX2,scrY2;
-int width, height, mwidth, mheight, rotation;
+Rotation rotation;
+// usual dpi calculated from height only"
+int width, height, mwidth, mheight,
+    h4dpi, mh4dpi, w4dpi, mw4dpi,
+    h4dpimin, mh4dpimin, w4dpimin, mw4dpimin,
+    h4dpimax, mh4dpimax, w4dpimax, mw4dpimax;
 _short resXY,mon,mon_sz;
 double mon_grow;
 
@@ -396,10 +413,10 @@ static void map_to(){
 		y-=b;
 		h+=b*2;
 	}
-	x/=wa.width;
-	y/=wa.height;
-	w/=wa.width;
-	h/=wa.height;
+	x/=scr_width;
+	y/=scr_height;
+	w/=scr_width;
+	h/=scr_height;
 	switch (rotation) {
 	    case RR_Reflect_X|RR_Rotate_0:
 	    case RR_Reflect_Y|RR_Rotate_180:
@@ -442,69 +459,175 @@ static void map_to(){
 	XFree(d);
 }
 
+#if 0
+static int _isqrt(int n){
+	int sqrt = n >> 1, t = 0;
+	while (sqrt != t) {
+		t = sqrt;
+		sqrt = (n / t + t) >> 1;
+	}
+	return sqrt;
+}
+#endif
+
+void fixMonSize(int width, int height, int mwidth, int mheight, double *dpmw, double *dpmh) {
+//	double mw = mwidth, mh = mheight;
+	double mw = width / *dpmw, mh = height / *dpmh;
+	double d = sqrt(mw*mw+mh*mh);
+	double _min, _max, m = 1.;
+
+	if (pi[p_min_native_mon]) {
+		_min = pf[p_min_native_mon];
+		if (_min < 0) {
+			_min = -_min;
+			if (mheight < _min) m = _min / mheight;
+		} else {
+			_min *= 25.4;
+			if (d < _min) m = _min / d;
+		}
+	}
+	if (m == 1.)
+	    if (pi[p_max_native_mon]) {
+		_max = pf[p_max_native_mon];
+		if (_max < 0) {
+			_max = -_max;
+			if (mheight > _max) m = _max / mheight;
+		} else {
+			_max *= 25.4;
+			if (d > _max) m = _max / d;
+		}
+	}
+	if (m != 1.) {
+		*dpmw /= m;
+		*dpmh /= m;
+	}
+	if (pi[p_max_dpi]) {
+		_max = pf[p_max_dpi] / 25.4;
+		if (*dpmw > _max) {
+			m = _max / *dpmw;
+			*dpmw = _max;
+			*dpmh /= m;
+		}
+		if (*dpmh > _max) {
+			m = _max / *dpmh;
+			*dpmw /= m;
+			*dpmh = _max;
+		}
+	}
+	if (pi[p_max_dpi]) {
+		_min = pf[p_min_dpi] / 25.4;
+		if (*dpmw < _min) {
+			m = _min / *dpmw;
+			*dpmw = _min;
+			*dpmh /= m;
+		}
+		if (*dpmh < _min) {
+			m = pf[p_min_dpi] / *dpmh;
+			*dpmw /= m;
+			*dpmh = _min;
+		}
+	}
+}
+
 // mode: 0 - x,y, 1 - mon, 2 - mon_sz
 // mode 0 need only for scroll resolution
 // mode 1 & 2 - for map-to-output too
 static void getRes(int x, int y, _short mode){
-	int i;
+	int i,j;
 	_int found = 0;
 
-	XGetWindowAttributes(dpy, DefaultRootWindow(dpy), &wa);
-	mwidth = DisplayWidthMM(dpy, screen);
-	mheight = DisplayHeightMM(dpy, screen);
-	width = wa.width;
-	height = wa.height;
-	scrX1 = 0;
-	scrY1 = 0;
+//	XGetWindowAttributes(dpy, DefaultRootWindow(dpy), &wa);
+	mwidth = scr_mwidth;
+	mheight = scr_mheight;
+	width = scr_width;
+	height = scr_height;
+	rotation = 0;
+	scrX1 = scrY1 = 0;
+	h4dpi = mh4dpi = w4dpi = mw4dpi =
+	h4dpimin = mh4dpimin = w4dpimin = mw4dpimin =
+	h4dpimax = mh4dpimax = w4dpimax = mw4dpimax = 0;
 #ifdef USE_EVDEV
 	if (mode == 2) {
 		getEvRes();
-		if (devX == 0 || devY == 0) goto found;
+		if (devX == 0 || devY == 0) {
+			XGrabServer(dpy);
+			goto found;
+		}
 		// if (mode==0) ... get real resolution from matrix and return
 	}
 #endif
-	XRRScreenResources *xrrr;
-	if (xrr && (xrrr = XRRGetScreenResources(dpy,wa.root))) {
-		int n = 0;
-		for (i = 0; i < xrrr->noutput && (!found
+	// try dont lock for libevent, but still unsure (got one fd lock)
+	XGrabServer(dpy);
+
+	if (!xrr) goto noxrr;
+	int n = 0;
+	RROutput prim = XRRGetOutputPrimary(dpy, root);
+	XRRScreenResources *xrrr = XRRGetScreenResources(dpy,root);
+	if (!xrr) goto noxrr;
+	for (i = 0; i < xrrr->noutput; i++) {
+		XRROutputInfo *oinf = XRRGetOutputInfo(dpy, xrrr, xrrr->outputs[i]);
+		if (!oinf || oinf->connection != RR_Connected || !oinf->crtc) goto nextout;
+		XRRCrtcInfo *cinf = XRRGetCrtcInfo(dpy, xrrr, oinf->crtc);
+		if (!cinf) goto nextout;
+		if((!found
 #ifdef USE_EVDEV
 		    || (mon_sz && found == 1)
 #endif
-		    ); i++) {
-			XRROutputInfo *oinf = XRRGetOutputInfo(dpy, xrrr, xrrr->outputs[i]);
-			if (!oinf) continue;
-			XRRCrtcInfo *cinf;
-			if (oinf->crtc && oinf->connection == RR_Connected
-			    && ((!mode && !found)
+		    ) &&
+		    ((!mode && !found)
 #ifdef USE_EVDEV
-			      || (mon_sz && (
+			    || (mon_sz && (
 				(oinf->mm_width <= devX && devX - oinf->mm_width < mon_grow
 				    && oinf->mm_height <= devY && devY - oinf->mm_height < mon_grow)
 				|| (oinf->mm_height <= devX && devX - oinf->mm_height < mon_grow
 				    && oinf->mm_width <= devY && devY - oinf->mm_width < mon_grow)
-			      ))
+			    ))
 #endif
-			      || (mode == 1 && (pi[p_mon] == ++n || (pa[p_mon] && !strcmp(oinf->name,pa[p_mon]))))
-			    )
-			    && (cinf = XRRGetCrtcInfo(dpy, xrrr, oinf->crtc))
-			    ) {
-				if (mode || (x >= cinf->x && y >= cinf->y && x < cinf->x + cinf->width && y < cinf->y + cinf->height)) {
-					if(!found++ || !mode) {
-						scrX1 = cinf->x;
-						scrY1 = cinf->y;
-						mwidth=oinf->mm_width;
-						mheight=oinf->mm_height;
-						width = cinf->width;
-						height = cinf->height;
-						rotation = cinf->rotation;
-					}
-				}
-				XRRFreeCrtcInfo(cinf);
+			    || (mode == 1 && (pi[p_mon] == ++n ||
+				(pa[p_mon] && !strcmp(oinf->name,pa[p_mon]))))
+		    ) &&
+		    ( mode || (x >= cinf->x && y >= cinf->y && x < cinf->x + cinf->width && y < cinf->y + cinf->height)) &&
+		    (!found++ || !mode)) {
+			scrX1 = cinf->x;
+			scrY1 = cinf->y;
+			mwidth = oinf->mm_width;
+			mheight = oinf->mm_height;
+			width = cinf->width;
+			height = cinf->height;
+			rotation = cinf->rotation;
+			if ((prim == xrrr->outputs[i]) || (!prim && mheight > mh4dpi)) {
+				h4dpi = height;
+				mh4dpi = mheight;
+				w4dpi = width;
+				mw4dpi = mwidth;
 			}
-			XRRFreeOutputInfo(oinf);
 		}
-		XRRFreeScreenResources(xrrr);
+		if (oinf->mm_height) {
+			if (!(h4dpi && prim) && ((prim == xrrr->outputs[i]) || (!prim && oinf->mm_height > mh4dpi))) {
+				h4dpi = cinf->height;
+				mh4dpi = oinf->mm_height;
+				w4dpi = cinf->width;
+				mw4dpi = oinf->mm_width;
+			}
+			if (!mh4dpimin || oinf->mm_height < mh4dpimin || (oinf->mm_height == mh4dpimin && cinf->width < mw4dpimin)) {
+				h4dpimin = cinf->height;
+				mh4dpimin = oinf->mm_height;
+				w4dpimin = cinf->width;
+				mw4dpimin = oinf->mm_width;
+			}
+			if (oinf->mm_height > mh4dpimax || (oinf->mm_height == mh4dpimax && cinf->width > mw4dpimax)) {
+				h4dpimax = cinf->height;
+				mh4dpimax =  oinf->mm_height;
+				w4dpimax = cinf->width;
+				mw4dpimax = oinf->mm_width;
+			}
+		}
+		XRRFreeCrtcInfo(cinf);
+nextout:
+		XRRFreeOutputInfo(oinf);
 	}
+	XRRFreeScreenResources(xrrr);
+noxrr:
 #ifdef USE_XINERAMA
 	if (!found && xir && XineramaIsActive(dpy) && pi[p_mon]) {
 		int n = 0;
@@ -531,6 +654,8 @@ found:
 		// +.5 ?
 		if (devX) mwidth = devX;
 		if (devY) mheight = devY;
+		if (!mh4dpi && h4dpi) mh4dpi = mheight;
+		if (!mw4dpi && w4dpi) mw4dpi = mwidth;
 	}
 #endif
 	scrX2 = scrX1 + width - 1;
@@ -549,11 +674,42 @@ found:
 			resX = resY = -pf[p_res];
 			fprintf(stderr,"Screen dimensions in mm unknown. Use resolution in dots.\n");
 		} else {
-			if (mwidth) resX = (0.+wa.width)/mwidth*(-pf[p_res]);
-			resY = mheight ? (0.+wa.height)/mheight*(-pf[p_res]) : resX;
+			if (mwidth) resX = (0.+scr_width)/mwidth*(-pf[p_res]);
+			resY = mheight ? (0.+scr_height)/mheight*(-pf[p_res]) : resX;
 			if (!mwidth) resX = resY;
 		}
 	}
+	// most pixmap fonts default size: 7.5 pix
+	// other: 24pt = 24/72inch = 1/3 inch (adobe size) ~= 8.5mm
+	// if f=minimal sont size, size must be reduced not less  24/f
+	// if s=minimal monitor height mm (mh4dpi)
+	// if h4dpi/s<24/f -> h4dpi=s*24/f
+	// default f=8
+
+	// i inches 4:3 - sqrt(4*x*4*x+3*x*3*x)/25.4=i
+	// sqrt(25*x*x)/25.4=i
+	// 5*x/25.4=i
+	// x = i*25.4/5  ~= (x*5)
+	// height = x*3 = (i*25.4/25)*3   ~= i*15
+
+	if (mh4dpi && mw4dpi) {
+		double dpmh = (.0 + h4dpi) / mh4dpi;
+		double dpmw = (.0 + w4dpi) / mw4dpi;
+
+		fixMonSize(w4dpimin, h4dpimin, mw4dpimin, mh4dpimin, &dpmw, &dpmh); 
+		fixMonSize(w4dpimax, h4dpimax, mw4dpimax, mh4dpimax, &dpmw, &dpmh); 
+		fixMonSize(w4dpi, h4dpi, mw4dpi, mh4dpi, &dpmw, &dpmh); 
+
+		int mh = scr_height / dpmh + .5;
+		int mw = scr_width / dpmw +.5;
+
+		if (mw != scr_mwidth || mh != scr_mheight) {
+			fprintf(stderr,"dpi %.1f %.1f -> %.1f %.1f\n",25.4*scr_width/scr_mwidth,25.4*scr_height/scr_mheight,25.4*scr_width/mw,25.4*scr_height/mh);
+			XRRSetScreenSize(dpy, root, scr_width, scr_height, mw, mh);
+		}
+	}
+
+	XUngrabServer(dpy);
 }
 
 
@@ -587,9 +743,9 @@ static void getHierarchy(){
 				if (ca.new_master != m) {
 					ximask.mask=(void*)&ximaskTouch;
 					ximask.deviceid=m;
-					XISelectEvents(dpy, wa.root, &ximask, 1);
-//					XIUndefineCursor(dpy,m,wa.root);
-//					XIDefineCursor(dpy,m,wa.root,None);
+					XISelectEvents(dpy, root, &ximask, 1);
+//					XIUndefineCursor(dpy,m,root);
+//					XIDefineCursor(dpy,m,root,None);
 				}
 			}
 			break;
@@ -695,7 +851,7 @@ skip_map:
 				switch (pi[p_floating]) {
 				    case 1:
 					ximask.mask=(void*)&ximaskTouch;
-					XIGrabDevice(dpy,devid,wa.root,0,None,XIGrabModeSync,XIGrabModeTouch,False,&ximask);
+					XIGrabDevice(dpy,devid,root,0,None,XIGrabModeSync,XIGrabModeTouch,False,&ximask);
 					ximask.mask=NULL;
 					break;
 				    case 0:
@@ -713,7 +869,7 @@ skip_map:
 //			continue;
 		}
 		if (c) XIChangeHierarchy(dpy, c, 1);
-		if (ximask.mask) XISelectEvents(dpy, wa.root, &ximask, 1);
+		if (ximask.mask) XISelectEvents(dpy, root, &ximask, 1);
 	}
 	switch (pi[p_floating]) {
 	    case 2:
@@ -727,7 +883,7 @@ skip_map:
 		if (m) break;
 		if (curShow) {
 //			curShow = 0;
-//			XFixesHideCursor(dpy, wa.root);
+//			XFixesHideCursor(dpy, root);
 //			XFlush(dpy);
 			if (!showPtr) fprintf(stderr,"hide\n");
 		}
@@ -746,8 +902,8 @@ static void setShowCursor(){
 	// "Hide" must be first!
 	if (showPtr != curShow) {
 		curShow = showPtr;
-		if (showPtr) XFixesShowCursor(dpy, wa.root);
-		else XFixesHideCursor(dpy, wa.root);
+		if (showPtr) XFixesShowCursor(dpy, root);
+		else XFixesHideCursor(dpy, root);
 	}
 }
 
@@ -792,11 +948,11 @@ static void initmap(){
 static void getWinGrp(){
 	if (win1==None) {
 		XGetInputFocus(dpy, &win1, &revert);
-		if (win1==None) win1 = wa.root;
+		if (win1==None) win1 = root;
 	}
 	win = win1;
 	grp1 = 0;
-	if (win!=wa.root && getProp(win,aKbdGrp,XA_CARDINAL,sizeof(CARD32)))
+	if (win!=root && getProp(win,aKbdGrp,XA_CARDINAL,sizeof(CARD32)))
 		grp1 = *(CARD32*)ret;
 	while (grp1 != grp && XkbLockGroup(dpy, XkbUseCoreKbd, grp1)!=Success && grp1) {
 		XDeleteProperty(dpy,win,aKbdGrp);
@@ -810,13 +966,13 @@ static void getWinGrp(){
 
 static void setWinGrp(){
 	printGrp();
-	if (win!=wa.root)
+	if (win!=root)
 		XChangeProperty(dpy,win,aKbdGrp,XA_CARDINAL,32,PropModeReplace,(unsigned char*) &grp1,1);
 	grp = grp1;
 }
 
 static void getPropWin1(){
-	if (getProp(wa.root,aActWin,XA_WINDOW,sizeof(Window)))
+	if (getProp(root,aActWin,XA_WINDOW,sizeof(Window)))
 		win1 = *(Window*)ret;
 }
 
@@ -829,21 +985,26 @@ static int xerrh(Display *dpy, XErrorEvent *err){
 		oldShowPtr |= 2;
 		showPtr = 1;
 		break;
-//	    case BadMatch: break; // XShowCursor() before XHideCursor()
+	    case BadMatch:
+		// RRSetScreenSize() on bad XRandr state;
+		// XShowCursor() before XHideCursor()
+		break;
 #endif
 	    default:
 #ifdef XTG
 		if (err->error_code==xierror) break; // changes on device list
 old:
 #endif
-		
 		oldxerrh(dpy,err);
 	}
 #ifdef XTG
 	static int oldErr = 0;
 	if (oldErr != err->error_code) {
 		oldErr=err->error_code;
-		fprintf(stderr, "XError: type=%i XID=0x%lx serial=%lu error_code=%i%s request_code=%i minor_code=%i xierror=%i\n",err->type,err->resourceid,err->serial,err->error_code,err->error_code == xierror ? "=XI": "",err->request_code,err->minor_code,xierror);
+		fprintf(stderr, "XError: type=%i XID=0x%lx serial=%lu error_code=%i%s request_code=%i minor_code=%i xierror=%i\n",
+			err->type, err->resourceid, err->serial, oldErr,
+			oldErr == xierror ? "=XI" : oldErr == xrerror ?"=XrandR":"s",
+			err->request_code, err->minor_code, xierror);
 	}
 #endif
 	return 0;
@@ -854,7 +1015,8 @@ static void init(){
 	int evmask = PropertyChangeMask;
 
 	screen = DefaultScreen(dpy);
-	XGetWindowAttributes(dpy, DefaultRootWindow(dpy), &wa);
+	root = DefaultRootWindow(dpy);
+//	XGetWindowAttributes(dpy, root, &wa);
 	aActWin = XInternAtom(dpy, "_NET_ACTIVE_WINDOW", False);
 	aKbdGrp = XInternAtom(dpy, "_KBD_ACTIVE_GROUP", False);
 	aXkbRules = XInternAtom(dpy, "_XKB_RULES_NAMES", False);
@@ -887,7 +1049,7 @@ static void init(){
 #ifdef DEV_CHANGED
 	XISetMask(ximask0, XI_DeviceChanged);
 #endif
-	XISelectEvents(dpy, wa.root, &ximask, 1);
+	XISelectEvents(dpy, root, &ximask, 1);
 	XIClearMask(ximask0, XI_HierarchyChanged);
 #ifdef DEV_CHANGED
 	XIClearMask(ximask0, XI_DeviceChanged);
@@ -898,10 +1060,11 @@ static void init(){
 	    = xirevent = xirerror
 #endif
 	    = -1;
+	XGrabServer(dpy);
 	if (pf[p_res]<0 || mon || mon_sz) {
 		if (xrr = XRRQueryExtension(dpy, &xrevent, &xrerror)) {
 			xrevent += RRScreenChangeNotify;
-			XRRSelectInput(dpy, wa.root, RRScreenChangeNotifyMask);
+			XRRSelectInput(dpy, root, RRScreenChangeNotifyMask);
 		};
 #ifdef USE_XINERAMA
 		xir = XineramaQueryExtension(dpy, &xirevent, &xirerror);
@@ -910,20 +1073,24 @@ static void init(){
 	aNode = XInternAtom(dpy, "Device Node", False);
 #endif
 	}
+	scr_width = DisplayWidth(dpy,screen);
+	scr_height = DisplayHeight(dpy,screen);
+	scr_mwidth = DisplayWidthMM(dpy,screen);
+	scr_mheight = DisplayHeightMM(dpy,screen);
+	XUngrabServer(dpy);
 #ifdef XSS
 	if (XScreenSaverQueryExtension(dpy, &xssevent, &xsserror)) {
-		xssevent += ScreenSaverNotify;
-		XScreenSaverSelectInput(dpy, wa.root, ScreenSaverNotifyMask);
+		XScreenSaverSelectInput(dpy, root, ScreenSaverNotifyMask);
 		XScreenSaverInfo *x = XScreenSaverAllocInfo();
-		if (x && XScreenSaverQueryInfo(dpy, wa.root, x) == Success && x->state == ScreenSaverOn)
+		if (x && XScreenSaverQueryInfo(dpy, root, x) == Success && x->state == ScreenSaverOn)
 			timeSkip--;
 		XFree(x);
 	} else xssevent = -1;
 #endif
 #endif
-	XSelectInput(dpy, wa.root, evmask);
+	XSelectInput(dpy, root, evmask);
 	oldxerrh = XSetErrorHandler(xerrh);
-	win = wa.root;
+	win = root;
 	win1 = None;
 	grp = NO_GRP;
 	grp1 = 0;
@@ -1280,7 +1447,7 @@ evfree:
 		    case PropertyNotify:
 			TIME(T,e.time);
 			//fprintf(stderr,"Prop %s\n",XGetAtomName(dpy,e.atom));
-			//if (e.window!=wa.root) break;
+			//if (e.window!=root) break;
 			if (e.atom==aActWin) {
 				win1 = None;
 				if (e.state==PropertyNewValue) getPropWin1();
@@ -1294,6 +1461,16 @@ evfree:
 				rul2 = NULL;
 			}
 			break;
+/*
+		    case CreateNotify:
+		    case ConfigureNotify:
+		    case UnmapNotify:
+		    case MapNotify:
+		    case ReparentNotify:
+		    case DestroyNotify:
+			goto ev;
+			break;
+*/
 		    default:
 #undef e
 #define e ((XkbEvent)ev)
@@ -1329,6 +1506,11 @@ evfree:
 				TIME(T,e->timestamp > e->config_timestamp ? e->timestamp : e->config_timestamp);
 				resDev = 0;
 				oldShowPtr |= 2;
+				scr_width = e->width;
+				scr_height = e->height;
+				scr_mwidth = e->mwidth;
+				scr_mheight = e->mheight;
+				scr_rotation = e->rotation;
 			}
 #endif
 //			else fprintf(stderr,"ev? %i\n",ev.type);
