@@ -372,7 +372,34 @@ static int unmapWin(){
 		XDeleteProperty(display,win,aStrutPartial);
 		_prop(32,atype,XA_ATOM,&aDock,1,PropModeReplace);
 		XFlush(display);
+		XSync(display,False);
 		return 1;
+}
+
+#ifdef USE_XR
+struct _Geometry {
+	void *next;
+	unsigned long w,h,mw,mh;
+	keyboard *kb;
+} *geo0 = NULL, *geo = NULL;
+#endif
+static void unmapOrRestart(){
+	if (!(dock & 2048)) restart();
+	remapped = 0;
+	unmapWin();
+	x = y = width = height = 0;
+#ifdef USE_XR
+	if (!geo) {
+		geo = malloc(sizeof(*geo));
+		geo->w = scr_width;
+		geo->h = scr_height;
+		geo->mw = scr_mwidth;
+		geo->mh = scr_mheight;
+		geo->kb = kb;
+		geo->next = geo0;
+		geo0 = geo;
+	}
+#endif
 }
 
 int main(int argc, char **argv)
@@ -592,11 +619,6 @@ stop_argv:
 
 #ifdef USE_XR
 	int xrevent, xrerror, xrr;
-	static struct _Geometry {
-		void *next;
-		unsigned long w,h,mw,mh;
-		keyboard *kb;
-	} *geo0 = NULL, *geo = NULL;
 	xrr = XRRQueryExtension(display, &xrevent, &xrerror);
 #endif
 #ifdef USE_XI
@@ -613,17 +635,18 @@ stop_argv:
 	if (!XkbQueryExtension(display,&xkbop,&xkbEventType,&xkbError,&xkbmjr,&xkbmnr)) xkbEventType = 0;
 #endif
 
-chScreen:
+chScreen1:
    screen = DefaultScreen(display);
    rootWin = RootWindow(display, screen);
    scr_mwidth=DisplayWidthMM(display, screen);
    scr_mheight=DisplayHeightMM(display, screen);
+   scr_width=DisplayWidth(display, screen);
+   scr_height=DisplayHeight(display, screen);
+chScreen:
 
    XGetWindowAttributes(display,rootWin,&wa0);
 
    X1=wa0.x; Y1=wa0.y; X2=wa0.x+wa0.width-1; Y2=wa0.y+wa0.height-1;
-   scr_mwidth=DisplayWidthMM(display, screen);
-   scr_mheight=DisplayHeightMM(display, screen);
    if (scr_mwidth > scr_mheight && scr_width < scr_height && scr_mheight) {
 	unsigned long sw = scr_mwidth;
 	scr_mwidth = scr_mheight;
@@ -996,7 +1019,10 @@ _remapped:
 			continue;
 		}
 		XGetWindowAttributes(display,rootWin,&wa);
-		if (wa0.x!=wa.x || wa0.y!=wa.y || wa0.width!=wa.width || wa0.height!=wa.height) restart();
+		if (wa0.x!=wa.x || wa0.y!=wa.y || wa0.width!=wa.width || wa0.height!=wa.height) {
+			unmapOrRestart();
+			goto chScreen1;
+		}
 		wa0=wa;
 		transCoord();
 		setSize(x = kb->X, y = kb->Y, width, height, resized);
@@ -1004,7 +1030,7 @@ _remapped:
 		break;
 	    case VisibilityNotify: if (dock & 32) {
 		Window rw, pw, *wins, *ww;
-		unsigned int nw;
+		unsigned int nw,re = 0;
 		static int lock_cnt = 0;
 
 		if (ev.xvisibility.state!=VisibilityFullyObscured ||
@@ -1018,14 +1044,15 @@ _remapped:
 				wa.screen == wa0.screen &&
 				wa.x<=x && wa.y<y && wa.width>=width && wa.height>height &&
 				wa.x+wa.width>x && wa.y+wa.height>y
-				) XResizeWindow(display, *ww, wa.width, y-wa.y);
+				&& *ww != rootWin && XResizeWindow(display, *ww, wa.width, y-wa.y))
+					re++;
 			ww++;
 		}
 		XFree(wins);
 		// first lock: fork (to realize init-lock safe wait)
-		if (!lock_cnt++ && fork()) exit(0);
+		if (re && !lock_cnt++ && fork()) exit(0);
 	    }
-	    if (dock & 256) XRaiseWindow(display, win);
+	    if ((dock & 256) && ev.xvisibility.state!=VisibilityUnobscured) XRaiseWindow(display, win);
 	    if (dock & (256|32)) XFlush(display);
 	    break;
 	    case 0: break;
@@ -1054,20 +1081,14 @@ _remapped:
 		}
 #endif
 #ifdef USE_XR
+#undef e
+#define e ((XRRScreenChangeNotifyEvent*)&ev)
 		if (xrr && ev.type == xrevent + RRScreenChangeNotify) {
-			remapped = 0;
-			if (!unmapWin()) restart();
-			x = y = width = height = 0;
-			if (!geo) {
-				geo = malloc(sizeof(*geo));
-				geo->w = scr_width;
-				geo->h = scr_height;
-				geo->mw = scr_mwidth;
-				geo->mh = scr_mheight;
-				geo->kb = kb;
-				geo->next = geo0;
-				geo0 = geo;
-			}
+			unmapOrRestart();
+			scr_width = e->width;
+			scr_height = e->height;
+			scr_mwidth = e->mwidth;
+			scr_mheight = e->mheight;
 			goto chScreen;
 		}
 #endif
