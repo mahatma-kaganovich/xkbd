@@ -70,7 +70,7 @@ char *display_name = NULL;
 CARD32 prop[12] = {2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 int crts=0, X1,Y1,X2,Y2, top=0, left=0;
 //unsigned int dock = 1974;
-unsigned int dock = 4018;
+unsigned int dock = 3762;
 
 #define UNSIZE 1
 int resized = 0;
@@ -456,7 +456,7 @@ int main(int argc, char **argv)
 #endif
 	".\n		(_NET_WM_WINDOW_TYPE_DOCK is hardwired, but can hide\n\
 		other toolbar/panel, so use pending hack where possible)\n\
-	For OpenBox I use 4018 = $[2+16+32+128+256+512+1024+2048]," },
+	For OpenBox I use 3762 = $[2+16+32+128+512+1024+2048]," },
 	{ 'i', IAM ".fake_touch", 2, 0, &fake_touch,"event type bitmask: "
 #ifdef USE_XI
 		"1=Xkb vs. XI2,\n\
