@@ -1,5 +1,5 @@
 /*
-	xtg v1.26 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.27 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -25,6 +25,7 @@
 
 	Auto hide/show mouse cursor on touchscreen.
 	Gestures.
+	Auto-DPI.
 	-h to help
 
 	(C) 2019-2020 Denis Kaganovich, Anarchy license
