@@ -524,7 +524,7 @@ void fixMonSize(int width, int height, int mwidth, int mheight, double *dpmw, do
 			*dpmh /= m;
 		}
 		if (*dpmh < _min) {
-			m = pf[p_min_dpi] / *dpmh;
+			m = _min / *dpmh;
 			*dpmw /= m;
 			*dpmh = _min;
 		}
