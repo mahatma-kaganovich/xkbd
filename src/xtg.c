@@ -340,7 +340,7 @@ int scr_width, scr_height, scr_mwidth, scr_mheight, scr_rotation;
 int scrX1,scrY1,scrX2,scrY2;
 Rotation rotation;
 // usual dpi calculated from height only"
-int width, height, mwidth, mheight,
+int ifound, width, height, mwidth, mheight,
     i4dpi, h4dpi, mh4dpi, w4dpi, mw4dpi,
     i4dpimin, h4dpimin, mh4dpimin, w4dpimin, mw4dpimin,
     i4dpimax, h4dpimax, mh4dpimax, w4dpimax, mw4dpimax;
@@ -548,7 +548,7 @@ static void getRes(int x, int y, _short mode){
 	h4dpi = mh4dpi = w4dpi = mw4dpi =
 	h4dpimin = mh4dpimin = w4dpimin = mw4dpimin =
 	h4dpimax = mh4dpimax = w4dpimax = mw4dpimax = 0;
-	i4dpi = i4dpimin = i4dpimax = -1;
+	ifound = i4dpi = i4dpimin = i4dpimax = -1;
 #ifdef USE_EVDEV
 	if (mode == 2) {
 		getEvRes();
@@ -598,6 +598,7 @@ static void getRes(int x, int y, _short mode){
 			width = cinf->width;
 			height = cinf->height;
 			rotation = cinf->rotation;
+			ifound = i;
 			if ((prim == xrrr->outputs[i]) || (!prim && mheight > mh4dpi)) {
 				h4dpi = height;
 				mh4dpi = mheight;
@@ -693,6 +694,8 @@ found:
 		fixMonSize(w4dpimin, h4dpimin, mw4dpimin, mh4dpimin, &dpmw, &dpmh); 
 		if (i4dpimax != i4dpimin)
 			fixMonSize(w4dpimax, h4dpimax, mw4dpimax, mh4dpimax, &dpmw, &dpmh); 
+		if (ifound != i4dpi && ifound != i4dpimin && ifound != i4dpimax)
+			fixMonSize(width, height, mwidth, mheight, &dpmw, &dpmh); 
 		if (i4dpi != i4dpimin && i4dpi != i4dpimax)
 			fixMonSize(w4dpi, h4dpi, mw4dpi, mh4dpi, &dpmw, &dpmh); 
 
