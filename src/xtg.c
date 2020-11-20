@@ -341,9 +341,9 @@ int scrX1,scrY1,scrX2,scrY2;
 Rotation rotation;
 // usual dpi calculated from height only"
 int width, height, mwidth, mheight,
-    h4dpi, mh4dpi, w4dpi, mw4dpi,
-    h4dpimin, mh4dpimin, w4dpimin, mw4dpimin,
-    h4dpimax, mh4dpimax, w4dpimax, mw4dpimax;
+    i4dpi, h4dpi, mh4dpi, w4dpi, mw4dpi,
+    i4dpimin, h4dpimin, mh4dpimin, w4dpimin, mw4dpimin,
+    i4dpimax, h4dpimax, mh4dpimax, w4dpimax, mw4dpimax;
 _short resXY,mon,mon_sz;
 double mon_grow;
 
@@ -547,6 +547,7 @@ static void getRes(int x, int y, _short mode){
 	h4dpi = mh4dpi = w4dpi = mw4dpi =
 	h4dpimin = mh4dpimin = w4dpimin = mw4dpimin =
 	h4dpimax = mh4dpimax = w4dpimax = mw4dpimax = 0;
+	i4dpi = i4dpimin = i4dpimax = -1;
 #ifdef USE_EVDEV
 	if (mode == 2) {
 		getEvRes();
@@ -601,6 +602,7 @@ static void getRes(int x, int y, _short mode){
 				mh4dpi = mheight;
 				w4dpi = width;
 				mw4dpi = mwidth;
+				i4dpi = i;
 			}
 		}
 		if (oinf->mm_height) {
@@ -609,18 +611,21 @@ static void getRes(int x, int y, _short mode){
 				mh4dpi = oinf->mm_height;
 				w4dpi = cinf->width;
 				mw4dpi = oinf->mm_width;
+				i4dpi = i;
 			}
 			if (!mh4dpimin || oinf->mm_height < mh4dpimin || (oinf->mm_height == mh4dpimin && cinf->width < mw4dpimin)) {
 				h4dpimin = cinf->height;
 				mh4dpimin = oinf->mm_height;
 				w4dpimin = cinf->width;
 				mw4dpimin = oinf->mm_width;
+				i4dpimin = i;
 			}
 			if (oinf->mm_height > mh4dpimax || (oinf->mm_height == mh4dpimax && cinf->width > mw4dpimax)) {
 				h4dpimax = cinf->height;
 				mh4dpimax =  oinf->mm_height;
 				w4dpimax = cinf->width;
 				mw4dpimax = oinf->mm_width;
+				i4dpimax = i;
 			}
 		}
 		XRRFreeCrtcInfo(cinf);
@@ -680,26 +685,15 @@ found:
 			if (!mwidth) resX = resY;
 		}
 	}
-	// most pixmap fonts default size: 7.5 pix
-	// other: 24pt = 24/72inch = 1/3 inch (adobe size) ~= 8.5mm
-	// if f=minimal sont size, size must be reduced not less  24/f
-	// if s=minimal monitor height mm (mh4dpi)
-	// if h4dpi/s<24/f -> h4dpi=s*24/f
-	// default f=8
-
-	// i inches 4:3 - sqrt(4*x*4*x+3*x*3*x)/25.4=i
-	// sqrt(25*x*x)/25.4=i
-	// 5*x/25.4=i
-	// x = i*25.4/5  ~= (x*5)
-	// height = x*3 = (i*25.4/25)*3   ~= i*15
-
 	if (mh4dpi && mw4dpi) {
 		double dpmh = (.0 + h4dpi) / mh4dpi;
 		double dpmw = (.0 + w4dpi) / mw4dpi;
 
 		fixMonSize(w4dpimin, h4dpimin, mw4dpimin, mh4dpimin, &dpmw, &dpmh); 
-		fixMonSize(w4dpimax, h4dpimax, mw4dpimax, mh4dpimax, &dpmw, &dpmh); 
-		fixMonSize(w4dpi, h4dpi, mw4dpi, mh4dpi, &dpmw, &dpmh); 
+		if (i4dpimax != i4dpimin)
+			fixMonSize(w4dpimax, h4dpimax, mw4dpimax, mh4dpimax, &dpmw, &dpmh); 
+		if (i4dpi != i4dpimin && i4dpi != i4dpimax)
+			fixMonSize(w4dpi, h4dpi, mw4dpi, mh4dpi, &dpmw, &dpmh); 
 
 		int mh = scr_height / dpmh + .5;
 		int mw = scr_width / dpmw +.5;
@@ -709,7 +703,6 @@ found:
 			XRRSetScreenSize(dpy, root, scr_width, scr_height, mw, mh);
 		}
 	}
-
 	XUngrabServer(dpy);
 }
 
