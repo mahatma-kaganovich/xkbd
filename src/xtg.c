@@ -472,6 +472,7 @@ static int _isqrt(int n){
 #endif
 
 void fixMonSize(int width, int height, int mwidth, int mheight, double *dpmw, double *dpmh) {
+	if (!mheight) return;
 //	double mw = mwidth, mh = mheight;
 	double mw = width / *dpmw, mh = height / *dpmh;
 	double d = sqrt(mw*mw+mh*mh);
