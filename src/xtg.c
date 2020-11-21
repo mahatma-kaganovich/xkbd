@@ -69,7 +69,6 @@
 #include <string.h>
 //#include <sys/time.h>
 #include <X11/Xpoll.h>
-#include <math.h>
 #endif
 
 #define NO_GRP 99
@@ -460,44 +459,23 @@ static void map_to(){
 	XFree(d);
 }
 
-#if 0
-static int _isqrt(int n){
-	int sqrt = n >> 1, t = 0;
-	while (sqrt != t) {
-		t = sqrt;
-		sqrt = (n / t + t) >> 1;
-	}
-	return sqrt;
-}
-#endif
-
 void fixMonSize(int width, int height, int mwidth, int mheight, double *dpmw, double *dpmh) {
 	if (!mheight) return;
 //	double mw = mwidth, mh = mheight;
 	double mw = width / *dpmw, mh = height / *dpmh;
-	double d = sqrt(mw*mw+mh*mh);
 	double _min, _max, m = 1.;
 
+	// diagonal -> 4:3 height
 	if (pi[p_min_native_mon]) {
 		_min = pf[p_min_native_mon];
-		if (_min < 0) {
-			_min = -_min;
-			if (mheight < _min) m = _min / mheight;
-		} else {
-			_min *= 25.4;
-			if (d < _min) m = _min / d;
-		}
+		_min = _min < 0 ? -_min : (_min * (25.4 * 3 / 5));
+		if (mh < _min) m = _min / mheight;
 	}
 	if (m == 1.)
 	    if (pi[p_max_native_mon]) {
 		_max = pf[p_max_native_mon];
-		if (_max < 0) {
-			_max = -_max;
-			if (mheight > _max) m = _max / mheight;
-		} else {
-			_max *= 25.4;
-			if (d > _max) m = _max / d;
-		}
+		_max = _max < 0 ? -_max : (_max * (25.4 * 3 / 5));
+		if (mh > _max) m = _max / mheight;
 	}
 	if (m != 1.) {
 		*dpmw /= m;
