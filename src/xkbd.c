@@ -93,6 +93,7 @@ unsigned long scr_width;
 unsigned long scr_height;
 unsigned long scr_mwidth;
 unsigned long scr_mheight;
+SubpixelOrder subpixel_order;
 
 // IBM standard 500x200mm, ~22x6 keys? or key 20x20mm
 // int max_width = 440, max_height=120;
@@ -381,6 +382,7 @@ struct _Geometry {
 	void *next;
 	unsigned long w,h,mw,mh;
 	keyboard *kb;
+	SubpixelOrder subpixel_order;
 } *geo0 = NULL, *geo = NULL;
 #endif
 static void unmapOrRestart(){
@@ -396,6 +398,7 @@ static void unmapOrRestart(){
 		geo->mw = scr_mwidth;
 		geo->mh = scr_mheight;
 		geo->kb = kb;
+		geo->subpixel_order = subpixel_order;
 		geo->next = geo0;
 		geo0 = geo;
 	}
@@ -689,6 +692,7 @@ re_crts:
 				Y1=max(Y1,y1);
 				X2=min(X2,x2);
 				Y2=min(Y2,y2);
+				subpixel_order = oinf->subpixel_order;
 				scr_mwidth=oinf->mm_width;
 				scr_mheight=oinf->mm_height;
 				if (scr_mwidth > scr_mheight && x2-x1 < y2-y1 && scr_mheight) {
@@ -791,7 +795,7 @@ re_crts:
       else {
         kb = NULL;
 	for (geo = geo0; geo; geo = geo->next) {
-		if (geo->w == scr_width && geo->h == scr_height && geo->mw == scr_mwidth && geo->mh == scr_mheight) {
+		if (geo->w == scr_width && geo->h == scr_height && geo->mw == scr_mwidth && geo->mh == scr_mheight && geo->subpixel_order == subpixel_order) {
 			kb = geo->kb;
 			break;
 		}
@@ -1089,6 +1093,7 @@ _remapped:
 			scr_height = e->height;
 			scr_mwidth = e->mwidth;
 			scr_mheight = e->mheight;
+			subpixel_order = e->subpixel_order;
 			goto chScreen;
 		}
 #endif
