@@ -461,24 +461,18 @@ static void map_to(){
 
 void fixMonSize(int width, int height, int mwidth, int mheight, double *dpmw, double *dpmh) {
 	if (!mheight) return;
-	double _min, _max, m = 1., mh = height / *dpmh;
+	double _min, _max, m,  mh = height / *dpmh;
 
 	// diagonal -> 4:3 height
-	if (pi[p_min_native_mon]) {
-		_min = pf[p_min_native_mon];
-		_min = _min < 0 ? -_min : (_min * (25.4 * 3 / 5));
-		if (mh < _min) m = _min / mh;
-	}
-	if (m == 1.)
-	    if (pi[p_max_native_mon]) {
-		_max = pf[p_max_native_mon];
-		_max = _max < 0 ? -_max : (_max * (25.4 * 3 / 5));
-		if (mh > _max) m = _max / mh;
-	}
-	if (m != 1.) {
+	if (
+	    (pi[p_min_native_mon] && mh < (m = (m = pf[p_min_native_mon]) < 0 ? -m : (m * (25.4 * 3 / 5)))) ||
+	    (pi[p_max_native_mon] && mh > (m = (m = pf[p_max_native_mon]) < 0 ? -m : (m * (25.4 * 3 / 5))))
+		) {
+		m /= mh;
 		*dpmw /= m;
 		*dpmh /= m;
 	}
+
 	if (pi[p_max_dpi]) {
 		_max = pf[p_max_dpi] / 25.4;
 		if (*dpmw > _max) {
