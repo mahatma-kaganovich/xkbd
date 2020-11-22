@@ -70,7 +70,7 @@ char *display_name = NULL;
 CARD32 prop[12] = {2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 int crts=0, X1,Y1,X2,Y2, top=0, left=0;
 //unsigned int dock = 1974;
-unsigned int dock = 3762;
+unsigned int dock = 4018;
 
 #define UNSIZE 1
 int resized = 0;
@@ -405,6 +405,16 @@ static void unmapOrRestart(){
 #endif
 }
 
+static int rootChanged(XWindowAttributes *wa){
+	XGetWindowAttributes(display,rootWin,wa);
+	if (wa0.x!=wa->x || wa0.y!=wa->y || wa0.width!=wa->width || wa0.height!=wa->height) {
+		unmapOrRestart();
+		return 1;
+	}
+	wa0 = *wa;
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
    char *window_name = iam;
@@ -459,7 +469,7 @@ int main(int argc, char **argv)
 #endif
 	".\n		(_NET_WM_WINDOW_TYPE_DOCK is hardwired, but can hide\n\
 		other toolbar/panel, so use pending hack where possible)\n\
-	For OpenBox I use 3762 = $[2+16+32+128+512+1024+2048]," },
+	For OpenBox I use 4018 = $[2+16+32+128+256+512+1024+2048]," },
 	{ 'i', IAM ".fake_touch", 2, 0, &fake_touch,"event type bitmask: "
 #ifdef USE_XI
 		"1=Xkb vs. XI2,\n\
@@ -623,6 +633,8 @@ stop_argv:
 #ifdef USE_XR
 	int xrevent, xrerror, xrr;
 	xrr = XRRQueryExtension(display, &xrevent, &xrerror);
+	xrevent += RRScreenChangeNotify;
+	if (!xrr) xrevent = 0;
 #endif
 #ifdef USE_XI
 	int xiopcode, xievent = 0, xierror, xi, ximajor = 2, ximinor = 2;
@@ -1017,21 +1029,20 @@ _remapped:
 		}
 		break;
 	    case Expose:
+		if (rootChanged(&wa)) goto chScreen1;
 		if (resized) break;
 		if (unmapWin()) {
 			XMapWindow(display, win);
 			continue;
-		}
-		XGetWindowAttributes(display,rootWin,&wa);
-		if (wa0.x!=wa.x || wa0.y!=wa.y || wa0.width!=wa.width || wa0.height!=wa.height) {
-			unmapOrRestart();
-			goto chScreen1;
-		}
-		wa0=wa;
+		} 
 		transCoord();
 		setSize(x = kb->X, y = kb->Y, width, height, resized);
 		reset2();
 		break;
+//	    case MapNotify:
+//	    case UnmapNotify:
+//		if (rootChanged(&wa)) goto chScreen1;
+//		break;
 	    case VisibilityNotify: if (dock & 32) {
 		Window rw, pw, *wins, *ww;
 		unsigned int nw,re = 0;
@@ -1056,7 +1067,10 @@ _remapped:
 		// first lock: fork (to realize init-lock safe wait)
 		if (re && !lock_cnt++ && fork()) exit(0);
 	    }
-	    if ((dock & 256) && ev.xvisibility.state!=VisibilityUnobscured) XRaiseWindow(display, win);
+	    if ((dock & 256) && ev.xvisibility.state!=VisibilityUnobscured) {
+			if (rootChanged(&wa)) goto chScreen1;
+			XRaiseWindow(display, win);
+	    }
 	    if (dock & (256|32)) XFlush(display);
 	    break;
 	    case 0: break;
@@ -1087,7 +1101,13 @@ _remapped:
 #ifdef USE_XR
 #undef e
 #define e ((XRRScreenChangeNotifyEvent*)&ev)
-		if (xrr && ev.type == xrevent + RRScreenChangeNotify) {
+		if (ev.type == xrevent) {
+// reduce blinking, but possible bugs (?)
+#if 0
+			static int serial = 0;
+			if (e->serial == serial) continue;
+			serial = e->serial;
+#endif
 			unmapOrRestart();
 			scr_width = e->width;
 			scr_height = e->height;
