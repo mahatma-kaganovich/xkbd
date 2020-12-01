@@ -339,10 +339,8 @@ int scr_width, scr_height, scr_mwidth, scr_mheight, scr_rotation;
 int scrX1,scrY1,scrX2,scrY2;
 Rotation rotation;
 // usual dpi calculated from height only"
-int ifound, width, height, mwidth, mheight,
-    i4dpi, h4dpi, mh4dpi, w4dpi, mw4dpi,
-    i4dpimin, h4dpimin, mh4dpimin, w4dpimin, mw4dpimin,
-    i4dpimax, h4dpimax, mh4dpimax, w4dpimax, mw4dpimax;
+int width, height, mwidth, mheight,
+    h4dpi, mh4dpi, w4dpi, mw4dpi;
 _short resXY,mon,mon_sz;
 double mon_grow;
 
@@ -506,7 +504,7 @@ void fixMonSize(int width, int height, int mwidth, int mheight, double *dpmw, do
 // mode 1 & 2 - for map-to-output too
 static void getRes(int x, int y, _short mode){
 	int i,j;
-	_int found = 0;
+	_int found = 0, nm = 0;
 
 //	XGetWindowAttributes(dpy, DefaultRootWindow(dpy), &wa);
 	mwidth = scr_mwidth;
@@ -515,10 +513,7 @@ static void getRes(int x, int y, _short mode){
 	height = scr_height;
 	rotation = 0;
 	scrX1 = scrY1 = 0;
-	h4dpi = mh4dpi = w4dpi = mw4dpi =
-	h4dpimin = mh4dpimin = w4dpimin = mw4dpimin =
-	h4dpimax = mh4dpimax = w4dpimax = mw4dpimax = 0;
-	ifound = i4dpi = i4dpimin = i4dpimax = -1;
+	h4dpi = mh4dpi = w4dpi = mw4dpi = 0;
 #ifdef USE_EVDEV
 	if (mode == 2) {
 		getEvRes();
@@ -542,6 +537,7 @@ static void getRes(int x, int y, _short mode){
 		if (!oinf || oinf->connection != RR_Connected || !oinf->crtc) goto nextout;
 		XRRCrtcInfo *cinf = XRRGetCrtcInfo(dpy, xrrr, oinf->crtc);
 		if (!cinf) goto nextout;
+		nm++;
 		if((!found
 #ifdef USE_EVDEV
 		    || (mon_sz && found == 1)
@@ -568,13 +564,11 @@ static void getRes(int x, int y, _short mode){
 			width = cinf->width;
 			height = cinf->height;
 			rotation = cinf->rotation;
-			ifound = i;
 			if ((prim == xrrr->outputs[i]) || (!prim && mheight > mh4dpi)) {
 				h4dpi = height;
 				mh4dpi = mheight;
 				w4dpi = width;
 				mw4dpi = mwidth;
-				i4dpi = i;
 			}
 		}
 		if (oinf->mm_height) {
@@ -583,21 +577,6 @@ static void getRes(int x, int y, _short mode){
 				mh4dpi = oinf->mm_height;
 				w4dpi = cinf->width;
 				mw4dpi = oinf->mm_width;
-				i4dpi = i;
-			}
-			if (!mh4dpimin || oinf->mm_height < mh4dpimin || (oinf->mm_height == mh4dpimin && cinf->width < mw4dpimin)) {
-				h4dpimin = cinf->height;
-				mh4dpimin = oinf->mm_height;
-				w4dpimin = cinf->width;
-				mw4dpimin = oinf->mm_width;
-				i4dpimin = i;
-			}
-			if (oinf->mm_height > mh4dpimax || (oinf->mm_height == mh4dpimax && cinf->width > mw4dpimax)) {
-				h4dpimax = cinf->height;
-				mh4dpimax =  oinf->mm_height;
-				w4dpimax = cinf->width;
-				mw4dpimax = oinf->mm_width;
-				i4dpimax = i;
 			}
 		}
 		XRRFreeCrtcInfo(cinf);
@@ -660,14 +639,22 @@ found:
 	if (mh4dpi && mw4dpi) {
 		double dpmh = (.0 + h4dpi) / mh4dpi;
 		double dpmw = (.0 + w4dpi) / mw4dpi;
+		_int m2 = (width != w4dpi || height != h4dpi || mwidth != mw4dpi || mheight != mh4dpi);
 
-		fixMonSize(w4dpimin, h4dpimin, mw4dpimin, mh4dpimin, &dpmw, &dpmh); 
-		if (i4dpimax != i4dpimin)
-			fixMonSize(w4dpimax, h4dpimax, mw4dpimax, mh4dpimax, &dpmw, &dpmh); 
-		if (ifound != i4dpi && ifound != i4dpimin && ifound != i4dpimax)
-			fixMonSize(width, height, mwidth, mheight, &dpmw, &dpmh); 
-		if (i4dpi != i4dpimin && i4dpi != i4dpimax)
-			fixMonSize(w4dpi, h4dpi, mw4dpi, mh4dpi, &dpmw, &dpmh); 
+		if (nm != m2 + 1) {
+			int nmon = 0;
+			XRRMonitorInfo *xrm = XRRGetMonitors(dpy,root,True,&nmon);
+			for (i = 0; i<nmon; i++) {
+				XRRMonitorInfo *m = &xrm[i];
+				if (!m->mwidth || !m->mheight) continue;
+				if (m->width == w4dpi && m->height == h4dpi && m->mwidth == mw4dpi && m->mheight == mh4dpi) continue;
+				if (m->width == width && m->height == height && m->mwidth == mwidth && m->mheight == mheight) continue;
+				fixMonSize(m->width, m->height, m->mwidth, m->mheight, &dpmw, &dpmh);
+			}
+			XRRFreeMonitors(xrm);
+		}
+		if (m2) fixMonSize(width, height, mwidth, mheight, &dpmw, &dpmh); 
+		fixMonSize(w4dpi, h4dpi, mw4dpi, mh4dpi, &dpmw, &dpmh); 
 
 		int mh = scr_height / dpmh + .5;
 		int mw = scr_width / dpmw +.5;
