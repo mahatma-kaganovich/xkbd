@@ -367,11 +367,20 @@ static int _delay(Time delay){
 }
 
 _short grabcnt = 0;
+_int grabserial = 0;
+static void _Xgrab(){
+		XGrabServer(dpy);
+		grabserial++;
+		grabserial&=0xffff;
+}
+static void _Xungrab(){
+		XUngrabServer(dpy);
+}
 static void _grabX(){
-	if (!(grabcnt++)) XGrabServer(dpy);
+	if (!(grabcnt++)) _Xgrab();
 }
 static void _ungrabX(){
-	if (!(--grabcnt)) XUngrabServer(dpy);
+	if (!(--grabcnt)) _Xungrab();
 }
 
 #ifdef USE_EVDEV
@@ -389,7 +398,7 @@ static void getEvRes(){
 	unsigned long n,b;
 	devX = devY = 0;
 	if (XIGetProperty(dpy,devid,aNode,0,1024,False,XA_STRING,&t,&f,&n,&b,(void*)&name) != Success) return;
-	if (grabcnt) XUngrabServer(dpy);
+	if (grabcnt) _Xungrab();
 	int fd = open(name, O_RDONLY|O_NONBLOCK);
 	XFree(name);
 	if (fd < 0) goto ret;
@@ -403,7 +412,7 @@ static void getEvRes(){
 	}
 	close(fd);
 ret:
-	if (grabcnt) XGrabServer(dpy);
+	if (grabcnt) _Xgrab();
 }
 #endif
 
@@ -470,7 +479,7 @@ static void map_to(){
 	XFree(d);
 }
 
-void fixMonSize(int width, int height, int mwidth, int mheight, double *dpmw, double *dpmh) {
+static void fixMonSize(int width, int height, int mwidth, int mheight, double *dpmw, double *dpmh) {
 	if (!mheight) return;
 	double _min, _max, m,  mh = height / *dpmh;
 
@@ -710,7 +719,7 @@ static void getHierarchy(){
 	static XIDetachSlaveInfo cf = {.type=XIDetachSlave};
 	static XIAddMasterInfo cm = {.type = XIAddMaster, .name = "TouchScreen", .send_core = 0, .enable = 1};
 	static XIRemoveMasterInfo cr = {.type = XIRemoveMaster, .return_mode = XIFloating};
-	int i,j,ndevs2,nrel,nkbd,m=0;
+	int i,j,ndevs2,nrel,nkbd,m=0,_grab;
 
 	if (!resDev) {
 		if (mon) getRes(0,0,1);
@@ -718,7 +727,10 @@ static void getHierarchy(){
 		else if (mon_sz) resXY = 0;
 #endif
 	}
-	if (pi[p_safe]) _grabX();
+	if (pi[p_safe]) {
+		_grabX();
+		_grab = grabserial;
+	}
 	XIDeviceInfo *info2 = XIQueryDevice(dpy, XIAllDevices, &ndevs2);
 	if (pi[p_floating] != 1) {
 	    for (i=0; i<ndevs2; i++) {
@@ -786,21 +798,6 @@ static void getHierarchy(){
 #define e ((XIScrollClassInfo*)cl)
 			    case XIScrollClass:
 				scroll=1;
-				break;
-#undef e
-#define e ((XIButtonClassInfo*)cl)
-			    case XIButtonClass:
-				if (!pi[p_safe]) break;
-				int b;
-#if 0
-				for (b=0; b<e->num_buttons; b++) if (XIMaskIsSet(e->state.mask, b)) {busy = 1; break;}
-#else
-				unsigned char *bb = e->state.mask;
-				for (b=e->num_buttons; b>0; b-=8) {
-					if (*bb && (b>7 || (*bb)&((1<<(b+1))-1))) {busy = 1; break;}
-					bb++;
-				}
-#endif
 				break;
 			}
 		}
@@ -882,6 +879,37 @@ busy:
 				continue;
 			}
 			for (j=P; j!=N; j=TOUCH_N(j)) if (touch[j].deviceid == devid) goto busy;
+
+			if (_grab != grabserial) {
+				// server was relocked (getEvRes...), reread device state
+				d2 = XIQueryDevice(dpy, devid, &j);
+				if (!d2 || j < 1 || d2->deviceid != devid) {
+					if (d2) XIFreeDeviceInfo(d2);
+					d2 = &info2[i];
+				}
+			}
+			for (j=0; j<d2->num_classes; j++) {
+				XIAnyClassInfo *cl = d2->classes[j];
+				switch (cl->type) {
+#undef e
+#define e ((XIButtonClassInfo*)cl)
+				    case XIButtonClass: {
+					int b;
+#if 0
+					for (b=0; b<e->num_buttons; b++) if (XIMaskIsSet(e->state.mask, b)) {busy = 1; break;}
+#else
+					unsigned char *bb = e->state.mask;
+					for (b=e->num_buttons; b>0; b-=8) {
+						if (*bb && (b>7 || (*bb)&((1<<(b+1))-1))) {busy = 1; break;}
+						bb++;
+					}
+#endif
+					break; }
+				}
+			}
+			if (d2 != &info2[i]) XIFreeDeviceInfo(d2);
+			if (busy) goto busy;
+
 			if ((evcount=XPending(dpy))>0) {
 				XEvent ev1;
 				XPeekIfEvent(dpy,&ev1,&filterTouch,NULL);
@@ -905,7 +933,7 @@ busy:
 //			curShow = 0;
 //			XFixesHideCursor(dpy, root);
 //			XFlush(dpy);
-			if (!showPtr) fprintf(stderr,"hide\n");
+			//if (!showPtr) fprintf(stderr,"hide\n");
 		}
 		XIChangeHierarchy(dpy, (void*)&cm, 1);
 	}
