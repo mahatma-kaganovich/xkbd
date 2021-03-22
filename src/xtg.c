@@ -688,6 +688,8 @@ static Bool filterTouch(Display *dpy1, XEvent *ev1, XPointer arg){
 	    case XI_TouchBegin:
 //	    case XI_TouchUpdate:
 //	    case XI_TouchEnd:
+	    case XI_ButtonPress:
+//	    case XI_ButtonRelease:
 #if 0
 		busy = 1;
 #else
@@ -748,7 +750,8 @@ static void getHierarchy(){
 	for (i=0; i<ndevs2; i++) {
 		XIDeviceInfo *d2 = &info2[i];
 		devid = d2->deviceid;
-		short t = 0, rel = 0, abs = 0, scroll = 0, button = 0;
+		short t = 0, rel = 0, abs = 0, scroll = 0;
+		busy = 0;
 		switch (d2->use) {
 		    case XIFloatingSlave: break;
 		    case XISlavePointer:
@@ -784,8 +787,20 @@ static void getHierarchy(){
 			    case XIScrollClass:
 				scroll=1;
 				break;
+#undef e
+#define e ((XIButtonClassInfo*)cl)
 			    case XIButtonClass:
-				button=1;
+				if (!pi[p_safe]) break;
+				int b;
+#if 0
+				for (b=0; b<e->num_buttons; b++) if (XIMaskIsSet(e->state.mask, b)) {busy = 1; break;}
+#else
+				unsigned char *bb = e->state.mask;
+				for (b=e->num_buttons; b>0; b-=8) {
+					if (*bb && (b>7 || (*bb)&((1<<(b+1))-1))) {busy = 1; break;}
+					bb++;
+				}
+#endif
 				break;
 			}
 		}
@@ -860,38 +875,17 @@ skip_map:
 		}
 		if (pi[p_safe]) {
 			if (!(c || ximask.mask)) continue;
-			for (j=P; j!=N; j=TOUCH_N(j)) if (touch[j].deviceid == devid) goto busy;
-			// getRes -> getEvRes can do unlock/lock, rescan
-			if (button) for (j=0; j<d2->num_classes; j++) {
-				XIAnyClassInfo *cl = d2->classes[j];
-				switch (cl->type) {
-#undef e
-#define e ((XIButtonClassInfo*)cl)
-				    case XIButtonClass: {
-					int b;
-#if 0
-					for (b=0; b<e->num_buttons; b++) if (XIMaskIsSet(e->state.mask, b)) goto busy;
-#else
-					unsigned char *bb = e->state.mask;
-					for (b=e->num_buttons; b>0; b-=8) {
-						if (*bb && (b>7 || (*bb)&((1<<(b+1))-1))) goto busy;
-						bb++;
-					}
-#endif
-					break; }
-				}
-
-			}
-			busy = 0;
-			if ((evcount=XPending(dpy))>0) {
-				XEvent ev1;
-				XPeekIfEvent(dpy,&ev1,&filterTouch,NULL);
-			}
 			if (busy) {
 busy:
 				oldShowPtr |= 4;
 				//fprintf(stderr,"busy delay\n");
 				continue;
+			}
+			for (j=P; j!=N; j=TOUCH_N(j)) if (touch[j].deviceid == devid) goto busy;
+			if ((evcount=XPending(dpy))>0) {
+				XEvent ev1;
+				XPeekIfEvent(dpy,&ev1,&filterTouch,NULL);
+				if (busy) goto busy;
 			}
 		}
 		if (c) XIChangeHierarchy(dpy, c, 1);
