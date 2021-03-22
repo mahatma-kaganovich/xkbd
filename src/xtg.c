@@ -1,5 +1,5 @@
 /*
-	xtg v1.27 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.28 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -25,7 +25,7 @@
 
 	Auto hide/show mouse cursor on touchscreen.
 	Gestures.
-	Auto-DPI.
+	Auto RandR DPI.
 	-h to help
 
 	(C) 2019-2020 Denis Kaganovich, Anarchy license
@@ -203,12 +203,14 @@ static void _print_bmap(_int x, _short n, TouchTree *m) {
 #define p_max_native_mon 11
 #define p_min_dpi 12
 #define p_max_dpi 13
-#define MAX_PAR 14
+#define p_safe 14
+#define MAX_PAR 15
 char *pa[MAX_PAR] = {};
 // android: 125ms tap, 500ms long
-#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0,  14, 32, 72, 0}
+#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0,  14, 32, 72, 0, 0}
 int pi[] = PAR_DEFS;
 double pf[] = PAR_DEFS;
+char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:s:h";
 char *ph[MAX_PAR] = {
 	"touch device 0=auto",
 	"min fingers",
@@ -232,10 +234,10 @@ char *ph[MAX_PAR] = {
 #endif
 	"min native dpi monitor (<0 - -horizontal mm, >0 -  diagonal \")",
 	"max ...",
-	"min dpi",
-	"nax dpi",
+	"min dpi (monitor)",
+	"max ...",
+	"1=safe mode: don't change hierarchy of device busy/pressed (for -f 2)",
 };
-char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:h";
 #else
 #define TIME(T,t)
 #endif
@@ -499,6 +501,14 @@ void fixMonSize(int width, int height, int mwidth, int mheight, double *dpmw, do
 	}
 }
 
+_short grabcnt = 0;
+static void _grabX(){
+	if (!(grabcnt++)) XGrabServer(dpy);
+}
+static void _ungrabX(){
+	if (!(--grabcnt)) XUngrabServer(dpy);
+}
+
 // mode: 0 - x,y, 1 - mon, 2 - mon_sz
 // mode 0 need only for scroll resolution
 // mode 1 & 2 - for map-to-output too
@@ -518,14 +528,14 @@ static void getRes(int x, int y, _short mode){
 	if (mode == 2) {
 		getEvRes();
 		if (devX == 0 || devY == 0) {
-			XGrabServer(dpy);
+			_grabX();
 			goto found;
 		}
 		// if (mode==0) ... get real resolution from matrix and return
 	}
 #endif
 	// try dont lock for libevent, but still unsure (got one fd lock)
-	XGrabServer(dpy);
+	_grabX();
 
 	if (!xrr) goto noxrr;
 	int n = 0;
@@ -664,9 +674,27 @@ found:
 			XRRSetScreenSize(dpy, root, scr_width, scr_height, mw, mh);
 		}
 	}
-	XUngrabServer(dpy);
+	_ungrabX();
 }
 
+_short busy;
+int evcount;
+static Bool filterTouch(Display *dpy1, XEvent *ev1, XPointer arg){
+	if (dpy1 == dpy && ev1->type == GenericEvent && ev1->xcookie.extension == xiopcode)
+	    switch (ev1->xcookie.evtype) {
+	    case XI_TouchBegin:
+//	    case XI_TouchUpdate:
+//	    case XI_TouchEnd:
+#if 0
+		busy = 1;
+#else
+		if (!XGetEventData(dpy, &ev1->xcookie)) break;
+		if (devid == ((XIDeviceEvent*)ev1->xcookie.data)->deviceid) busy = 1;
+                XFreeEventData(dpy, &ev1->xcookie);
+#endif
+	}
+	return busy || (evcount-- > 0);
+}
 
 int xtestPtr, xtestPtr0;
 _short showPtr = 1, oldShowPtr = 3, curShow = 1;
@@ -678,14 +706,15 @@ static void getHierarchy(){
 	static XIAddMasterInfo cm = {.type = XIAddMaster, .name = "TouchScreen", .send_core = 0, .enable = 1};
 	static XIRemoveMasterInfo cr = {.type = XIRemoveMaster, .return_mode = XIFloating};
 	int i,j,ndevs2,nrel,nkbd,m=0;
-	XIDeviceInfo *info2 = XIQueryDevice(dpy, XIAllDevices, &ndevs2);
 
+	if (pi[p_safe]) _grabX();
 	if (!resDev) {
 		if (mon) getRes(0,0,1);
 #ifdef USE_EVDEV
 		else if (mon_sz) resXY = 0;
 #endif
 	}
+	XIDeviceInfo *info2 = XIQueryDevice(dpy, XIAllDevices, &ndevs2);
 	if (pi[p_floating] != 1) {
 	    for (i=0; i<ndevs2; i++) {
 		XIDeviceInfo *d2 = &info2[i];
@@ -717,6 +746,7 @@ static void getHierarchy(){
 		XIDeviceInfo *d2 = &info2[i];
 		devid = d2->deviceid;
 		short t = 0, rel = 0, abs = 0, scroll = 0;
+		busy = 0;
 		switch (d2->use) {
 		    case XIFloatingSlave: break;
 		    case XISlavePointer:
@@ -751,6 +781,25 @@ static void getHierarchy(){
 #define e ((XIScrollClassInfo*)cl)
 			    case XIScrollClass:
 				scroll=1;
+				break;
+#undef e
+#define e ((XIButtonClassInfo*)cl)
+			    case XIButtonClass:
+				if (!pi[p_safe] || busy) break;
+				int b;
+#if 0
+				for (b=0; b<e->num_buttons; b++)
+				    if (XIMaskIsSet(e->state.mask, b)) {
+					busy = 1;
+					break
+				}
+#else
+				unsigned char *bb = e->state.mask;
+				for (b=e->num_buttons; b>0; b-=8) {
+					if (*bb && (b>7 || (*bb)&((1<<(b+1))-1))) {busy=1;break;};
+					bb++;
+				}
+#endif
 				break;
 			}
 		}
@@ -823,6 +872,25 @@ skip_map:
 //		    default:
 //			continue;
 		}
+		if (pi[p_safe]) {
+			if (!(c || ximask.mask)) continue;
+			if (busy) goto busy;
+			_short t;
+			for (t=P; t!=N; t=TOUCH_N(t)) if (touch[t].deviceid == devid) {
+				//busy = 1;
+				goto busy;
+			}
+			if ((evcount=XPending(dpy))>0) {
+				XEvent ev1;
+				XPeekIfEvent(dpy,&ev1,&filterTouch,NULL);
+			}
+			if (busy) {
+busy:
+				oldShowPtr |= 4;
+				//fprintf(stderr,"busy delay\n");
+				continue;
+			}
+		}
 		if (c) XIChangeHierarchy(dpy, c, 1);
 		if (ximask.mask) XISelectEvents(dpy, root, &ximask, 1);
 	}
@@ -846,6 +914,7 @@ skip_map:
 	}
 	XIFreeDeviceInfo(info2);
 	XFlush(dpy);
+	if (pi[p_safe]) _ungrabX();
 	tdevs -= tdevs2;
 	if (!resDev) resDev=1;
 }
@@ -1015,7 +1084,7 @@ static void init(){
 	    = xirevent = xirerror
 #endif
 	    = -1;
-	XGrabServer(dpy);
+	_grabX();
 	if (pf[p_res]<0 || mon || mon_sz) {
 		if (xrr = XRRQueryExtension(dpy, &xrevent, &xrerror)) {
 			xrevent += RRScreenChangeNotify;
@@ -1032,7 +1101,7 @@ static void init(){
 	scr_height = DisplayHeight(dpy,screen);
 	scr_mwidth = DisplayWidthMM(dpy,screen);
 	scr_mheight = DisplayHeightMM(dpy,screen);
-	XUngrabServer(dpy);
+	_ungrabX();
 #ifdef XSS
 	if (XScreenSaverQueryExtension(dpy, &xssevent, &xsserror)) {
 		XScreenSaverSelectInput(dpy, root, ScreenSaverNotifyMask);
@@ -1077,6 +1146,7 @@ int main(int argc, char **argv){
 			printf("<value> is octal combination, starting from x>0, where x is last event type:\n"
 				"	1=begin, 2=update, 3=end\n"
 				"	bit 3(+4)=border\n"
+				"	(standard scroll buttons: up/down/left/right = 5/4/7/6)\n"
 				"<button> 0..%i (X use 1-9)\n"
 				"	button 0xf is special: this is key"
 				"\ndefault map:",MAX_BUTTON);
