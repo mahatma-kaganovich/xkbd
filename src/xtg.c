@@ -1,5 +1,5 @@
 /*
-	xtg v1.28 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.29 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -184,8 +184,10 @@ static void _print_bmap(_int x, _short n, TouchTree *m) {
 
 #ifdef USE_EVDEV
 #define DEF_RR -1
+#define DEF_SAFE 7
 #else
 #define DEF_RR 0
+#define DEF_SAFE 5
 #endif
 
 #define p_device 0
@@ -207,7 +209,7 @@ static void _print_bmap(_int x, _short n, TouchTree *m) {
 #define MAX_PAR 15
 char *pa[MAX_PAR] = {};
 // android: 125ms tap, 500ms long
-#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0,  14, 32, 72, 0, 0}
+#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0,  14, 32, 72, 0, DEF_SAFE}
 int pi[] = PAR_DEFS;
 double pf[] = PAR_DEFS;
 char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:s:h";
@@ -236,7 +238,12 @@ char *ph[MAX_PAR] = {
 	"max ...",
 	"min dpi (monitor)",
 	"max ...",
-	"1=safe mode: don't change hierarchy of device busy/pressed (for -f 2)",
+	"	safe mode bits:"
+	"	1 don't change hierarchy of device busy/pressed (for -f 2)\n"
+#ifdef USE_EVDEV
+	"	2(+2) XUngrabServer() for libevdev call\n"
+#endif
+	"	3(+4) XGrabServer() cumulative\n",
 };
 #else
 #define TIME(T,t)
@@ -346,6 +353,29 @@ int width, height, mwidth, mheight,
 _short resXY,mon,mon_sz;
 double mon_grow;
 
+_short grabcnt = 0;
+_int grabserial = -1;
+static void _Xgrab(){
+		XGrabServer(dpy);
+		grabserial=(grabserial+1)&0xffff;
+}
+static void _Xungrab(){
+		XUngrabServer(dpy);
+		grabserial = -1;
+}
+static void _grabX(){
+	if (!(grabcnt++)) _Xgrab();
+}
+static inline void forceUngrab(){
+	if (grabcnt) {
+		grabcnt=0;
+		_Xungrab();
+	}
+}
+static inline void _ungrabX(){
+	if ((pi[p_safe]&4) && !--grabcnt) _Xungrab();
+}
+
 #if 0
 #define TMUL1000(x) (x*1000)
 #define TDIV1000(x) (x/1000)
@@ -355,6 +385,7 @@ double mon_grow;
 #endif
 
 static int _delay(Time delay){
+	forceUngrab();
 	if (XPending(dpy)) return 0;
 	struct timeval tv;
 	fd_set rs;
@@ -364,23 +395,6 @@ static int _delay(Time delay){
 	FD_ZERO(&rs);
 	FD_SET(fd,&rs);
 	return !Select(fd+1, &rs, 0, 0, &tv);
-}
-
-_short grabcnt = 0;
-_int grabserial = 0;
-static void _Xgrab(){
-		XGrabServer(dpy);
-		grabserial++;
-		grabserial&=0xffff;
-}
-static void _Xungrab(){
-		XUngrabServer(dpy);
-}
-static void _grabX(){
-	if (!(grabcnt++)) _Xgrab();
-}
-static void _ungrabX(){
-	if (!(--grabcnt)) _Xungrab();
 }
 
 #ifdef USE_EVDEV
@@ -398,7 +412,7 @@ static void getEvRes(){
 	unsigned long n,b;
 	devX = devY = 0;
 	if (XIGetProperty(dpy,devid,aNode,0,1024,False,XA_STRING,&t,&f,&n,&b,(void*)&name) != Success) return;
-	if (grabcnt) _Xungrab();
+	if (grabcnt && (pi[p_safe]&2)) _Xungrab();
 	int fd = open(name, O_RDONLY|O_NONBLOCK);
 	XFree(name);
 	if (fd < 0) goto ret;
@@ -412,7 +426,7 @@ static void getEvRes(){
 	}
 	close(fd);
 ret:
-	if (grabcnt) _Xgrab();
+	if (grabcnt && (pi[p_safe]&2)) _Xgrab();
 }
 #endif
 
@@ -719,18 +733,20 @@ static void getHierarchy(){
 	static XIDetachSlaveInfo cf = {.type=XIDetachSlave};
 	static XIAddMasterInfo cm = {.type = XIAddMaster, .name = "TouchScreen", .send_core = 0, .enable = 1};
 	static XIRemoveMasterInfo cr = {.type = XIRemoveMaster, .return_mode = XIFloating};
-	int i,j,ndevs2,nrel,nkbd,m=0,_grab;
+	int i,j,ndevs2,nrel,nkbd,m=0;
+	short grabbed = 0, ev2=0;
 
 	if (!resDev) {
 		if (mon) getRes(0,0,1);
 #ifdef USE_EVDEV
-		else if (mon_sz) resXY = 0;
+		else if (mon_sz) {
+			resXY = 0;
+			ev2 = ev2 && abs;
+		}
 #endif
 	}
-	if (pi[p_safe]) {
-		_grabX();
-		_grab = grabserial;
-	}
+	if (!ev2 && (pi[p_safe]&7)==5) {_grabX();grabbed=1;} // just balance grab count
+	int _grab = grabserial;
 	XIDeviceInfo *info2 = XIQueryDevice(dpy, XIAllDevices, &ndevs2);
 	if (pi[p_floating] != 1) {
 	    for (i=0; i<ndevs2; i++) {
@@ -870,7 +886,7 @@ skip_map:
 //		    default:
 //			continue;
 		}
-		if (pi[p_safe]) {
+		if (pi[p_safe]&1) {
 			if (!(c || ximask.mask)) continue;
 			if (busy) {
 busy:
@@ -879,6 +895,11 @@ busy:
 				continue;
 			}
 			for (j=P; j!=N; j=TOUCH_N(j)) if (touch[j].deviceid == devid) goto busy;
+
+			if (!grabbed) {
+				grabbed = 1;
+				_grabX();
+			}
 
 			if (_grab != grabserial) {
 				// server was relocked (getEvRes...), reread device state
@@ -939,7 +960,7 @@ busy:
 	}
 	XIFreeDeviceInfo(info2);
 	XFlush(dpy);
-	if (pi[p_safe]) _ungrabX();
+	if (grabbed) _ungrabX();
 	tdevs -= tdevs2;
 	if (!resDev) resDev=1;
 }
@@ -1126,7 +1147,7 @@ static void init(){
 	scr_height = DisplayHeight(dpy,screen);
 	scr_mwidth = DisplayWidthMM(dpy,screen);
 	scr_mheight = DisplayHeightMM(dpy,screen);
-	_ungrabX();
+	//forceUngrab();
 #ifdef XSS
 	if (XScreenSaverQueryExtension(dpy, &xssevent, &xsserror)) {
 		XScreenSaverSelectInput(dpy, root, ScreenSaverNotifyMask);
@@ -1236,6 +1257,7 @@ ev:
 		}
 ev2:
 		if (showPtr != oldShowPtr) setShowCursor();
+		forceUngrab();
 #endif
 		XNextEvent(dpy, &ev);
 		switch (ev.type) {
