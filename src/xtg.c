@@ -389,8 +389,14 @@ static inline void _ungrabX(){
 #endif
 
 static int _delay(Time delay){
-	forceUngrab();
-	if (XPending(dpy)) return 0;
+	if (QLength(dpy)) return 0;
+	if (grabcnt) {
+		grabcnt=0;
+		XFlush(dpy);
+		_Xungrab();
+		XSync(dpy,False);
+		if (XPending(dpy)) return 0;
+	}
 	struct timeval tv;
 	fd_set rs;
 	int fd = ConnectionNumber(dpy);
@@ -1254,6 +1260,7 @@ ev:
 		if (timeHold) {
 			Time t = T - timeHold;
 			if (t >= pi[p_hold] || _delay(pi[p_hold] - t)) {
+				forceUngrab();
 				to->g = BUTTON_HOLD;
 				timeHold = 0;
 				goto hold;
