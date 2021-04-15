@@ -1,5 +1,5 @@
 /*
-	xtg v1.29 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.30 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -361,7 +361,7 @@ static void _Xgrab(){
 }
 static void _Xungrab(){
 		XUngrabServer(dpy);
-		grabserial = -1;
+		grabserial=(grabserial+1)&0xffff;
 }
 static void _grabX(){
 	if (!(grabcnt++)) _Xgrab();
@@ -369,11 +369,15 @@ static void _grabX(){
 static inline void forceUngrab(){
 	if (grabcnt) {
 		grabcnt=0;
+		XFlush(dpy);
 		_Xungrab();
 	}
 }
 static inline void _ungrabX(){
-	if ((pi[p_safe]&4) && !--grabcnt) _Xungrab();
+	if ((pi[p_safe]&4) && !--grabcnt) {
+		XFlush(dpy);
+		_Xungrab();
+	}
 }
 
 #if 0
@@ -931,6 +935,7 @@ busy:
 			if (d2 != &info2[i]) XIFreeDeviceInfo(d2);
 			if (busy) goto busy;
 
+			XSync(dpy,False);
 			if ((evcount=XPending(dpy))>0) {
 				XEvent ev1;
 				XPeekIfEvent(dpy,&ev1,&filterTouch,NULL);
@@ -959,7 +964,6 @@ busy:
 		XIChangeHierarchy(dpy, (void*)&cm, 1);
 	}
 	XIFreeDeviceInfo(info2);
-	XFlush(dpy);
 	if (grabbed) _ungrabX();
 	tdevs -= tdevs2;
 	if (!resDev) resDev=1;
