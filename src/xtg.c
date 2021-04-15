@@ -381,11 +381,9 @@ static inline void _ungrabX(){
 }
 
 #if 0
-#define TMUL1000(x) (x*1000)
-#define TDIV1000(x) (x/1000)
+#define TIMEVAL(tv,x) struct timeval tv = { .tv_sec = (x) / 1000, .tv_usec = ((x) % 1000) * 1000 }
 #else
-#define TMUL1000(x) (x<<10)
-#define TDIV1000(x) (x>>10)
+#define TIMEVAL(tv,x) struct timeval tv = { .tv_sec = (x) >> 10, .tv_usec = ((x) & 0x3ff) << 10 }
 #endif
 
 static int _delay(Time delay){
@@ -397,11 +395,9 @@ static int _delay(Time delay){
 		XSync(dpy,False);
 		if (XPending(dpy)) return 0;
 	}
-	struct timeval tv;
+	TIMEVAL(tv,delay);
 	fd_set rs;
 	int fd = ConnectionNumber(dpy);
-	tv.tv_sec = TDIV1000(delay);
-	tv.tv_usec = TMUL1000(delay);
 	FD_ZERO(&rs);
 	FD_SET(fd,&rs);
 	return !Select(fd+1, &rs, 0, 0, &tv);
