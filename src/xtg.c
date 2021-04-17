@@ -1,5 +1,5 @@
 /*
-	xtg v1.30 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.31 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -26,9 +26,10 @@
 	Auto hide/show mouse cursor on touchscreen.
 	Gestures.
 	Auto RandR DPI.
+	Auto primary or vertical panning (optional).
 	-h to help
 
-	(C) 2019-2020 Denis Kaganovich, Anarchy license
+	(C) 2019-2021 Denis Kaganovich, Anarchy license
 */
 #ifndef NO_ALL
 #define XSS
@@ -206,13 +207,14 @@ static void _print_bmap(_int x, _short n, TouchTree *m) {
 #define p_min_dpi 12
 #define p_max_dpi 13
 #define p_safe 14
-#define MAX_PAR 15
+#define p_undo 15
+#define MAX_PAR 16
 char *pa[MAX_PAR] = {};
 // android: 125ms tap, 500ms long
-#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0,  14, 32, 72, 0, DEF_SAFE}
+#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0,  14, 32, 72, 0, DEF_SAFE, 6}
 int pi[] = PAR_DEFS;
 double pf[] = PAR_DEFS;
-char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:s:h";
+char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:s:u:h";
 char *ph[MAX_PAR] = {
 	"touch device 0=auto",
 	"min fingers",
@@ -238,12 +240,18 @@ char *ph[MAX_PAR] = {
 	"max ...",
 	"min dpi (monitor)",
 	"max ...",
-	"	safe mode bits:"
-	"	1 don't change hierarchy of device busy/pressed (for -f 2)\n"
+	"safe mode bits\n"
+	"		1 don't change hierarchy of device busy/pressed (for -f 2)\n"
 #ifdef USE_EVDEV
-	"	2(+2) XUngrabServer() for libevdev call\n"
+	"		2 XUngrabServer() for libevdev call\n"
 #endif
-	"	3(+4) XGrabServer() cumulative\n",
+	"		3(+4) XGrabServer() cumulative",
+	"undo/disable change bits:\n"
+	"		1=no mon dpi\n"
+	"		2=no mon primary\n"
+	"		3(+4)=no vertical panning\n"
+	"		4(+8)=auto bits 2,3 on primary present - enable primary & disable panning\n"
+	"		(auto-panning for openbox+tint2: \"xrandr --noprimary\" on early init && \"-u 8\")",
 };
 #else
 #define TIME(T,t)
@@ -356,21 +364,21 @@ double mon_grow;
 _short grabcnt = 0;
 _int grabserial = -1;
 static void _Xgrab(){
-		XGrabServer(dpy);
 		grabserial=(grabserial+1)&0xffff;
+		XGrabServer(dpy);
 }
 static void _Xungrab(){
 		XUngrabServer(dpy);
-		grabserial=(grabserial+1)&0xffff;
+//		grabserial=(grabserial+1)&0xffff;
 }
 static void _grabX(){
 	if (!(grabcnt++)) _Xgrab();
 }
 static inline void forceUngrab(){
 	if (grabcnt) {
-		grabcnt=0;
 		XFlush(dpy);
 		_Xungrab();
+		grabcnt=0;
 	}
 }
 static inline void _ungrabX(){
@@ -389,9 +397,9 @@ static inline void _ungrabX(){
 static int _delay(Time delay){
 	if (QLength(dpy)) return 0;
 	if (grabcnt) {
-		grabcnt=0;
 		XFlush(dpy);
 		_Xungrab();
+		grabcnt=0;
 		XSync(dpy,False);
 		if (XPending(dpy)) return 0;
 	}
@@ -541,12 +549,41 @@ static void fixMonSize(int width, int height, int mwidth, int mheight, double *d
 	}
 }
 
+XRRScreenResources *xrrr;
+unsigned int pan;
+static void _pan(RRCrtc crt) {
+	if (!crt) return;
+	XRRPanning *p = XRRGetPanning(dpy,xrrr,crt);
+	if (!p) return;
+#if 1
+	XRRCrtcInfo *cinf = XRRGetCrtcInfo(dpy,xrrr,crt);
+	if (cinf) {
+		if (p->width != cinf->width || p->height != cinf->height) {
+			p->width = cinf->width;
+			p->height = cinf->height;
+			p->top = pan + 1;
+		}
+		XRRFreeCrtcInfo(cinf);
+	}
+#endif
+	if (p->top != pan) {
+		p->top = pan;
+		fprintf(stderr,"crtc %i panning %ix%i+%i+%i/track:%ix%i+%i+%i/border:%i/%i/%i/%i\n",crt,p->width,p->height,p->left,p->top,  p->track_width,p->track_height,p->track_left,p->track_top,  p->border_left,p->border_top,p->border_right,p->border_bottom);
+		XRRSetPanning(dpy,xrrr,crt,p);
+	}
+	pan += p->height;
+	pan += p->border_top + p->border_bottom;
+	XRRFreePanning(p);
+}
+
 // mode: 0 - x,y, 1 - mon, 2 - mon_sz
 // mode 0 need only for scroll resolution
 // mode 1 & 2 - for map-to-output too
 static void getRes(int x, int y, _short mode){
 	int i,j;
 	_int found = 0, nm = 0;
+	RRCrtc crt1 = 0, crt2 = 0;
+	RROutput prim = 0, prim1 = 0;
 
 //	XGetWindowAttributes(dpy, DefaultRootWindow(dpy), &wa);
 	mwidth = scr_mwidth;
@@ -571,11 +608,17 @@ static void getRes(int x, int y, _short mode){
 
 	if (!xrr) goto noxrr;
 	int n = 0;
-	RROutput prim = XRRGetOutputPrimary(dpy, root);
-	XRRScreenResources *xrrr = XRRGetScreenResources(dpy,root);
-	if (!xrr) goto noxrr;
+	RROutput prim0 = prim = XRRGetOutputPrimary(dpy, root);
+	if ((pi[p_undo]&8)) {
+		pi[p_undo]=(pi[p_undo]|(2|4)) ^ (prim?2:4);
+		prim0 = 0;
+	}
+	if (!(pi[p_undo]&2)) prim0 = 0;
+	xrrr = XRRGetScreenResources(dpy,root);
+	if (!xrrr) goto noxrr;
 	for (i = 0; i < xrrr->noutput; i++) {
-		XRROutputInfo *oinf = XRRGetOutputInfo(dpy, xrrr, xrrr->outputs[i]);
+		RROutput o = xrrr->outputs[i];
+		XRROutputInfo *oinf = XRRGetOutputInfo(dpy, xrrr, o);
 		if (!oinf || oinf->connection != RR_Connected || !oinf->crtc) goto nextout;
 		XRRCrtcInfo *cinf = XRRGetCrtcInfo(dpy, xrrr, oinf->crtc);
 		if (!cinf) goto nextout;
@@ -606,19 +649,24 @@ static void getRes(int x, int y, _short mode){
 			width = cinf->width;
 			height = cinf->height;
 			rotation = cinf->rotation;
-			if ((prim == xrrr->outputs[i]) || (!prim && mheight > mh4dpi)) {
+			crt2 = oinf->crtc;
+			if ((prim0 == o) || (!prim0 && mheight > mh4dpi)) {
 				h4dpi = height;
 				mh4dpi = mheight;
 				w4dpi = width;
 				mw4dpi = mwidth;
-			}
+				prim1 = o;
+				crt1 = oinf->crtc;
+			} //else if (!prim1) prim1 = o;
 		}
 		if (oinf->mm_height) {
-			if (!(h4dpi && prim) && ((prim == xrrr->outputs[i]) || (!prim && oinf->mm_height > mh4dpi))) {
+			if (!(h4dpi && prim0) && ((prim0 == o) || (!prim0 && oinf->mm_height > mh4dpi))) {
 				h4dpi = cinf->height;
 				mh4dpi = oinf->mm_height;
 				w4dpi = cinf->width;
 				mw4dpi = oinf->mm_width;
+				prim1 = o;
+				crt1 = oinf->crtc;
 			}
 		}
 		XRRFreeCrtcInfo(cinf);
@@ -678,7 +726,8 @@ found:
 			if (!mwidth) resX = resY;
 		}
 	}
-	if (mh4dpi && mw4dpi) {
+	if (!xrr) goto noxrr1;
+	if (mh4dpi && mw4dpi && !(pi[p_undo]&1)) {
 		double dpmh = (.0 + h4dpi) / mh4dpi;
 		double dpmw = (.0 + w4dpi) / mw4dpi;
 		_int m2 = (width != w4dpi || height != h4dpi || mwidth != mw4dpi || mheight != mh4dpi);
@@ -695,7 +744,7 @@ found:
 			}
 			XRRFreeMonitors(xrm);
 		}
-		if (m2) fixMonSize(width, height, mwidth, mheight, &dpmw, &dpmh); 
+		if (m2) fixMonSize(width, height, mwidth, mheight, &dpmw, &dpmh);
 		fixMonSize(w4dpi, h4dpi, mw4dpi, mh4dpi, &dpmw, &dpmh); 
 
 		int mh = scr_height / dpmh + .5;
@@ -706,6 +755,27 @@ found:
 			XRRSetScreenSize(dpy, root, scr_width, scr_height, mw, mh);
 		}
 	}
+	if (!(pi[p_undo]&2) && prim1 && prim1 != prim) {
+		fprintf(stderr,"primary output %i\n",prim1);
+		XRRSetOutputPrimary(dpy,root,prim = prim1);
+	}
+	if (!(pi[p_undo]&4) && (xrrr = XRRGetScreenResources(dpy,root))) {
+		_int m2 = (crt1 != crt2);
+		pan = 0;
+		_pan(crt1);
+		if (nm != m2 + 1)
+		    for (i = 0; i < xrrr->noutput; i++) {
+			XRROutputInfo *oinf = XRRGetOutputInfo(dpy, xrrr, xrrr->outputs[i]);
+			if (!oinf) continue;
+			if (oinf->connection == RR_Connected && oinf->crtc && oinf->crtc != crt1 && oinf->crtc != crt2) {
+				_pan(oinf->crtc);
+			}
+			XRRFreeOutputInfo(oinf);
+		}
+		if (m2) _pan(crt2);
+		XRRFreeScreenResources(xrrr);
+	}
+noxrr1:
 	_ungrabX();
 }
 
