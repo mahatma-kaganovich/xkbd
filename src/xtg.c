@@ -550,22 +550,44 @@ static void fixMonSize(int width, int height, int mwidth, int mheight, double *d
 }
 
 XRRScreenResources *xrrr;
+XRRCrtcInfo *cinf;
+unsigned int _width,_height;
+static void _rmode(){
+	int i;
+	for (i=0; i<xrrr->nmode; i++) {
+		XRRModeInfo *m = &xrrr->modes[i];
+		if (m->id == cinf->mode) {
+			_width = m->width;
+			_height = m->height;
+			return;
+		}
+	}
+	_width = cinf->width;
+	_height = cinf->height;
+}
+
 unsigned int pan;
 static void _pan(RRCrtc crt) {
 	if (!crt) return;
 	XRRPanning *p = XRRGetPanning(dpy,xrrr,crt);
 	if (!p) return;
-#if 1
-	XRRCrtcInfo *cinf = XRRGetCrtcInfo(dpy,xrrr,crt);
-	if (cinf) {
-		if (p->width != cinf->width || p->height != cinf->height) {
-			p->width = cinf->width;
-			p->height = cinf->height;
+	// panning width/height to mode cause errors on xrandr tool
+#if 0
+	if ((cinf = XRRGetCrtcInfo(dpy,xrrr,crt))) {
+		_rmode();
+#else
+	if (!p->width || !p->height)
+	if ((cinf = XRRGetCrtcInfo(dpy,xrrr,crt))) {
+		_width = cinf->width;
+		_height = cinf->height;
+#endif
+		if (p->width != _width || p->height != _height) {
+			p->width = _width;
+			p->height = _height;
 			p->top = pan + 1;
 		}
 		XRRFreeCrtcInfo(cinf);
 	}
-#endif
 	if (p->top != pan) {
 		p->top = pan;
 		fprintf(stderr,"crtc %i panning %ix%i+%i+%i/track:%ix%i+%i+%i/border:%i/%i/%i/%i\n",crt,p->width,p->height,p->left,p->top,  p->track_width,p->track_height,p->track_left,p->track_top,  p->border_left,p->border_top,p->border_right,p->border_bottom);
@@ -575,6 +597,7 @@ static void _pan(RRCrtc crt) {
 	pan += p->border_top + p->border_bottom;
 	XRRFreePanning(p);
 }
+
 
 // mode: 0 - x,y, 1 - mon, 2 - mon_sz
 // mode 0 need only for scroll resolution
@@ -620,8 +643,9 @@ static void getRes(int x, int y, _short mode){
 		RROutput o = xrrr->outputs[i];
 		XRROutputInfo *oinf = XRRGetOutputInfo(dpy, xrrr, o);
 		if (!oinf || oinf->connection != RR_Connected || !oinf->crtc) goto nextout;
-		XRRCrtcInfo *cinf = XRRGetCrtcInfo(dpy, xrrr, oinf->crtc);
+		cinf = XRRGetCrtcInfo(dpy, xrrr, oinf->crtc);
 		if (!cinf) goto nextout;
+		_rmode();
 		nm++;
 		if((!found
 #ifdef USE_EVDEV
@@ -640,14 +664,14 @@ static void getRes(int x, int y, _short mode){
 			    || (mode == 1 && (pi[p_mon] == ++n ||
 				(pa[p_mon] && !strcmp(oinf->name,pa[p_mon]))))
 		    ) &&
-		    ( mode || (x >= cinf->x && y >= cinf->y && x < cinf->x + cinf->width && y < cinf->y + cinf->height)) &&
+		    ( mode || (x >= cinf->x && y >= cinf->y && x < cinf->x + _width && y < cinf->y + _height)) &&
 		    (!found++ || !mode)) {
 			scrX1 = cinf->x;
 			scrY1 = cinf->y;
 			mwidth = oinf->mm_width;
 			mheight = oinf->mm_height;
-			width = cinf->width;
-			height = cinf->height;
+			width=_width;
+			height=_height;
 			rotation = cinf->rotation;
 			crt2 = oinf->crtc;
 			if ((prim0 == o) || (!prim0 && mheight > mh4dpi)) {
@@ -661,9 +685,9 @@ static void getRes(int x, int y, _short mode){
 		}
 		if (oinf->mm_height) {
 			if (!(h4dpi && prim0) && ((prim0 == o) || (!prim0 && oinf->mm_height > mh4dpi))) {
-				h4dpi = cinf->height;
+				h4dpi = _height;
 				mh4dpi = oinf->mm_height;
-				w4dpi = cinf->width;
+				w4dpi = _width;
 				mw4dpi = oinf->mm_width;
 				prim1 = o;
 				crt1 = oinf->crtc;
