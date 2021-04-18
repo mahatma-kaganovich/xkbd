@@ -1,5 +1,5 @@
 /*
-	xtg v1.31 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.32 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -66,6 +66,7 @@
 #include <X11/extensions/XInput2.h>
 
 #include <X11/extensions/XTest.h>
+#include <X11/extensions/Xfixes.h>
 #include <stdlib.h>
 #include <string.h>
 //#include <sys/time.h>
@@ -95,6 +96,7 @@ Window win, win1;
 int screen;
 Window root;
 Atom aActWin, aKbdGrp, aXkbRules;
+Bool _error;
 #ifdef XSS
 Atom aWMState, aFullScreen;
 Bool noXSS, noXSS1;
@@ -108,7 +110,7 @@ unsigned char *ret;
 
 #ifdef XTG
 int devid = 0;
-int xiopcode, xierror;
+int xiopcode, xierror, xfopcode=0, xfevent=0, xferror=0;
 Atom aFloat,aMatrix;
 #ifdef USE_EVDEV
 Atom aNode;
@@ -185,10 +187,10 @@ static void _print_bmap(_int x, _short n, TouchTree *m) {
 
 #ifdef USE_EVDEV
 #define DEF_RR -1
-#define DEF_SAFE 7
+#define DEF_SAFE (7+32+64)
 #else
 #define DEF_RR 0
-#define DEF_SAFE 5
+#define DEF_SAFE (5+32+64)
 #endif
 
 #define p_device 0
@@ -207,11 +209,10 @@ static void _print_bmap(_int x, _short n, TouchTree *m) {
 #define p_min_dpi 12
 #define p_max_dpi 13
 #define p_safe 14
-#define p_undo 15
-#define MAX_PAR 16
+#define MAX_PAR 15
 char *pa[MAX_PAR] = {};
 // android: 125ms tap, 500ms long
-#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0,  14, 32, 72, 0, DEF_SAFE, 6}
+#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0,  14, 32, 72, 0, DEF_SAFE }
 int pi[] = PAR_DEFS;
 double pf[] = PAR_DEFS;
 char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:s:u:h";
@@ -245,13 +246,13 @@ char *ph[MAX_PAR] = {
 #ifdef USE_EVDEV
 	"		2 XUngrabServer() for libevdev call\n"
 #endif
-	"		3(+4) XGrabServer() cumulative",
-	"undo/disable change bits:\n"
-	"		1=no mon dpi\n"
-	"		2=no mon primary\n"
-	"		3(+4)=no vertical panning\n"
-	"		4(+8)=auto bits 2,3 on primary present - enable primary & disable panning\n"
-	"		(auto-panning for openbox+tint2: \"xrandr --noprimary\" on early init && \"-u 8\")",
+	"		3(+4) XGrabServer() cumulative\n"
+	"		4(+8) cursor recheck (tricky)\n"
+	"		5(+16) no mon dpi\n"
+	"		6(+32) no mon primary\n"
+	"		7(+64) no vertical panning\n"
+	"		8(+128) auto bits 6,7 on primary present - enable primary & disable panning\n"
+	"		(auto-panning for openbox+tint2: \"xrandr --noprimary\" on early init && \"-u 135\" (7+128))",
 };
 #else
 #define TIME(T,t)
@@ -632,11 +633,11 @@ static void getRes(int x, int y, _short mode){
 	if (!xrr) goto noxrr;
 	int n = 0;
 	RROutput prim0 = prim = XRRGetOutputPrimary(dpy, root);
-	if ((pi[p_undo]&8)) {
-		pi[p_undo]=(pi[p_undo]|(2|4)) ^ (prim?2:4);
+	if ((pi[p_safe]&128)) {
+		pi[p_safe]=(pi[p_safe]|(32|64)) ^ (prim?32:64);
 		prim0 = 0;
 	}
-	if (!(pi[p_undo]&2)) prim0 = 0;
+	if (!(pi[p_safe]&32)) prim0 = 0;
 	xrrr = XRRGetScreenResources(dpy,root);
 	if (!xrrr) goto noxrr;
 	for (i = 0; i < xrrr->noutput; i++) {
@@ -751,7 +752,7 @@ found:
 		}
 	}
 	if (!xrr) goto noxrr1;
-	if (mh4dpi && mw4dpi && !(pi[p_undo]&1)) {
+	if (mh4dpi && mw4dpi && !(pi[p_safe]&16)) {
 		double dpmh = (.0 + h4dpi) / mh4dpi;
 		double dpmw = (.0 + w4dpi) / mw4dpi;
 		_int m2 = (width != w4dpi || height != h4dpi || mwidth != mw4dpi || mheight != mh4dpi);
@@ -779,11 +780,11 @@ found:
 			XRRSetScreenSize(dpy, root, scr_width, scr_height, mw, mh);
 		}
 	}
-	if (!(pi[p_undo]&2) && prim1 && prim1 != prim) {
+	if (!(pi[p_safe]&32) && prim1 && prim1 != prim) {
 		fprintf(stderr,"primary output %i\n",prim1);
 		XRRSetOutputPrimary(dpy,root,prim = prim1);
 	}
-	if (!(pi[p_undo]&4) && (xrrr = XRRGetScreenResources(dpy,root))) {
+	if (!(pi[p_safe]&64) && (xrrr = XRRGetScreenResources(dpy,root))) {
 		_int m2 = (crt1 != crt2);
 		pan = 0;
 		_pan(crt1);
@@ -824,8 +825,35 @@ static Bool filterTouch(Display *dpy1, XEvent *ev1, XPointer arg){
 	return busy || (evcount-- > 0);
 }
 
+static Bool _cursor(Bool s){
+	_error = False;
+	if (s) XFixesShowCursor(dpy, root);
+	else XFixesHideCursor(dpy, root);
+//	XFlush(dpy);
+	XSync(dpy,False);
+	return !_error;
+}
+
+Bool cursor_ok = 1;
+static int getShowCursor(){
+	int r = 1;
+	_grabX();
+	XSync(dpy,False);
+	_error = False;
+	if (_cursor(True)) {
+		if (_cursor(True) && _cursor(True)) { // ??? sometimes triple
+			fprintf(stderr,"double show cursor enabled! change code!\n");
+			//r = -1;
+			cursor_ok = 0;
+		} else if (_cursor(False)) r = 0;
+	}
+	if (!(pi[p_safe]&8)) cursor_ok = 0;
+	_ungrabX();
+	return r;
+}
+
 int xtestPtr, xtestPtr0;
-_short showPtr = 1, oldShowPtr = 3, curShow = 1;
+_short showPtr, oldShowPtr, curShow;
 _int tdevs = 0, tdevs2=0;
 //#define floating (pi[p_floating]==1)
 static void getHierarchy(){
@@ -1060,6 +1088,11 @@ busy:
 		XIChangeHierarchy(dpy, (void*)&cm, 1);
 	}
 	XIFreeDeviceInfo(info2);
+	if (cursor_ok) {
+		curShow = getShowCursor();
+		oldShowPtr &= 0xe;
+		oldShowPtr |= curShow;
+	}
 	if (grabbed) _ungrabX();
 	tdevs -= tdevs2;
 	if (!resDev) resDev=1;
@@ -1070,11 +1103,11 @@ static void setShowCursor(){
 	getHierarchy();
 	if ((oldShowPtr & 2) && !showPtr) return;
 	// "Hide" must be first!
-	if (showPtr != curShow) {
-		curShow = showPtr;
-		if (showPtr) XFixesShowCursor(dpy, root);
+	// but prefer to filter error to invisible start
+//	if (showPtr != curShow) {
+		if ((curShow = showPtr)) XFixesShowCursor(dpy, root);
 		else XFixesHideCursor(dpy, root);
-	}
+//	}
 }
 
 static void _set_bmap(_int g, _short i, _int j){
@@ -1148,6 +1181,7 @@ static void getPropWin1(){
 
 int (*oldxerrh) (Display *, XErrorEvent *);
 static int xerrh(Display *dpy, XErrorEvent *err){
+	_error = True;
 	switch (err->error_code) {
 	    case BadWindow: win1 = None; break;
 #ifdef XTG
@@ -1156,8 +1190,9 @@ static int xerrh(Display *dpy, XErrorEvent *err){
 		showPtr = 1;
 		break;
 	    case BadMatch:
-		// RRSetScreenSize() on bad XRandr state;
 		// XShowCursor() before XHideCursor()
+		if (err->request_code == xfopcode) return 0;
+		// RRSetScreenSize() on bad XRandr state;
 		break;
 #endif
 	    default:
@@ -1257,6 +1292,9 @@ static void init(){
 		XFree(x);
 	} else xssevent = -1;
 #endif
+	if (XQueryExtension(dpy, "XFIXES", &xfopcode, &xfevent, &xferror)) {
+//		XFixesSelectCursorInput(dpy,root,XFixesDisplayCursorNotifyMask);
+	}
 #endif
 	XSelectInput(dpy, root, evmask);
 	oldxerrh = XSetErrorHandler(xerrh);
@@ -1267,6 +1305,10 @@ static void init(){
 	rul = NULL;
 	rul2 =NULL;
 	ret = NULL;
+#ifdef XTG
+	oldShowPtr = curShow = showPtr = getShowCursor();
+	oldShowPtr |= 2;
+#endif
 }
 
 int main(int argc, char **argv){
@@ -1685,6 +1727,11 @@ evfree:
 				scr_mheight = e->mheight;
 				scr_rotation = e->rotation;
 			}
+#undef e
+#define e ((XFixesCursorNotifyEvent*)&ev)
+//			else if (xfevent && ev.type == xfevent + XFixesCursorNotify) {
+//				    TIME(T,e->timestamp);
+//			}
 #endif
 //			else fprintf(stderr,"ev? %i\n",ev.type);
 			break;
