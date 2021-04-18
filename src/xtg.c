@@ -215,7 +215,7 @@ char *pa[MAX_PAR] = {};
 #define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0,  14, 32, 72, 0, DEF_SAFE }
 int pi[] = PAR_DEFS;
 double pf[] = PAR_DEFS;
-char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:s:u:h";
+char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:s:h";
 char *ph[MAX_PAR] = {
 	"touch device 0=auto",
 	"min fingers",
