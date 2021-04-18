@@ -591,7 +591,7 @@ static void _pan(RRCrtc crt) {
 	}
 	if (p->top != pan) {
 		p->top = pan;
-		fprintf(stderr,"crtc %i panning %ix%i+%i+%i/track:%ix%i+%i+%i/border:%i/%i/%i/%i\n",crt,p->width,p->height,p->left,p->top,  p->track_width,p->track_height,p->track_left,p->track_top,  p->border_left,p->border_top,p->border_right,p->border_bottom);
+		fprintf(stderr,"crtc %lu panning %ix%i+%i+%i/track:%ix%i+%i+%i/border:%i/%i/%i/%i\n",crt,p->width,p->height,p->left,p->top,  p->track_width,p->track_height,p->track_left,p->track_top,  p->border_left,p->border_top,p->border_right,p->border_bottom);
 		XRRSetPanning(dpy,xrrr,crt,p);
 	}
 	pan += p->height;
@@ -781,7 +781,7 @@ found:
 		}
 	}
 	if (!(pi[p_safe]&32) && prim1 && prim1 != prim) {
-		fprintf(stderr,"primary output %i\n",prim1);
+		fprintf(stderr,"primary output %lu\n",prim1);
 		XRRSetOutputPrimary(dpy,root,prim = prim1);
 	}
 	if (!(pi[p_safe]&64) && (xrrr = XRRGetScreenResources(dpy,root))) {
@@ -823,33 +823,6 @@ static Bool filterTouch(Display *dpy1, XEvent *ev1, XPointer arg){
 #endif
 	}
 	return busy || (evcount-- > 0);
-}
-
-static Bool _cursor(Bool s){
-	_error = False;
-	if (s) XFixesShowCursor(dpy, root);
-	else XFixesHideCursor(dpy, root);
-//	XFlush(dpy);
-	XSync(dpy,False);
-	return !_error;
-}
-
-Bool cursor_ok = 1;
-static int getShowCursor(){
-	int r = 1;
-	_grabX();
-	XSync(dpy,False);
-	_error = False;
-	if (_cursor(True)) {
-		if (_cursor(True) && _cursor(True)) { // ??? sometimes triple
-			fprintf(stderr,"double show cursor enabled! change code!\n");
-			//r = -1;
-			cursor_ok = 0;
-		} else if (_cursor(False)) r = 0;
-	}
-	if (!(pi[p_safe]&8)) cursor_ok = 0;
-	_ungrabX();
-	return r;
 }
 
 int xtestPtr, xtestPtr0;
@@ -1088,11 +1061,7 @@ busy:
 		XIChangeHierarchy(dpy, (void*)&cm, 1);
 	}
 	XIFreeDeviceInfo(info2);
-	if (cursor_ok) {
-		curShow = getShowCursor();
-		oldShowPtr &= 0xe;
-		oldShowPtr |= curShow;
-	}
+	if (pi[p_safe]&8) XFixesShowCursor(dpy,root);
 	if (grabbed) _ungrabX();
 	tdevs -= tdevs2;
 	if (!resDev) resDev=1;
@@ -1104,10 +1073,10 @@ static void setShowCursor(){
 	if ((oldShowPtr & 2) && !showPtr) return;
 	// "Hide" must be first!
 	// but prefer to filter error to invisible start
-//	if (showPtr != curShow) {
+	if (showPtr != curShow || showPtr) {
 		if ((curShow = showPtr)) XFixesShowCursor(dpy, root);
 		else XFixesHideCursor(dpy, root);
-//	}
+	}
 }
 
 static void _set_bmap(_int g, _short i, _int j){
@@ -1191,7 +1160,13 @@ static int xerrh(Display *dpy, XErrorEvent *err){
 		break;
 	    case BadMatch:
 		// XShowCursor() before XHideCursor()
-		if (err->request_code == xfopcode) return 0;
+		if (err->request_code == xfopcode) {
+			if (err->minor_code == X_XFixesShowCursor) {
+				curShow = 1;
+				oldShowPtr |= 1;
+			}
+			return 0;
+		}
 		// RRSetScreenSize() on bad XRandr state;
 		break;
 #endif
@@ -1306,8 +1281,10 @@ static void init(){
 	rul2 =NULL;
 	ret = NULL;
 #ifdef XTG
-	oldShowPtr = curShow = showPtr = getShowCursor();
-	oldShowPtr |= 2;
+	curShow = 0;
+	oldShowPtr = 2;
+	showPtr = 1;
+	XFixesShowCursor(dpy,root);
 #endif
 }
 
