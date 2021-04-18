@@ -252,7 +252,7 @@ char *ph[MAX_PAR] = {
 	"		6(+32) no mon primary\n"
 	"		7(+64) no vertical panning\n"
 	"		8(+128) auto bits 6,7 on primary present - enable primary & disable panning\n"
-	"		(auto-panning for openbox+tint2: \"xrandr --noprimary\" on early init && \"-u 135\" (7+128))",
+	"		(auto-panning for openbox+tint2: \"xrandr --noprimary\" on early init && \"-s 135\" (7+128))",
 };
 #else
 #define TIME(T,t)
