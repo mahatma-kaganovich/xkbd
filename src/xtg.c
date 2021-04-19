@@ -799,35 +799,32 @@ found:
 
 		if (do_dpi) {
 			int mh, mw;
-			int w = scr_width, h = scr_height;
-			if (pan_cnt) {
+			if (!pan_x)
+				pan_x = scr_width;
+			if (!pan_y)
+				pan_y = scr_height;
+			if (pan_cnt && (pan_x != scr_width || pan_y != scr_height)) {
 				XFlush(dpy);
 				XSync(dpy,False);
 			}
-			if (!pan_x)
-				pan_x = w;
-			if (!pan_y)
-				pan_y = h;
 
 			if (m2) fixMonSize(width, height, mwidth, mheight, &dpmw, &dpmh);
 			fixMonSize(w4dpi, h4dpi, mw4dpi, mh4dpi, &dpmw, &dpmh);
 rep_size:
 			mh = pan_y / dpmh + .5;
 			mw = pan_x / dpmw +.5;
-
-			if (mw != scr_mwidth || mh != scr_mheight || pan_y != h || pan_x != w) {
-				fprintf(stderr,"dpi %.1f %.1f -> %.1f %.1f %ix%i\n",25.4*w/scr_mwidth,25.4*h/scr_mheight,25.4*pan_x/mw,25.4*pan_y/mh,pan_x,pan_y);
+    
+			if (mw != scr_mwidth || mh != scr_mheight || pan_y != scr_height || pan_x != scr_width) {
+				fprintf(stderr,"dpi %.1f %.1f -> %.1f %.1f %ix%i\n",25.4*scr_width/scr_mwidth,25.4*scr_height/scr_mheight,25.4*pan_x/mw,25.4*pan_y/mh,pan_x,pan_y);
 				_error = 0;
 				XRRSetScreenSize(dpy, root, pan_x, pan_y, mw, mh);
-				if (pan_cnt) {
+				if (pan_x != scr_width || pan_y != scr_height) {
 					XFlush(dpy);
 					XSync(dpy,False);
 					if (_error) {
-						if (pan_y != h || pan_x != w) {
-							pan_x = w;
-							pan_y = h;
-							goto rep_size;
-						}
+						pan_x = scr_width;
+						pan_y = scr_height;
+						goto rep_size;
 					}
 				}
 			}
