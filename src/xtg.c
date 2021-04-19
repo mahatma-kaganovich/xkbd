@@ -253,6 +253,7 @@ char *ph[MAX_PAR] = {
 	"		7(+64) no vertical panning\n"
 	"		8(+128) auto bits 6,7 on primary present - enable primary & disable panning\n"
 	"		9(+256) use mode sizes for panning (errors in xrandr tool!)\n"
+	"		10(+512) keep dpi different x & y (image panned non-aspected)\n"
 	"		(auto-panning for openbox+tint2: \"xrandr --noprimary\" on early init && \"-s 135\" (7+128))",
 };
 #else
@@ -776,6 +777,8 @@ found:
 		if (do_dpi) {
 			dpmh = (.0 + h4dpi) / mh4dpi;
 			dpmw = (.0 + w4dpi) / mw4dpi;
+			// auto resolution usual equal physical propotions
+			// in mode resolution - use one max density
 		}
 		_pan(crt1);
 		if (nm != m2 + 1)
@@ -811,11 +814,15 @@ found:
 			if (m2) fixMonSize(width, height, mwidth, mheight, &dpmw, &dpmh);
 			fixMonSize(w4dpi, h4dpi, mw4dpi, mh4dpi, &dpmw, &dpmh);
 rep_size:
+			if (!(pi[p_safe]&512))
+				if (dpmh > dpmw) dpmw = dpmh;
+				else dpmh = dpmw;
+
 			mh = pan_y / dpmh + .5;
 			mw = pan_x / dpmw +.5;
     
 			if (mw != scr_mwidth || mh != scr_mheight || pan_y != scr_height || pan_x != scr_width) {
-				fprintf(stderr,"dpi %.1f %.1f -> %.1f %.1f %ix%i\n",25.4*scr_width/scr_mwidth,25.4*scr_height/scr_mheight,25.4*pan_x/mw,25.4*pan_y/mh,pan_x,pan_y);
+				fprintf(stderr,"dpi %.1fx%.1f -> %.1fx%.1f dots/mm %ix%i/%ix%i -> %ix%i/%ix%i\n",25.4*scr_width/scr_mwidth,25.4*scr_height/scr_mheight,25.4*pan_x/mw,25.4*pan_y/mh,scr_width,scr_height,scr_mwidth,scr_mheight,pan_x,pan_y,mw,mh);
 				_error = 0;
 				XRRSetScreenSize(dpy, root, pan_x, pan_y, mw, mh);
 				if (pan_x != scr_width || pan_y != scr_height) {
