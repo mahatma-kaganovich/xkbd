@@ -569,7 +569,7 @@ static void _rmode(){
 	_height = cinf->height;
 }
 
-unsigned int pan_x,pan_y;
+unsigned int pan_x,pan_y,pan_cnt;
 _short pan_mode;
 static void _pan(RRCrtc crt) {
 	if (!crt) goto ex;
@@ -597,7 +597,7 @@ static void _pan(RRCrtc crt) {
 		p->top = pan_y;
 		p->left = 0;
 		fprintf(stderr,"crtc %lu panning %ix%i+%i+%i/track:%ix%i+%i+%i/border:%i/%i/%i/%i\n",crt,p->width,p->height,p->left,p->top,  p->track_width,p->track_height,p->track_left,p->track_top,  p->border_left,p->border_top,p->border_right,p->border_bottom);
-		XRRSetPanning(dpy,xrrr,crt,p);
+		if (XRRSetPanning(dpy,xrrr,crt,p)==Success) pan_cnt++;
 	}
 	pan_y += p->height + p->border_top + p->border_bottom;
 	int x = p->left + p->width + p->border_left + p->border_right;
@@ -771,7 +771,7 @@ found:
 		double dpmh, dpmw;
 		_int m2 = (crt1 != crt2);
 		pan_mode = !!(pi[p_safe]&256);
-		pan_x = pan_y = 0;
+		pan_x = pan_y = pan_cnt = 0;
 		cinf = NULL;
 		if (do_dpi) {
 			dpmh = (.0 + h4dpi) / mh4dpi;
@@ -800,8 +800,7 @@ found:
 		if (do_dpi) {
 			int mh, mw;
 			int w = scr_width, h = scr_height;
-			_short panned = (pan_x || pan_y);
-			if (panned) {
+			if (pan_cnt) {
 				XFlush(dpy);
 				XSync(dpy,False);
 			}
@@ -820,7 +819,7 @@ rep_size:
 				fprintf(stderr,"dpi %.1f %.1f -> %.1f %.1f %ix%i\n",25.4*w/scr_mwidth,25.4*h/scr_mheight,25.4*pan_x/mw,25.4*pan_y/mh,pan_x,pan_y);
 				_error = 0;
 				XRRSetScreenSize(dpy, root, pan_x, pan_y, mw, mh);
-				if (panned) {
+				if (pan_cnt) {
 					XFlush(dpy);
 					XSync(dpy,False);
 					if (_error) {
