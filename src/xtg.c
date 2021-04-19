@@ -1,5 +1,5 @@
 /*
-	xtg v1.32 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.33 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -252,6 +252,7 @@ char *ph[MAX_PAR] = {
 	"		6(+32) no mon primary\n"
 	"		7(+64) no vertical panning\n"
 	"		8(+128) auto bits 6,7 on primary present - enable primary & disable panning\n"
+	"		9(+256) use mode sizes for panning (errors in xrandr tool!)\n"
 	"		(auto-panning for openbox+tint2: \"xrandr --noprimary\" on early init && \"-s 135\" (7+128))",
 };
 #else
@@ -552,6 +553,7 @@ static void fixMonSize(int width, int height, int mwidth, int mheight, double *d
 
 XRRScreenResources *xrrr;
 XRRCrtcInfo *cinf;
+XRROutputInfo *oinf;
 unsigned int _width,_height;
 static void _rmode(){
 	int i;
@@ -567,38 +569,46 @@ static void _rmode(){
 	_height = cinf->height;
 }
 
-unsigned int pan;
+unsigned int pan_x,pan_y;
+_short pan_mode;
 static void _pan(RRCrtc crt) {
-	if (!crt) return;
+	if (!crt) goto ex;
+	if (pi[p_safe]&64) goto ex;
 	XRRPanning *p = XRRGetPanning(dpy,xrrr,crt);
-	if (!p) return;
-	// panning width/height to mode cause errors on xrandr tool
-#if 0
-	if ((cinf = XRRGetCrtcInfo(dpy,xrrr,crt))) {
-		_rmode();
-#else
-	if (!p->width || !p->height)
-	if ((cinf = XRRGetCrtcInfo(dpy,xrrr,crt))) {
-		_width = cinf->width;
-		_height = cinf->height;
-#endif
-		if (p->width != _width || p->height != _height) {
-			p->width = _width;
-			p->height = _height;
-			p->top = pan + 1;
+	if (!p) goto ex;
+	if (pan_mode || !p->width || !p->height) {
+		if (!cinf) {
+			cinf = XRRGetCrtcInfo(dpy,xrrr,crt);
+			if (pan_mode) _rmode();
 		}
-		XRRFreeCrtcInfo(cinf);
+		if (cinf) {
+			if (!pan_mode) {
+				_width = cinf->width;
+				_height = cinf->height;
+			}
+			if (p->width != _width || p->height != _height) {
+				p->width = _width;
+				p->height = _height;
+				p->top = pan_y + 1;
+			}
+		}
 	}
-	if (p->top != pan) {
-		p->top = pan;
+	if (p->top != pan_y || p->left) {
+		p->top = pan_y;
+		p->left = 0;
 		fprintf(stderr,"crtc %lu panning %ix%i+%i+%i/track:%ix%i+%i+%i/border:%i/%i/%i/%i\n",crt,p->width,p->height,p->left,p->top,  p->track_width,p->track_height,p->track_left,p->track_top,  p->border_left,p->border_top,p->border_right,p->border_bottom);
 		XRRSetPanning(dpy,xrrr,crt,p);
 	}
-	pan += p->height;
-	pan += p->border_top + p->border_bottom;
+	pan_y += p->height + p->border_top + p->border_bottom;
+	int x = p->left + p->width + p->border_left + p->border_right;
+	if (pan_x < x) pan_x = x;
 	XRRFreePanning(p);
+ex:
+	if (cinf) {
+		XRRFreeCrtcInfo(cinf);
+		cinf = NULL;
+	}
 }
-
 
 // mode: 0 - x,y, 1 - mon, 2 - mon_sz
 // mode 0 need only for scroll resolution
@@ -642,7 +652,7 @@ static void getRes(int x, int y, _short mode){
 	if (!xrrr) goto noxrr;
 	for (i = 0; i < xrrr->noutput; i++) {
 		RROutput o = xrrr->outputs[i];
-		XRROutputInfo *oinf = XRRGetOutputInfo(dpy, xrrr, o);
+		oinf = XRRGetOutputInfo(dpy, xrrr, o);
 		if (!oinf || oinf->connection != RR_Connected || !oinf->crtc) goto nextout;
 		cinf = XRRGetCrtcInfo(dpy, xrrr, oinf->crtc);
 		if (!cinf) goto nextout;
@@ -752,53 +762,77 @@ found:
 		}
 	}
 	if (!xrr) goto noxrr1;
-	if (mh4dpi && mw4dpi && !(pi[p_safe]&16)) {
-		double dpmh = (.0 + h4dpi) / mh4dpi;
-		double dpmw = (.0 + w4dpi) / mw4dpi;
-		_int m2 = (width != w4dpi || height != h4dpi || mwidth != mw4dpi || mheight != mh4dpi);
-
-		if (nm != m2 + 1) {
-			int nmon = 0;
-			XRRMonitorInfo *xrm = XRRGetMonitors(dpy,root,True,&nmon);
-			for (i = 0; i<nmon; i++) {
-				XRRMonitorInfo *m = &xrm[i];
-				if (!m->mwidth || !m->mheight) continue;
-				if (m->width == w4dpi && m->height == h4dpi && m->mwidth == mw4dpi && m->mheight == mh4dpi) continue;
-				if (m->width == width && m->height == height && m->mwidth == mwidth && m->mheight == mheight) continue;
-				fixMonSize(m->width, m->height, m->mwidth, m->mheight, &dpmw, &dpmh);
-			}
-			XRRFreeMonitors(xrm);
-		}
-		if (m2) fixMonSize(width, height, mwidth, mheight, &dpmw, &dpmh);
-		fixMonSize(w4dpi, h4dpi, mw4dpi, mh4dpi, &dpmw, &dpmh); 
-
-		int mh = scr_height / dpmh + .5;
-		int mw = scr_width / dpmw +.5;
-
-		if (mw != scr_mwidth || mh != scr_mheight) {
-			fprintf(stderr,"dpi %.1f %.1f -> %.1f %.1f\n",25.4*scr_width/scr_mwidth,25.4*scr_height/scr_mheight,25.4*scr_width/mw,25.4*scr_height/mh);
-			XRRSetScreenSize(dpy, root, scr_width, scr_height, mw, mh);
-		}
-	}
 	if (!(pi[p_safe]&32) && prim1 && prim1 != prim) {
 		fprintf(stderr,"primary output %lu\n",prim1);
 		XRRSetOutputPrimary(dpy,root,prim = prim1);
 	}
-	if (!(pi[p_safe]&64) && (xrrr = XRRGetScreenResources(dpy,root))) {
+	_short do_dpi = mh4dpi && mw4dpi && !(pi[p_safe]&16);
+	if ((do_dpi || !(pi[p_safe]&64)) && (xrrr = XRRGetScreenResources(dpy,root))) {
+		double dpmh, dpmw;
 		_int m2 = (crt1 != crt2);
-		pan = 0;
+		pan_mode = !!(pi[p_safe]&256);
+		pan_x = pan_y = 0;
+		cinf = NULL;
+		if (do_dpi) {
+			dpmh = (.0 + h4dpi) / mh4dpi;
+			dpmw = (.0 + w4dpi) / mw4dpi;
+		}
 		_pan(crt1);
 		if (nm != m2 + 1)
 		    for (i = 0; i < xrrr->noutput; i++) {
-			XRROutputInfo *oinf = XRRGetOutputInfo(dpy, xrrr, xrrr->outputs[i]);
+			oinf = XRRGetOutputInfo(dpy, xrrr, xrrr->outputs[i]);
 			if (!oinf) continue;
 			if (oinf->connection == RR_Connected && oinf->crtc && oinf->crtc != crt1 && oinf->crtc != crt2) {
+				if (do_dpi && oinf->mm_width && oinf->mm_height &&
+				    (cinf = XRRGetCrtcInfo(dpy,xrrr,oinf->crtc))) {
+					_rmode();
+					if ( !(_width == w4dpi && _height == h4dpi && oinf->mm_width == mw4dpi && oinf->mm_height == mh4dpi) &&
+					     !(_width == width && _height == height && oinf->mm_width == mwidth && oinf->mm_height == mheight))
+					fixMonSize(_width, _height, oinf->mm_width, oinf->mm_height, &dpmw, &dpmh);
+				}
 				_pan(oinf->crtc);
 			}
 			XRRFreeOutputInfo(oinf);
 		}
 		if (m2) _pan(crt2);
 		XRRFreeScreenResources(xrrr);
+
+		if (do_dpi) {
+			int mh, mw;
+			int w = scr_width, h = scr_height;
+			_short panned = (pan_x || pan_y);
+			if (panned) {
+				XFlush(dpy);
+				XSync(dpy,False);
+			}
+			if (!pan_x)
+				pan_x = w;
+			if (!pan_y)
+				pan_y = h;
+
+			if (m2) fixMonSize(width, height, mwidth, mheight, &dpmw, &dpmh);
+			fixMonSize(w4dpi, h4dpi, mw4dpi, mh4dpi, &dpmw, &dpmh);
+rep_size:
+			mh = pan_y / dpmh + .5;
+			mw = pan_x / dpmw +.5;
+
+			if (mw != scr_mwidth || mh != scr_mheight || pan_y != h || pan_x != w) {
+				fprintf(stderr,"dpi %.1f %.1f -> %.1f %.1f %ix%i\n",25.4*w/scr_mwidth,25.4*h/scr_mheight,25.4*pan_x/mw,25.4*pan_y/mh,pan_x,pan_y);
+				_error = 0;
+				XRRSetScreenSize(dpy, root, pan_x, pan_y, mw, mh);
+				if (panned) {
+					XFlush(dpy);
+					XSync(dpy,False);
+					if (_error) {
+						if (pan_y != h || pan_x != w) {
+							pan_x = w;
+							pan_y = h;
+							goto rep_size;
+						}
+					}
+				}
+			}
+		}
 	}
 noxrr1:
 	_ungrabX();
