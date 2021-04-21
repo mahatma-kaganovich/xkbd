@@ -1692,7 +1692,6 @@ evfree:
 			break;
 /*
 		    case CreateNotify:
-		    case ConfigureNotify:
 		    case UnmapNotify:
 		    case MapNotify:
 		    case ReparentNotify:
@@ -1700,6 +1699,11 @@ evfree:
 			goto ev;
 			break;
 */
+#ifdef XTG
+		    case ConfigureNotify:
+			XRRUpdateConfiguration(&ev);
+			break;
+#endif
 		    default:
 #undef e
 #define e ((XkbEvent)ev)
@@ -1733,6 +1737,7 @@ evfree:
 #define e ((XRRScreenChangeNotifyEvent*)&ev)
 			else if (ev.type == xrevent) {
 				TIME(T,e->timestamp > e->config_timestamp ? e->timestamp : e->config_timestamp);
+				XRRUpdateConfiguration(&ev);
 				resDev = 0;
 				oldShowPtr |= 2;
 				scr_width = e->width;

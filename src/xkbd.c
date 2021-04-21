@@ -1102,6 +1102,7 @@ _remapped:
 #undef e
 #define e ((XRRScreenChangeNotifyEvent*)&ev)
 		if (ev.type == xrevent) {
+			XRRUpdateConfiguration(&ev);
 // reduce blinking, but possible bugs (?)
 #if 0
 			static int serial = 0;
