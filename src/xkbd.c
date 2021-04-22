@@ -683,8 +683,18 @@ re_crts:
 				XRRCrtcInfo *cinf = XRRGetCrtcInfo (display, xrrr, oinf->crtc);
 				int x1=cinf->x;
 				int y1=cinf->y;
-				int x2=x1+cinf->width-1;
-				int y2=y1+cinf->height-1;
+				int x2=cinf->width;
+				int y2=cinf->height;
+				for (j=0; j<xrrr->nmode; j++) {
+					XRRModeInfo *m = &xrrr->modes[j];
+					if (m->id==cinf->mode) {
+						x2=m->width;
+						y2=m->height;
+						break;
+					}
+				}
+				x2+=x1-1;
+				y2+=y1-1;
 				XRRFreeCrtcInfo(cinf);
 				crts++;
 				if (found) {
