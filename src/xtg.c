@@ -355,7 +355,8 @@ static void WMState(Atom *states, short nn){
 
 #ifdef XTG
 
-int scr_width, scr_height, scr_mwidth, scr_mheight, scr_rotation;
+int scr_width, scr_height, scr_mwidth, scr_mheight;
+//int scr_rotation;
 int scrX1,scrY1,scrX2,scrY2;
 Rotation rotation;
 // usual dpi calculated from height only"
@@ -390,6 +391,14 @@ static inline void _ungrabX(){
 		_Xungrab();
 	}
 }
+
+static void _scr_size(){
+	scr_width = DisplayWidth(dpy,screen);
+	scr_height = DisplayHeight(dpy,screen);
+	scr_mwidth = DisplayWidthMM(dpy,screen);
+	scr_mheight = DisplayHeightMM(dpy,screen);
+}
+
 
 #if 0
 #define TIMEVAL(tv,x) struct timeval tv = { .tv_sec = (x) / 1000, .tv_usec = ((x) % 1000) * 1000 }
@@ -1227,7 +1236,6 @@ old:
 	return 0;
 }
 
-
 static void init(){
 	int evmask = PropertyChangeMask;
 
@@ -1290,10 +1298,7 @@ static void init(){
 	aNode = XInternAtom(dpy, "Device Node", False);
 #endif
 	}
-	scr_width = DisplayWidth(dpy,screen);
-	scr_height = DisplayHeight(dpy,screen);
-	scr_mwidth = DisplayWidthMM(dpy,screen);
-	scr_mheight = DisplayHeightMM(dpy,screen);
+	_scr_size();
 	//forceUngrab();
 #ifdef XSS
 	if (XScreenSaverQueryExtension(dpy, &xssevent, &xsserror)) {
@@ -1700,8 +1705,11 @@ evfree:
 			break;
 */
 #ifdef XTG
+#undef e
+#define e (ev.xconfigure)
 		    case ConfigureNotify:
-			XRRUpdateConfiguration(&ev);
+			if (xrr || !XRRUpdateConfiguration(&ev)) goto ev;
+			_scr_size();
 			break;
 #endif
 		    default:
@@ -1738,13 +1746,10 @@ evfree:
 			else if (ev.type == xrevent) {
 				TIME(T,e->timestamp > e->config_timestamp ? e->timestamp : e->config_timestamp);
 				XRRUpdateConfiguration(&ev);
+				_scr_size();
+				//scr_rotation = e->rotation;
 				resDev = 0;
 				oldShowPtr |= 2;
-				scr_width = e->width;
-				scr_height = e->height;
-				scr_mwidth = e->mwidth;
-				scr_mheight = e->mheight;
-				scr_rotation = e->rotation;
 			}
 #undef e
 #define e ((XFixesCursorNotifyEvent*)&ev)

@@ -650,14 +650,13 @@ stop_argv:
 	if (!XkbQueryExtension(display,&xkbop,&xkbEventType,&xkbError,&xkbmjr,&xkbmnr)) xkbEventType = 0;
 #endif
 
-chScreen1:
+chScreen:
    screen = DefaultScreen(display);
    rootWin = RootWindow(display, screen);
-   scr_mwidth=DisplayWidthMM(display, screen);
-   scr_mheight=DisplayHeightMM(display, screen);
-   scr_width=DisplayWidth(display, screen);
-   scr_height=DisplayHeight(display, screen);
-chScreen:
+   scr_width = DisplayWidth(display,screen);
+   scr_height = DisplayHeight(display,screen);
+   scr_mwidth = DisplayWidthMM(display,screen);
+   scr_mheight = DisplayHeightMM(display,screen);
 
    XGetWindowAttributes(display,rootWin,&wa0);
 
@@ -1039,7 +1038,7 @@ _remapped:
 		}
 		break;
 	    case Expose:
-		if (rootChanged(&wa)) goto chScreen1;
+		if (rootChanged(&wa)) goto chScreen;
 		if (resized) break;
 		if (unmapWin()) {
 			XMapWindow(display, win);
@@ -1051,7 +1050,7 @@ _remapped:
 		break;
 //	    case MapNotify:
 //	    case UnmapNotify:
-//		if (rootChanged(&wa)) goto chScreen1;
+//		if (rootChanged(&wa)) goto chScreen;
 //		break;
 	    case VisibilityNotify: if (dock & 32) {
 		Window rw, pw, *wins, *ww;
@@ -1078,7 +1077,7 @@ _remapped:
 		if (re && !lock_cnt++ && fork()) exit(0);
 	    }
 	    if ((dock & 256) && ev.xvisibility.state!=VisibilityUnobscured) {
-			if (rootChanged(&wa)) goto chScreen1;
+			if (rootChanged(&wa)) goto chScreen;
 			XRaiseWindow(display, win);
 	    }
 	    if (dock & (256|32)) XFlush(display);
@@ -1112,7 +1111,6 @@ _remapped:
 #undef e
 #define e ((XRRScreenChangeNotifyEvent*)&ev)
 		if (ev.type == xrevent) {
-			XRRUpdateConfiguration(&ev);
 // reduce blinking, but possible bugs (?)
 #if 0
 			static int serial = 0;
@@ -1120,11 +1118,8 @@ _remapped:
 			serial = e->serial;
 #endif
 			unmapOrRestart();
-			scr_width = e->width;
-			scr_height = e->height;
-			scr_mwidth = e->mwidth;
-			scr_mheight = e->mheight;
 			subpixel_order = e->subpixel_order;
+			XRRUpdateConfiguration(&ev);
 			goto chScreen;
 		}
 #endif
