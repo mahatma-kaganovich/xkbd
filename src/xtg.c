@@ -141,7 +141,7 @@ Touch touch[TOUCH_MAX];
 _short P=0,N=0;
 
 double resX, resY;
-int resDev = 0;
+int resDev;
 int xrr, xrevent, xrerror;
 Atom aMonName = None;
 #ifdef USE_XINERAMA
@@ -390,13 +390,6 @@ static inline void _ungrabX(){
 		XFlush(dpy);
 		_Xungrab();
 	}
-}
-
-static void _scr_size(){
-	scr_width = DisplayWidth(dpy,screen);
-	scr_height = DisplayHeight(dpy,screen);
-	scr_mwidth = DisplayWidthMM(dpy,screen);
-	scr_mheight = DisplayHeightMM(dpy,screen);
 }
 
 
@@ -872,7 +865,7 @@ static Bool filterTouch(Display *dpy1, XEvent *ev1, XPointer arg){
 }
 
 int xtestPtr, xtestPtr0;
-_short showPtr, oldShowPtr, curShow;
+_short showPtr, oldShowPtr = 0, curShow;
 _int tdevs = 0, tdevs2=0;
 //#define floating (pi[p_floating]==1)
 static void getHierarchy(){
@@ -1161,6 +1154,16 @@ static void initmap(){
 		}
 	}
 }
+
+static void _scr_size(){
+	scr_width = DisplayWidth(dpy,screen);
+	scr_height = DisplayHeight(dpy,screen);
+	scr_mwidth = DisplayWidthMM(dpy,screen);
+	scr_mheight = DisplayHeightMM(dpy,screen);
+	resDev = 0;
+	oldShowPtr |= 2;
+
+}
 #endif
 
 static void getWinGrp(){
@@ -1324,7 +1327,6 @@ static void init(){
 	ret = NULL;
 #ifdef XTG
 	curShow = 0;
-	oldShowPtr = 2;
 	showPtr = 1;
 	XFixesShowCursor(dpy,root);
 #endif
@@ -1748,8 +1750,6 @@ evfree:
 				XRRUpdateConfiguration(&ev);
 				_scr_size();
 				//scr_rotation = e->rotation;
-				resDev = 0;
-				oldShowPtr |= 2;
 			}
 #undef e
 #define e ((XFixesCursorNotifyEvent*)&ev)
