@@ -1,5 +1,5 @@
 /*
-	xtg v1.33 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.34 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -107,6 +107,9 @@ unsigned long rulLen, n;
 int xkbEventType, xkbError, n1, revert;
 XEvent ev;
 unsigned char *ret;
+
+static inline long min(long x,long y){ return x<y?x:y; }
+static inline long max(long x,long y){ return x>y?x:y; }
 
 #ifdef XTG
 int devid = 0;
@@ -355,13 +358,22 @@ static void WMState(Atom *states, short nn){
 
 #ifdef XTG
 
+// width/height: real/mode
+// width0/height0: -||- or first preferred (default/max) - safe bit 9(+256)
+// width1/height1: -||- not rotated (for panning)
+typedef struct _minf {
+unsigned int x,y,x2,y2,width,height,width0,height0,width1,height1;
+unsigned long mwidth,mheight;
+RROutput out;
+RRCrtc crt;
+Rotation rotation;
+} minf_t;
+
+minf_t minf,minf1,minf2;
+
 int scr_width, scr_height, scr_mwidth, scr_mheight;
 //int scr_rotation;
-int scrX1,scrY1,scrX2,scrY2;
-Rotation rotation;
 // usual dpi calculated from height only"
-int width, height, mwidth, mheight,
-    h4dpi, mh4dpi, w4dpi, mw4dpi;
 _short resXY,mon,mon_sz;
 double mon_grow;
 
@@ -450,19 +462,19 @@ ret:
 #endif
 
 static void map_to(){
-	float x=scrX1,y=scrY1,w=width,h=height,dx=pf[p_touch_add],dy=pf[p_touch_add];
+	float x=minf2.x,y=minf2.y,w=minf2.width,h=minf2.height,dx=pf[p_touch_add],dy=pf[p_touch_add];
 	_short m = 1;
 	if (pa[p_touch_add] && pa[p_touch_add][0] == '+' && pa[p_touch_add][1] == 0) {
-		if (mwidth && devX!=0) dx = (devX - mwidth)/2;
-		if (mheight && devY!=0) dy = (devY - mheight)/2;
+		if (minf2.mwidth && devX!=0) dx = (devX - minf2.mwidth)/2;
+		if (minf2.mheight && devY!=0) dy = (devY - minf2.mheight)/2;
 	}
-	if (dx!=0 && mwidth) {
-		float b = (w/mwidth)*dx;
+	if (dx!=0 && minf2.mwidth) {
+		float b = (w/minf2.mwidth)*dx;
 		x-=b;
 		w+=b*2;
 	}
-	if (dy!=0 && mheight) {
-		float b = (h/mheight)*dy;
+	if (dy!=0 && minf2.mheight) {
+		float b = (h/minf2.mheight)*dy;
 		y-=b;
 		h+=b*2;
 	}
@@ -470,7 +482,7 @@ static void map_to(){
 	y/=scr_height;
 	w/=scr_width;
 	h/=scr_height;
-	switch (rotation) {
+	switch (minf2.rotation) {
 	    case RR_Reflect_X|RR_Rotate_0:
 	    case RR_Reflect_Y|RR_Rotate_180:
 		x+=w; w=-w;
@@ -512,9 +524,9 @@ static void map_to(){
 	XFree(d);
 }
 
-static void fixMonSize(int width, int height, int mwidth, int mheight, double *dpmw, double *dpmh) {
-	if (!mheight) return;
-	double _min, _max, m,  mh = height / *dpmh;
+static void fixMonSize(minf_t *minf, double *dpmw, double *dpmh) {
+	if (!minf->mheight) return;
+	double _min, _max, m,  mh = minf->height / *dpmh;
 
 	// diagonal -> 4:3 height
 	if (
@@ -554,63 +566,100 @@ static void fixMonSize(int width, int height, int mwidth, int mheight, double *d
 	}
 }
 
-XRRScreenResources *xrrr;
-XRRCrtcInfo *cinf;
-XRROutputInfo *oinf;
-unsigned int _width,_height;
-static void _rmode(){
-	int i;
-	for (i=0; i<xrrr->nmode; i++) {
-		XRRModeInfo *m = &xrrr->modes[i];
-		if (m->id == cinf->mode) {
-			_width = m->width;
-			_height = m->height;
-			return;
-		}
-	}
-	_width = cinf->width;
-	_height = cinf->height;
-}
+XRRScreenResources *xrrr = NULL;
+XRRCrtcInfo *cinf = NULL;
+XRROutputInfo *oinf = NULL;
+int nout = -1;
 
-unsigned int pan_x,pan_y,pan_cnt;
-_short pan_mode;
-static void _pan(RRCrtc crt) {
-	if (!crt) goto ex;
-	if (pi[p_safe]&64) goto ex;
-	XRRPanning *p = XRRGetPanning(dpy,xrrr,crt);
-	if (!p) goto ex;
-	if (pan_mode || !p->width || !p->height) {
-		if (!cinf) {
-			cinf = XRRGetCrtcInfo(dpy,xrrr,crt);
-			if (pan_mode) _rmode();
-		}
-		if (cinf) {
-			if (!pan_mode) {
-				_width = cinf->width;
-				_height = cinf->height;
-			}
-			if (p->width != _width || p->height != _height) {
-				p->width = _width;
-				p->height = _height;
-				p->top = pan_y + 1;
-			}
-		}
-	}
-	if (p->top != pan_y || p->left) {
-		p->top = pan_y;
-		p->left = 0;
-		fprintf(stderr,"crtc %lu panning %ix%i+%i+%i/track:%ix%i+%i+%i/border:%i/%i/%i/%i\n",crt,p->width,p->height,p->left,p->top,  p->track_width,p->track_height,p->track_left,p->track_top,  p->border_left,p->border_top,p->border_right,p->border_bottom);
-		if (XRRSetPanning(dpy,xrrr,crt,p)==Success) pan_cnt++;
-	}
-	pan_y += p->height + p->border_top + p->border_bottom;
-	int x = p->left + p->width + p->border_left + p->border_right;
-	if (pan_x < x) pan_x = x;
-	XRRFreePanning(p);
-ex:
+static _short xrMons(){
+next:
 	if (cinf) {
 		XRRFreeCrtcInfo(cinf);
+		XRRFreeOutputInfo(oinf);
 		cinf = NULL;
+		oinf = NULL;
 	}
+	while (xrrr && ++nout<xrrr->noutput) {
+		if (!(minf.out = xrrr->outputs[nout]) || !(oinf = XRRGetOutputInfo(dpy, xrrr, minf.out))) continue;
+		if (oinf->connection == RR_Connected && (minf.crt = oinf->crtc) && (cinf=XRRGetCrtcInfo(dpy, xrrr, minf.crt))) break;
+		XRRFreeOutputInfo(oinf);
+		oinf = NULL;
+	}
+	if (!oinf) {
+		nout = -1;
+		return 0;
+	}
+	minf.width = minf.width0 = cinf->width;
+	minf.height = minf.height0 = cinf->height;
+	minf.mwidth = oinf->mm_width;
+	minf.mheight = oinf->mm_height;
+	minf.x = cinf->x;
+	minf.y = cinf->y;
+	minf.rotation = cinf->rotation;
+	XRRModeInfo *m,*m0 = NULL,*m1 = NULL;
+	RRMode id = cinf->mode;
+	RRMode id0 = id + 1;
+	unsigned long i;
+	if (oinf->npreferred && id != (id0 = oinf->modes[0]) && !(pi[p_safe]&256)) for (i=0; i<xrrr->nmode; i++) {
+		m = &xrrr->modes[i];
+		if (m->id == id) {
+			m1 = m;
+			if (m0) break;
+		} else if (m->id == id0) {
+			m0 = m;
+			if (m1) break;
+		}
+	} else for (i=0; i<xrrr->nmode; i++) {
+		m = &xrrr->modes[i];
+		if (m->id == id) {
+			m1 = m;
+			if (id0 == id) m0 = m;
+			break;
+		}
+	}
+	if (m1) {
+		minf.width = m1->width;
+		minf.height = m1->height;
+	}
+	if (m0) {
+		minf.width0 = m0->width;
+		minf.height0 = m0->height;
+	}
+	minf.width1 = minf.width0;
+	minf.height1 = minf.height0;
+	if (minf.rotation & (RR_Rotate_90|RR_Rotate_180)) {
+		i = minf.width;
+		minf.width = minf.height;
+		minf.height = i;
+		i = minf.width0;
+		minf.width0 = minf.height0;
+		minf.height0 = i;
+		i = minf.mwidth;
+		minf.mwidth = minf.mheight;
+		minf.mheight = i;
+	}
+//	if (minf.width) minf.x2 = minf.x + minf.width;
+//	if (minf.height) minf.y2 = minf.y + minf.height;
+	return 1;
+}
+
+
+unsigned int pan_x,pan_y,pan_cnt;
+static void _pan(minf_t *m) {
+	if (pi[p_safe]&64) return;
+	XRRPanning *p = XRRGetPanning(dpy,xrrr,m->crt);
+	if (!p) return;
+	if (p->top != pan_y || p->left || p->width != m->width1 || p->height != m->height1) {
+		p->top = pan_y;
+		p->left = 0;
+		p->width = m->width1;
+		p->height = m->height1;
+		fprintf(stderr,"crtc %lu panning %ix%i+%i+%i/track:%ix%i+%i+%i/border:%i/%i/%i/%i\n",m->crt,p->width,p->height,p->left,p->top,  p->track_width,p->track_height,p->track_left,p->track_top,  p->border_left,p->border_top,p->border_right,p->border_bottom);
+		if (XRRSetPanning(dpy,xrrr,m->crt,p)==Success) pan_cnt++;
+	}
+	pan_y = max(pan_y,p->top + m->height0 + p->border_top + p->border_bottom);
+	pan_x = max(pan_x,p->left + m->width0 + p->border_left + p->border_right);
+	XRRFreePanning(p);
 }
 
 // mode: 0 - x,y, 1 - mon, 2 - mon_sz
@@ -619,17 +668,16 @@ ex:
 static void getRes(int x, int y, _short mode){
 	int i,j;
 	_int found = 0, nm = 0;
-	RRCrtc crt1 = 0, crt2 = 0;
-	RROutput prim = 0, prim1 = 0;
+	RROutput prim = 0;
 
 //	XGetWindowAttributes(dpy, DefaultRootWindow(dpy), &wa);
-	mwidth = scr_mwidth;
-	mheight = scr_mheight;
-	width = scr_width;
-	height = scr_height;
-	rotation = 0;
-	scrX1 = scrY1 = 0;
-	h4dpi = mh4dpi = w4dpi = mw4dpi = 0;
+	memset(&minf1,0,sizeof(minf1));
+	memset(&minf2,0,sizeof(minf2));
+	minf2.mwidth = scr_mwidth;
+	minf2.mheight = scr_mheight;
+	minf2.width = scr_width;
+	minf2.height = scr_height;
+
 #ifdef USE_EVDEV
 	if (mode == 2) {
 		getEvRes();
@@ -643,7 +691,7 @@ static void getRes(int x, int y, _short mode){
 	// try dont lock for libevent, but still unsure (got one fd lock)
 	_grabX();
 
-	if (!xrr) goto noxrr;
+	if (!xrr || !(xrrr = XRRGetScreenResources(dpy,root))) goto noxrr;
 	int n = 0;
 	RROutput prim0 = prim = XRRGetOutputPrimary(dpy, root);
 	if ((pi[p_safe]&128)) {
@@ -651,15 +699,7 @@ static void getRes(int x, int y, _short mode){
 		prim0 = 0;
 	}
 	if (!(pi[p_safe]&32)) prim0 = 0;
-	xrrr = XRRGetScreenResources(dpy,root);
-	if (!xrrr) goto noxrr;
-	for (i = 0; i < xrrr->noutput; i++) {
-		RROutput o = xrrr->outputs[i];
-		oinf = XRRGetOutputInfo(dpy, xrrr, o);
-		if (!oinf || oinf->connection != RR_Connected || !oinf->crtc) goto nextout;
-		cinf = XRRGetCrtcInfo(dpy, xrrr, oinf->crtc);
-		if (!cinf) goto nextout;
-		_rmode();
+	while (xrMons()) {
 		nm++;
 		if((!found
 #ifdef USE_EVDEV
@@ -669,49 +709,28 @@ static void getRes(int x, int y, _short mode){
 		    ((!mode && !found)
 #ifdef USE_EVDEV
 			    || (mon_sz && (
-				(oinf->mm_width <= devX && devX - oinf->mm_width < mon_grow
-				    && oinf->mm_height <= devY && devY - oinf->mm_height < mon_grow)
-				|| (oinf->mm_height <= devX && devX - oinf->mm_height < mon_grow
-				    && oinf->mm_width <= devY && devY - oinf->mm_width < mon_grow)
+				(minf.mwidth <= devX && devX - minf.mwidth < mon_grow
+				    && minf.mheight <= devY && devY - minf.mheight < mon_grow)
+				|| (minf.mheight <= devX && devX - minf.mheight < mon_grow
+				    && minf.mwidth <= devY && devY - minf.mwidth < mon_grow)
 			    ))
 #endif
 			    || (mode == 1 && (pi[p_mon] == ++n ||
 				(pa[p_mon] && !strcmp(oinf->name,pa[p_mon]))))
 		    ) &&
-		    ( mode || (x >= cinf->x && y >= cinf->y && x < cinf->x + _width && y < cinf->y + _height)) &&
+		    ( mode || (x >= cinf->x && y >= cinf->y && x < cinf->x + minf.width && y < cinf->y + minf.height)) &&
 		    (!found++ || !mode)) {
-			scrX1 = cinf->x;
-			scrY1 = cinf->y;
-			mwidth = oinf->mm_width;
-			mheight = oinf->mm_height;
-			width=_width;
-			height=_height;
-			rotation = cinf->rotation;
-			crt2 = oinf->crtc;
-			if ((prim0 == o) || (!prim0 && mheight > mh4dpi)) {
-				h4dpi = height;
-				mh4dpi = mheight;
-				w4dpi = width;
-				mw4dpi = mwidth;
-				prim1 = o;
-				crt1 = oinf->crtc;
-			} //else if (!prim1) prim1 = o;
-		}
-		if (oinf->mm_height) {
-			if (!(h4dpi && prim0) && ((prim0 == o) || (!prim0 && oinf->mm_height > mh4dpi))) {
-				h4dpi = _height;
-				mh4dpi = oinf->mm_height;
-				w4dpi = _width;
-				mw4dpi = oinf->mm_width;
-				prim1 = o;
-				crt1 = oinf->crtc;
+			minf2 = minf;
+			if ((prim0 == minf.out) || (!prim0 && minf.mheight > minf1.mheight)) {
+				minf1 = minf;
+				continue;
 			}
 		}
-		XRRFreeCrtcInfo(cinf);
-nextout:
-		XRRFreeOutputInfo(oinf);
+		if (minf.mheight) {
+			if (!(minf1.height && prim0) && ((prim0 == minf.out) || (!prim0 && minf.mheight > minf1.mheight)))
+				minf1 = minf;
+		}
 	}
-	XRRFreeScreenResources(xrrr);
 noxrr:
 #ifdef USE_XINERAMA
 	if (!found && xir && XineramaIsActive(dpy) && pi[p_mon]) {
@@ -719,11 +738,11 @@ noxrr:
 		i=pi[p_mon]-1;
 		XineramaScreenInfo *s = XineramaQueryScreens(dpy, &n);
 		if (i>=0 && i<n) {
-			scrX1 = s[i].x_org;
-			scrY1 = s[i].y_org;
-			width = s[i].width;
-			height = s[i].height;
-			rotation = 0;
+			minf2.x = s[i].x_org;
+			minf2.y = s[i].y_org;
+			minf2.width = s[i].minf2.width;
+			minf2.height = s[i].minf2.height;
+			minf2.rotation = 0;
 		}
 		XFree(s);
 	}
@@ -732,75 +751,68 @@ found:
 #ifdef USE_EVDEV
 	// workaround for some broken video drivers
 	// we can
-	if ((!found || !mwidth || !mheight)
+	if ((!found || !minf2.mwidth || !minf2.mheight)
 	    && (pf[p_touch_add] != 0 || pf[p_res]<0)
 	    ) {
 		if (mode != 2) getEvRes();
 		// +.5 ?
-		if (devX) mwidth = devX;
-		if (devY) mheight = devY;
-		if (!mh4dpi && h4dpi) mh4dpi = mheight;
-		if (!mw4dpi && w4dpi) mw4dpi = mwidth;
+		if (devX) minf2.mwidth = devX;
+		if (devY) minf2.mheight = devY;
+		if (!minf1.mheight && minf1.height) minf1.mheight = minf2.mheight;
+		if (!minf1.mwidth && minf1.width) minf1.mwidth = minf2.mwidth;
 	}
 #endif
-	scrX2 = scrX1 + width - 1;
-	scrY2 = scrY1 + height - 1;
-	if (mwidth > mheight && width < height && mheight) {
-		i = mwidth;
-		mwidth = mheight;
-		mheight = i;
+	minf2.x2 = minf2.x + minf2.width - 1;
+	minf2.y2 = minf2.y + minf2.height - 1;
+	if (minf2.mwidth > minf2.mheight && minf2.width < minf2.height && minf2.mheight) {
+		i = minf2.mwidth;
+		minf2.mwidth = minf2.mheight;
+		minf2.mheight = i;
 	}
 	if (mode==2) {
 		 if (found==1) map_to();
 		 else resXY = pf[p_res]<0;
 	}
 	if (pf[p_res]<0) {
-		if (!mwidth && !mheight) {
+		if (!minf2.mwidth && !minf2.mheight) {
 			resX = resY = -pf[p_res];
 			fprintf(stderr,"Screen dimensions in mm unknown. Use resolution in dots.\n");
 		} else {
-			if (mwidth) resX = (0.+scr_width)/mwidth*(-pf[p_res]);
-			resY = mheight ? (0.+scr_height)/mheight*(-pf[p_res]) : resX;
-			if (!mwidth) resX = resY;
+			if (minf2.mwidth) resX = (0.+scr_width)/minf2.mwidth*(-pf[p_res]);
+			resY = minf2.mheight ? (0.+scr_height)/minf2.mheight*(-pf[p_res]) : resX;
+			if (!minf2.mwidth) resX = resY;
 		}
 	}
-	if (!xrr) goto noxrr1;
-	if (!(pi[p_safe]&32) && prim1 && prim1 != prim) {
-		fprintf(stderr,"primary output %lu\n",prim1);
-		XRRSetOutputPrimary(dpy,root,prim = prim1);
+	if (!xrr || !(xrrr = xrrr ? : XRRGetScreenResources(dpy,root))) goto noxrr1;
+	if (!(pi[p_safe]&32) && minf1.out  && minf1.out != prim) {
+		fprintf(stderr,"primary output %lu\n",minf1.out);
+		XRRSetOutputPrimary(dpy,root,prim = minf1.out);
 	}
-	_short do_dpi = mh4dpi && mw4dpi && !(pi[p_safe]&16);
-	if ((do_dpi || !(pi[p_safe]&64)) && (xrrr = XRRGetScreenResources(dpy,root))) {
+	_short do_dpi = minf1.mheight && minf1.mwidth && !(pi[p_safe]&16);
+	if ((do_dpi || !(pi[p_safe]&64))) {
 		double dpmh, dpmw;
-		_int m2 = (crt1 != crt2);
-		pan_mode = !!(pi[p_safe]&256);
+		_int m2 = minf1.crt && minf2.crt && (minf1.crt != minf2.crt);
 		pan_x = pan_y = pan_cnt = 0;
 		cinf = NULL;
 		if (do_dpi) {
-			dpmh = (.0 + h4dpi) / mh4dpi;
-			dpmw = (.0 + w4dpi) / mw4dpi;
+			dpmh = (.0 + minf1.height) / minf1.mheight;
+			dpmw = (.0 + minf1.width) / minf1.mwidth;
 			// auto resolution usual equal physical propotions
 			// in mode resolution - use one max density
 		}
-		_pan(crt1);
+		_pan(&minf1);
 		if (nm != m2 + 1)
-		    for (i = 0; i < xrrr->noutput; i++) {
-			oinf = XRRGetOutputInfo(dpy, xrrr, xrrr->outputs[i]);
-			if (!oinf) continue;
-			if (oinf->connection == RR_Connected && oinf->crtc && oinf->crtc != crt1 && oinf->crtc != crt2) {
-				if (do_dpi && oinf->mm_width && oinf->mm_height &&
-				    (cinf = XRRGetCrtcInfo(dpy,xrrr,oinf->crtc))) {
-					_rmode();
-					if ( !(_width == w4dpi && _height == h4dpi && oinf->mm_width == mw4dpi && oinf->mm_height == mh4dpi) &&
-					     !(_width == width && _height == height && oinf->mm_width == mwidth && oinf->mm_height == mheight))
-					fixMonSize(_width, _height, oinf->mm_width, oinf->mm_height, &dpmw, &dpmh);
+		    while (xrMons()) {
+			if (minf.crt != minf1.crt && minf.crt != minf2.crt) {
+				if (do_dpi && minf.mwidth && minf.mheight) {
+					if ( !(minf.width == minf1.width && minf.height == minf1.height && minf.mwidth == minf1.mwidth && minf.mheight == minf1.mheight) &&
+					     !(minf.width == minf2.width && minf.height == minf2.height && minf.mwidth == minf2.mwidth && minf.mheight == minf2.mheight))
+					fixMonSize(&minf, &dpmw, &dpmh);
 				}
-				_pan(oinf->crtc);
+				_pan(&minf);
 			}
-			XRRFreeOutputInfo(oinf);
 		}
-		if (m2) _pan(crt2);
-		XRRFreeScreenResources(xrrr);
+		if (m2) _pan(&minf2);
 
 		if (do_dpi) {
 			int mh, mw;
@@ -813,8 +825,8 @@ found:
 				XSync(dpy,False);
 			}
 
-			if (m2) fixMonSize(width, height, mwidth, mheight, &dpmw, &dpmh);
-			fixMonSize(w4dpi, h4dpi, mw4dpi, mh4dpi, &dpmw, &dpmh);
+			if (m2) fixMonSize(&minf2, &dpmw, &dpmh);
+			fixMonSize(&minf1, &dpmw, &dpmh);
 rep_size:
 			if (!(pi[p_safe]&512))
 				if (dpmh > dpmw) dpmw = dpmh;
@@ -841,6 +853,8 @@ rep_size:
 	}
 noxrr1:
 	_ungrabX();
+	if (xrrr) XRRFreeScreenResources(xrrr);
+	xrrr = NULL;
 }
 
 _short busy;
@@ -1464,7 +1478,7 @@ ev2:
 				end = (ev.xcookie.evtype == XI_TouchEnd
 						|| (e->flags & XITouchPendingEnd));
 				x2 = e->root_x + pf[p_round], y2 = e->root_y + pf[p_round];
-				g = ((int)x2 <= scrX1) ? BUTTON_RIGHT : ((int)x2 >= scrX2) ? BUTTON_LEFT : ((int)y2 <= scrY1) ? BUTTON_UP : ((int)y2 >= scrY2) ? BUTTON_DOWN : 0;
+				g = ((int)x2 <= minf2.x) ? BUTTON_RIGHT : ((int)x2 >= minf2.x2) ? BUTTON_LEFT : ((int)y2 <= minf2.y) ? BUTTON_UP : ((int)y2 >= minf2.y2) ? BUTTON_DOWN : 0;
 				if (g) tt |= PH_BORDER;
 				if (resDev != devid) {
 					// slow for multiple touchscreens
