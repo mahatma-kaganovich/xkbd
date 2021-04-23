@@ -600,7 +600,7 @@ next:
 	RRMode id = cinf->mode;
 	RRMode id0 = id + 1;
 	unsigned long i;
-	if (oinf->npreferred && id != (id0 = oinf->modes[0]) && !(pi[p_safe]&256)) for (i=0; i<xrrr->nmode; i++) {
+	if (oinf->npreferred && id != (id0 = oinf->modes[0])) for (i=0; i<xrrr->nmode; i++) {
 		m = &xrrr->modes[i];
 		if (m->id == id) {
 			m1 = m;
@@ -617,6 +617,7 @@ next:
 			break;
 		}
 	}
+	if ((pi[p_safe]&256)) m0 = m1;
 	if (m1) {
 		minf.width = m1->width;
 		minf.height = m1->height;
