@@ -116,7 +116,7 @@ int devid = 0;
 int xiopcode, xierror, xfopcode=0, xfevent=0, xferror=0;
 Atom aFloat,aMatrix;
 #ifdef USE_EVDEV
-Atom aNode;
+Atom aNode, aABS;
 #endif
 #define MASK_LEN XIMaskLen(XI_LASTEVENT)
 typedef unsigned char xiMask[MASK_LEN];
@@ -441,6 +441,15 @@ static void getEvRes(){
 	char *name;
 	int f;
 	unsigned long n,b;
+	float xyz[3];
+	if (XIGetProperty(dpy,devid,aABS,0,9,False,XA_STRING,&t,&f,&n,&b,(void*)&xyz) == Success
+		&& t==aFloat && f==32 && n == 3
+		) {
+		devX = xyz[0];
+		devY = xyz[1];
+//		devZ = xyz[2];
+		return;
+	}
 	devX = devY = 0;
 	if (XIGetProperty(dpy,devid,aNode,0,1024,False,XA_STRING,&t,&f,&n,&b,(void*)&name) != Success) return;
 	if (grabcnt && (pi[p_safe]&2)) _Xungrab();
@@ -449,11 +458,13 @@ static void getEvRes(){
 	if (fd < 0) goto ret;
 	struct libevdev *device;
 	if (!libevdev_new_from_fd(fd, &device)){
-		devX = _evsize(device,ABS_X);
-		devY = _evsize(device,ABS_Y);
+		xyz[0] = devX = _evsize(device,ABS_X);
+		xyz[1] = devY = _evsize(device,ABS_Y);
+		xyz[2] = _evsize(device,ABS_Z);
 		//struct input_absinfo *z = libevdev_get_abs_info(&device, ABS_Z);
 		//if (z) fprintf(stderr,"ABS_Z: %i %i %i\n",z->minimum,z->maximum,z->resolution);
 		libevdev_free(device);
+		XIChangeProperty(dpy,devid,aABS,aFloat,32,PropModeReplace,&xyz,3);
 	}
 	close(fd);
 ret:
@@ -1314,6 +1325,7 @@ static void init(){
 #endif
 #ifdef USE_EVDEV
 	aNode = XInternAtom(dpy, "Device Node", False);
+	aABS = XInternAtom(dpy, "Device libinput ABS", False);
 #endif
 	}
 	_scr_size();
