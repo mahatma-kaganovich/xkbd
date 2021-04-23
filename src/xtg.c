@@ -432,7 +432,12 @@ static int _delay(Time delay){
 }
 
 #ifdef USE_EVDEV
-double devX = 0, devY = 0;
+#ifdef ABS_Z
+#define NdevABS 3
+#else
+#define NdevABS 2
+#endif
+float devABS[NdevABS] = {0,0,};
 static double _evsize(struct libevdev *dev, int c) {
 	double r = 0;
 	struct input_absinfo *x = libevdev_get_abs_info(dev, c);
@@ -444,16 +449,10 @@ static void getEvRes(){
 	char *name;
 	int f;
 	unsigned long n,b;
-	float xyz[3];
-	if (!(pi[p_safe]&1024) & XIGetProperty(dpy,devid,aABS,0,9,False,XA_STRING,&t,&f,&n,&b,(void*)&xyz) == Success
-		&& t==aFloat && f==32 && n == 3
-		) {
-		devX = xyz[0];
-		devY = xyz[1];
-//		devZ = xyz[2];
-		return;
-	}
-	devX = devY = 0;
+	if (!(pi[p_safe]&1024) & XIGetProperty(dpy,devid,aABS,0,NdevABS,False,XA_STRING,&t,&f,&n,&b,(void*)&devABS) == Success
+		&& t==aFloat && f==32 && n == NdevABS
+		) return;
+	memset(&devABS,0,sizeof(devABS));
 	if (XIGetProperty(dpy,devid,aNode,0,1024,False,XA_STRING,&t,&f,&n,&b,(void*)&name) != Success) return;
 	if (grabcnt && (pi[p_safe]&2)) _Xungrab();
 	int fd = open(name, O_RDONLY|O_NONBLOCK);
@@ -461,13 +460,13 @@ static void getEvRes(){
 	if (fd < 0) goto ret;
 	struct libevdev *device;
 	if (!libevdev_new_from_fd(fd, &device)){
-		xyz[0] = devX = _evsize(device,ABS_X);
-		xyz[1] = devY = _evsize(device,ABS_Y);
-		xyz[2] = _evsize(device,ABS_Z);
-		//struct input_absinfo *z = libevdev_get_abs_info(&device, ABS_Z);
-		//if (z) fprintf(stderr,"ABS_Z: %i %i %i\n",z->minimum,z->maximum,z->resolution);
+		devABS[0] = _evsize(device,ABS_X);
+		devABS[1] = _evsize(device,ABS_Y);
+#ifdef ABS_Z
+		devABS[2] = _evsize(device,ABS_Z);
+#endif
 		libevdev_free(device);
-		XIChangeProperty(dpy,devid,aABS,aFloat,32,PropModeReplace,&xyz,3);
+		XIChangeProperty(dpy,devid,aABS,aFloat,32,PropModeReplace,(void*)&devABS,NdevABS);
 	}
 	close(fd);
 ret:
@@ -479,8 +478,8 @@ static void map_to(){
 	float x=minf2.x,y=minf2.y,w=minf2.width,h=minf2.height,dx=pf[p_touch_add],dy=pf[p_touch_add];
 	_short m = 1;
 	if (pa[p_touch_add] && pa[p_touch_add][0] == '+' && pa[p_touch_add][1] == 0) {
-		if (minf2.mwidth && devX!=0) dx = (devX - minf2.mwidth)/2;
-		if (minf2.mheight && devY!=0) dy = (devY - minf2.mheight)/2;
+		if (minf2.mwidth && devABS[0]!=0) dx = (devABS[0] - minf2.mwidth)/2;
+		if (minf2.mheight && devABS[1]!=0) dy = (devABS[1] - minf2.mheight)/2;
 	}
 	if (dx!=0 && minf2.mwidth) {
 		float b = (w/minf2.mwidth)*dx;
@@ -696,7 +695,7 @@ static void getRes(int x, int y, _short mode){
 #ifdef USE_EVDEV
 	if (mode == 2) {
 		getEvRes();
-		if (devX == 0 || devY == 0) {
+		if (devABS[0] == 0 || devABS[1] == 0) {
 			_grabX();
 			goto found;
 		}
@@ -724,10 +723,10 @@ static void getRes(int x, int y, _short mode){
 		    ((!mode && !found)
 #ifdef USE_EVDEV
 			    || (mon_sz && (
-				(minf.mwidth <= devX && devX - minf.mwidth < mon_grow
-				    && minf.mheight <= devY && devY - minf.mheight < mon_grow)
-				|| (minf.mheight <= devX && devX - minf.mheight < mon_grow
-				    && minf.mwidth <= devY && devY - minf.mwidth < mon_grow)
+				(minf.mwidth <= devABS[0] && devABS[0] - minf.mwidth < mon_grow
+				    && minf.mheight <= devABS[1] && devABS[1] - minf.mheight < mon_grow)
+				|| (minf.mheight <= devABS[0] && devABS[0] - minf.mheight < mon_grow
+				    && minf.mwidth <= devABS[1] && devABS[1] - minf.mwidth < mon_grow)
 			    ))
 #endif
 			    || (mode == 1 && (pi[p_mon] == ++n ||
@@ -771,8 +770,8 @@ found:
 	    ) {
 		if (mode != 2) getEvRes();
 		// +.5 ?
-		if (devX) minf2.mwidth = devX;
-		if (devY) minf2.mheight = devY;
+		if (devABS[0]) minf2.mwidth = devABS[0];
+		if (devABS[1]) minf2.mheight = devABS[1];
 		if (!minf1.mheight && minf1.height) minf1.mheight = minf2.mheight;
 		if (!minf1.mwidth && minf1.width) minf1.mwidth = minf2.mwidth;
 	}
