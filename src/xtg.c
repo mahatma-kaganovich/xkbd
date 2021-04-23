@@ -112,12 +112,14 @@ static inline long min(long x,long y){ return x<y?x:y; }
 static inline long max(long x,long y){ return x>y?x:y; }
 
 #ifdef XTG
+//#define DEV_CHANGED
 int devid = 0;
 int xiopcode, xierror, xfopcode=0, xfevent=0, xferror=0;
 Atom aFloat,aMatrix;
 #ifdef USE_EVDEV
 Atom aNode, aABS;
 #endif
+
 #define MASK_LEN XIMaskLen(XI_LASTEVENT)
 typedef unsigned char xiMask[MASK_LEN];
 xiMask ximaskButton = {}, ximaskTouch = {}, ximask0 = {};
@@ -431,6 +433,7 @@ static int _delay(Time delay){
 	return !Select(fd+1, &rs, 0, 0, &tv);
 }
 
+
 #ifdef USE_EVDEV
 #ifdef ABS_Z
 #define NdevABS 3
@@ -438,22 +441,49 @@ static int _delay(Time delay){
 #define NdevABS 2
 #endif
 float devABS[NdevABS] = {0,0,};
+
+static _short _xiGetProp(int devid, Atom prop, Atom type, unsigned char **data, int cnt, _short chk){
+	Atom t;
+	int f;
+	unsigned long n,b;
+	void *d = NULL;
+
+	if (XIGetProperty(dpy,devid,prop,0,cnt,False,type,&t,&f,&n,&b,(void*)&d) != Success) return 0;
+	_short r = 0;
+	if (t == type && !b)
+	if (t == XA_STRING) {
+		if (!chk) r++;
+		if (*data) {
+			if (!strcmp(*data,d)) r++;
+			else if (!chk) strcpy(*data,d);
+		} else *data = d;
+	} else if (f == 32 && n == cnt) {
+		if (!chk) r++;
+		n <<= 2;
+		if (*data) {
+			if (!memcmp(*data,d,n)) r++;
+			else if (!chk) memcpy(*data,d,n);
+		} else *data = d;
+	}
+	if (*data != d) XFree(d);
+	return r;
+}
+
+static _short xiGetProp(int devid, Atom prop, Atom type, void *data, int cnt, _short chk){
+	return _xiGetProp(devid,prop,type,(void*)&data,cnt,chk);
+}
+
 static double _evsize(struct libevdev *dev, int c) {
 	double r = 0;
-	struct input_absinfo *x = libevdev_get_abs_info(dev, c);
+	const struct input_absinfo *x = libevdev_get_abs_info(dev, c);
 	if (x && x->resolution) r = (r + x->maximum - x->minimum)/x->resolution;
 	return r;
 }
 static void getEvRes(){
-	Atom t;
-	char *name;
-	int f;
-	unsigned long n,b;
-	if (!(pi[p_safe]&1024) & XIGetProperty(dpy,devid,aABS,0,NdevABS,False,XA_STRING,&t,&f,&n,&b,(void*)&devABS) == Success
-		&& t==aFloat && f==32 && n == NdevABS
-		) return;
+	if (!(pi[p_safe]&1024) && xiGetProp(devid,aABS,aFloat,&devABS,NdevABS,0)) return;
 	memset(&devABS,0,sizeof(devABS));
-	if (XIGetProperty(dpy,devid,aNode,0,1024,False,XA_STRING,&t,&f,&n,&b,(void*)&name) != Success) return;
+	unsigned char *name = NULL;
+	if (!_xiGetProp(devid,aNode,XA_STRING,&name,1024,0)) return;
 	if (grabcnt && (pi[p_safe]&2)) _Xungrab();
 	int fd = open(name, O_RDONLY|O_NONBLOCK);
 	XFree(name);
@@ -527,14 +557,8 @@ static void map_to(){
 	float matrix[9] = {0,0,x,0,0,y,0,0,1};
 	matrix[1-m]=w;
 	matrix[3+m]=h;
-	Atom t;
-	int f;
-	unsigned long n,b;
-	unsigned char *d = NULL;
-	if (XIGetProperty(dpy,devid,aMatrix,0,9,False,aFloat,&t,&f,&n,&b,&d) == Success
-	    && t==aFloat && f==32 && n == 9 && !b && memcmp(&matrix,d,sizeof(matrix)))
+	if (!xiGetProp(devid,aMatrix,aFloat,&matrix,9,1))
 		XIChangeProperty(dpy,devid,aMatrix,aFloat,32,PropModeReplace,(void*)&matrix,9);
-	XFree(d);
 }
 
 static void fixMonSize(minf_t *minf, double *dpmw, double *dpmh) {
@@ -1299,7 +1323,9 @@ static void init(){
 	XISetMask(ximaskTouch, XI_TouchBegin);
 	XISetMask(ximaskTouch, XI_TouchUpdate);
 	XISetMask(ximaskTouch, XI_TouchEnd);
+
 	XISetMask(ximaskTouch, XI_PropertyEvent);
+	XISetMask(ximask0, XI_PropertyEvent);
 
 	XISetMask(ximask0, XI_HierarchyChanged);
 #ifdef DEV_CHANGED
@@ -1412,9 +1438,9 @@ int main(int argc, char **argv){
 		int x, y;
 		unsigned int z = 0;
 		char k[128];
-		switch (sscanf(*a,"%i:%i:%127s",&x,&y,&k)) {
+		switch (sscanf(*a,"%i:%i:%127s",&x,&y,(char*)&k)) {
 		    case 3:
-			z = XKeysymToKeycode(dpy,XStringToKeysym(&k));
+			z = XKeysymToKeycode(dpy,XStringToKeysym((char*)&k));
 		    case 2:
 			SET_BMAP(x,y,z);
 			continue;
@@ -1457,20 +1483,39 @@ ev2:
 #ifdef XTG
 		    case GenericEvent:
 			if (ev.xcookie.extension == xiopcode) {
-				//fprintf(stderr,"ev %i\n",ev.xcookie.evtype);
+//				fprintf(stderr,"ev %i\n",ev.xcookie.evtype);
 				if (ev.xcookie.evtype < XI_TouchBegin) switch (ev.xcookie.evtype) {
 #ifdef DEV_CHANGED
 				    case XI_DeviceChanged:
-					if (XGetEventData(dpy, &ev.xcookie)) {
 #undef e
 #define e ((XIDeviceChangedEvent*)ev.xcookie.data)
+					if (XGetEventData(dpy, &ev.xcookie)) {
+						TIME(T,e->time);
 						int r = e->reason;
-						//devid = e->deviceid;
+						//fprintf(stderr,"dev changed %i %i (%i)\n",r,e->deviceid,devid);
 						XFreeEventData(dpy, &ev.xcookie);
 						if (r == XISlaveSwitch) goto ev2;
 					}
+					resDev = 0;
+					oldShowPtr |= 2;
+					continue;
 #endif
+#undef e
+#define e ((XIPropertyEvent*)ev.xcookie.data)
 				    case XI_PropertyEvent:
+					if (XGetEventData(dpy, &ev.xcookie)) {
+						TIME(T,e->time);
+						Atom p = e->property;
+						//int devid1 = e->deviceid;
+						XFreeEventData(dpy, &ev.xcookie);
+						if (
+							//devid!=devid1 ||
+							p==aMatrix
+#ifdef USE_EVDEV
+							|| p==aABS
+#endif
+							) goto ev2;
+					}
 				    case XI_HierarchyChanged:
 					resDev = 0;
 					oldShowPtr |= 2;
