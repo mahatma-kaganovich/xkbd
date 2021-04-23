@@ -257,6 +257,9 @@ char *ph[MAX_PAR] = {
 	"		8(+128) auto bits 6,7 on primary present - enable primary & disable panning\n"
 	"		9(+256) use mode sizes for panning (errors in xrandr tool!)\n"
 	"		10(+512) keep dpi different x & y (image panned non-aspected)\n"
+#ifdef USE_EVDEV
+	"		11(+1024) don't use cached libinput ABS\n"
+#endif
 	"		(auto-panning for openbox+tint2: \"xrandr --noprimary\" on early init && \"-s 135\" (7+128))",
 };
 #else
@@ -442,7 +445,7 @@ static void getEvRes(){
 	int f;
 	unsigned long n,b;
 	float xyz[3];
-	if (XIGetProperty(dpy,devid,aABS,0,9,False,XA_STRING,&t,&f,&n,&b,(void*)&xyz) == Success
+	if (!(pi[p_safe]&1024) & XIGetProperty(dpy,devid,aABS,0,9,False,XA_STRING,&t,&f,&n,&b,(void*)&xyz) == Success
 		&& t==aFloat && f==32 && n == 3
 		) {
 		devX = xyz[0];
