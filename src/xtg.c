@@ -472,7 +472,7 @@ static _short xiGetProp(int devid, Atom prop, Atom type, void *data, int cnt, _s
 }
 
 static void xiSetProp(int devid, Atom prop, Atom type, void *data, int cnt, _short chk){
-	if (chk && _xiGetProp(devid,prop,type,(void*)&data,cnt,1)) return;
+	if (chk && xiGetProp(devid,prop,type,data,cnt,chk)) return;
 	XIChangeProperty(dpy,devid,prop,type,(type==XA_STRING)?8:32,PropModeReplace,data,cnt);
 }
 
