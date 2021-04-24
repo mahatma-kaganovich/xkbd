@@ -446,7 +446,7 @@ static _short _xiGetProp(int devid, Atom prop, Atom type, unsigned char **data, 
 
 	XFree(ret);
 	ret = NULL;
-	if (XIGetProperty(dpy,devid,prop,0,cnt,False,type,&t,&f,&n,&b,(void*)&ret) != Success || !ret) return 0;
+	if (!type || XIGetProperty(dpy,devid,prop,0,cnt,False,type,&t,&f,&n,&b,(void*)&ret) != Success || !ret) return 0;
 	_short r = 0;
 	if (t == type && !b &&
 	    ((t==XA_STRING && f==8) || (f==32 && n==cnt))) {
@@ -468,7 +468,7 @@ static _short xiGetProp(int devid, Atom prop, Atom type, void *data, int cnt, _s
 
 static void xiSetProp(int devid, Atom prop, Atom type, void *data, int cnt, _short chk){
 	if (chk && xiGetProp(devid,prop,type,data,cnt,chk)) return;
-	XIChangeProperty(dpy,devid,prop,type,(type==XA_STRING)?8:32,PropModeReplace,data,cnt);
+	if (type) XIChangeProperty(dpy,devid,prop,type,(type==XA_STRING)?8:32,PropModeReplace,data,cnt);
 }
 
 #ifdef USE_EVDEV
@@ -1320,7 +1320,11 @@ static void init(){
 	XkbSelectEventDetails(dpy,XkbUseCoreKbd,XkbStateNotify,
 		XkbAllStateComponentsMask,XkbGroupStateMask);
 #ifdef XTG
-	aFloat = XInternAtom(dpy, "FLOAT", False);
+	if (sizeof(float) == 4) aFloat = XInternAtom(dpy, "FLOAT", False);
+	else {
+		fprintf(stderr,"sizeof(float) != 4: no map-to-output, etc\n");
+		aFloat = 0;
+	}
 	aMatrix = XInternAtom(dpy, "Coordinate Transformation Matrix", False);
 #ifdef USE_EVDEV
 	aNode = XInternAtom(dpy, "Device Node", False);
