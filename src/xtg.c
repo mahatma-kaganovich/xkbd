@@ -450,22 +450,20 @@ static _short _xiGetProp(int devid, Atom prop, Atom type, unsigned char **data, 
 
 	if (XIGetProperty(dpy,devid,prop,0,cnt,False,type,&t,&f,&n,&b,(void*)&d) != Success) return 0;
 	_short r = 0;
-	if (t == type && !b)
-	if (t == XA_STRING) {
-		if (!chk) r++;
-		if (*data) {
-			if (!strcmp(*data,d)) r++;
-			else if (!chk) strcpy(*data,d);
-		} else *data = d;
-	} else if (f == 32 && n == cnt) {
-		if (!chk) r++;
-		n <<= 2;
-		if (*data) {
-			if (!memcmp(*data,d,n)) r++;
-			else if (!chk) memcpy(*data,d,n);
-		} else *data = d;
-	}
-	if (*data != d) XFree(d);
+	if (t == type && !b &&
+	    ((t==XA_STRING && f==8) || (f==32 && n==cnt))) {
+		if (!*data) {
+			*data = d;
+			return 1;
+		}
+		r++
+		n*=(f>>3);
+		if (t == XA_STRING) n++;
+		if (!memcmp(*data,d,n)) r++;
+		else if (!chk) memcpy(*data,d,n);
+		else r=0;
+	} else fprintf(stderr,"incompatible XIGetProperty() result of %i %s %s\n",devid,XGetAtomName(dpy,prop),XGetAtomName(dpy,t));
+	XFree(d);
 	return r;
 }
 
@@ -480,7 +478,7 @@ static double _evsize(struct libevdev *dev, int c) {
 	return r;
 }
 static void getEvRes(){
-	if (!(pi[p_safe]&1024) && xiGetProp(devid,aABS,aFloat,&devABS,NdevABS,0)) return;
+//	if (!(pi[p_safe]&1024) && xiGetProp(devid,aABS,aFloat,&devABS,NdevABS,0)) return;
 	memset(&devABS,0,sizeof(devABS));
 	unsigned char *name = NULL;
 	if (!_xiGetProp(devid,aNode,XA_STRING,&name,1024,0)) return;
