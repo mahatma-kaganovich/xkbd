@@ -456,7 +456,7 @@ static _short _xiGetProp(int devid, Atom prop, Atom type, unsigned char **data, 
 			*data = d;
 			return 1;
 		}
-		r++
+		r++;
 		n*=(f>>3);
 		if (t == XA_STRING) n++;
 		if (!memcmp(*data,d,n)) r++;
@@ -469,6 +469,11 @@ static _short _xiGetProp(int devid, Atom prop, Atom type, unsigned char **data, 
 
 static _short xiGetProp(int devid, Atom prop, Atom type, void *data, int cnt, _short chk){
 	return _xiGetProp(devid,prop,type,(void*)&data,cnt,chk);
+}
+
+static void xiSetProp(int devid, Atom prop, Atom type, void *data, int cnt, _short chk){
+	if (chk && _xiGetProp(devid,prop,type,(void*)&data,cnt,1)) return;
+	XIChangeProperty(dpy,devid,prop,type,(type==XA_STRING)?8:32,PropModeReplace,data,cnt);
 }
 
 static double _evsize(struct libevdev *dev, int c) {
@@ -494,7 +499,7 @@ static void getEvRes(){
 		devABS[2] = _evsize(device,ABS_Z);
 #endif
 		libevdev_free(device);
-		XIChangeProperty(dpy,devid,aABS,aFloat,32,PropModeReplace,(void*)&devABS,NdevABS);
+		xiSetProp(devid,aABS,aFloat,&devABS,NdevABS,0);
 	}
 	close(fd);
 ret:
@@ -555,8 +560,7 @@ static void map_to(){
 	float matrix[9] = {0,0,x,0,0,y,0,0,1};
 	matrix[1-m]=w;
 	matrix[3+m]=h;
-	if (!xiGetProp(devid,aMatrix,aFloat,&matrix,9,1))
-		XIChangeProperty(dpy,devid,aMatrix,aFloat,32,PropModeReplace,(void*)&matrix,9);
+	xiSetProp(devid,aMatrix,aFloat,&matrix,9,1);
 }
 
 static void fixMonSize(minf_t *minf, double *dpmw, double *dpmh) {
