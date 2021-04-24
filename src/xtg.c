@@ -36,6 +36,7 @@
 #define XTG
 //#define TOUCH_ORDER
 //#define USE_EVDEV
+//#undef USE_EVDEV
 #endif
 
 // fixme: no physical size, only map-to-output on unknown case
@@ -115,9 +116,9 @@ static inline long max(long x,long y){ return x>y?x:y; }
 //#define DEV_CHANGED
 int devid = 0;
 int xiopcode, xierror, xfopcode=0, xfevent=0, xferror=0;
-Atom aFloat,aMatrix;
+Atom aFloat,aMatrix,aABS;
 #ifdef USE_EVDEV
-Atom aNode, aABS;
+Atom aNode;
 #endif
 
 #define MASK_LEN XIMaskLen(XI_LASTEVENT)
@@ -259,9 +260,7 @@ char *ph[MAX_PAR] = {
 	"		8(+128) auto bits 6,7 on primary present - enable primary & disable panning\n"
 	"		9(+256) use mode sizes for panning (errors in xrandr tool!)\n"
 	"		10(+512) keep dpi different x & y (image panned non-aspected)\n"
-#ifdef USE_EVDEV
-	"		11(+1024) don't use cached libinput ABS\n"
-#endif
+	"		11(+1024) don't use cached input ABS\n"
 	"		(auto-panning for openbox+tint2: \"xrandr --noprimary\" on early init && \"-s 135\" (7+128))",
 };
 #else
@@ -433,8 +432,6 @@ static int _delay(Time delay){
 	return !Select(fd+1, &rs, 0, 0, &tv);
 }
 
-
-#ifdef USE_EVDEV
 #ifdef ABS_Z
 #define NdevABS 3
 #else
@@ -446,24 +443,22 @@ static _short _xiGetProp(int devid, Atom prop, Atom type, unsigned char **data, 
 	Atom t;
 	int f;
 	unsigned long n,b;
-	void *d = NULL;
 
-	if (XIGetProperty(dpy,devid,prop,0,cnt,False,type,&t,&f,&n,&b,(void*)&d) != Success) return 0;
+	XFree(ret);
+	ret = NULL;
+	if (XIGetProperty(dpy,devid,prop,0,cnt,False,type,&t,&f,&n,&b,(void*)&ret) != Success || !ret) return 0;
 	_short r = 0;
 	if (t == type && !b &&
 	    ((t==XA_STRING && f==8) || (f==32 && n==cnt))) {
-		if (!*data) {
-			*data = d;
-			return 1;
-		}
 		r++;
-		n*=(f>>3);
-		if (t == XA_STRING) n++;
-		if (!memcmp(*data,d,n)) r++;
-		else if (!chk) memcpy(*data,d,n);
-		else r=0;
+		if (*data) {
+			n*=(f>>3);
+			if (t == XA_STRING) n++;
+			if (!memcmp(*data,ret,n)) r++;
+			else if (!chk) memcpy(*data,ret,n);
+			else r=0;
+		} else *data = ret;
 	} else fprintf(stderr,"incompatible XIGetProperty() result of %i %s %s\n",devid,XGetAtomName(dpy,prop),XGetAtomName(dpy,t));
-	XFree(d);
 	return r;
 }
 
@@ -476,6 +471,7 @@ static void xiSetProp(int devid, Atom prop, Atom type, void *data, int cnt, _sho
 	XIChangeProperty(dpy,devid,prop,type,(type==XA_STRING)?8:32,PropModeReplace,data,cnt);
 }
 
+#ifdef USE_EVDEV
 static double _evsize(struct libevdev *dev, int c) {
 	double r = 0;
 	const struct input_absinfo *x = libevdev_get_abs_info(dev, c);
@@ -483,13 +479,12 @@ static double _evsize(struct libevdev *dev, int c) {
 	return r;
 }
 static void getEvRes(){
-//	if (!(pi[p_safe]&1024) && xiGetProp(devid,aABS,aFloat,&devABS,NdevABS,0)) return;
+	if (!(pi[p_safe]&1024) && xiGetProp(devid,aABS,aFloat,&devABS,NdevABS,0)) return;
 	memset(&devABS,0,sizeof(devABS));
 	unsigned char *name = NULL;
 	if (!_xiGetProp(devid,aNode,XA_STRING,&name,1024,0)) return;
 	if (grabcnt && (pi[p_safe]&2)) _Xungrab();
 	int fd = open(name, O_RDONLY|O_NONBLOCK);
-	XFree(name);
 	if (fd < 0) goto ret;
 	struct libevdev *device;
 	if (!libevdev_new_from_fd(fd, &device)){
@@ -507,6 +502,7 @@ ret:
 }
 #endif
 
+float matrix[9] = {0,0,0,0,0,0,0,0,0};
 static void map_to(){
 	float x=minf2.x,y=minf2.y,w=minf2.width,h=minf2.height,dx=pf[p_touch_add],dy=pf[p_touch_add];
 	_short m = 1;
@@ -557,7 +553,11 @@ static void map_to(){
 		x+=w; y+=h; w=-w; h=-h;
 		break;
 	}
-	float matrix[9] = {0,0,x,0,0,y,0,0,1};
+//	float matrix[9] = {0,0,x,0,0,y,0,0,1};
+	matrix[0] = matrix[1] = matrix[3] = matrix[4] = matrix[6] = matrix[7] = 0;
+	matrix[2]=x;
+	matrix[5]=y;
+	matrix[8]=1;
 	matrix[1-m]=w;
 	matrix[3+m]=h;
 	xiSetProp(devid,aMatrix,aFloat,&matrix,9,1);
@@ -801,6 +801,10 @@ found:
 		if (!minf1.mheight && minf1.height) minf1.mheight = minf2.mheight;
 		if (!minf1.mwidth && minf1.width) minf1.mwidth = minf2.mwidth;
 	}
+#else
+	devABS[0] = minf2.mwidth;
+	devABS[1] = minf2.mheight;
+	xiSetProp(devid,aABS,aFloat,&devABS,NdevABS,1);
 #endif
 	minf2.x2 = minf2.x + minf2.width - 1;
 	minf2.y2 = minf2.y + minf2.height - 1;
@@ -1318,6 +1322,13 @@ static void init(){
 #ifdef XTG
 	aFloat = XInternAtom(dpy, "FLOAT", False);
 	aMatrix = XInternAtom(dpy, "Coordinate Transformation Matrix", False);
+#ifdef USE_EVDEV
+	aNode = XInternAtom(dpy, "Device Node", False);
+	aABS = XInternAtom(dpy, "Device libinput ABS", False);
+#else
+	aABS = XInternAtom(dpy, "xtg ABS", False);
+#endif
+
 	XISetMask(ximaskButton, XI_ButtonPress);
 	XISetMask(ximaskButton, XI_ButtonRelease);
 	XISetMask(ximaskButton, XI_Motion);
@@ -1352,10 +1363,6 @@ static void init(){
 		};
 #ifdef USE_XINERAMA
 		xir = XineramaQueryExtension(dpy, &xirevent, &xirerror);
-#endif
-#ifdef USE_EVDEV
-	aNode = XInternAtom(dpy, "Device Node", False);
-	aABS = XInternAtom(dpy, "Device libinput ABS", False);
 #endif
 	}
 	_scr_size();
@@ -1513,9 +1520,7 @@ ev2:
 						if (
 							//devid!=devid1 ||
 							p==aMatrix
-#ifdef USE_EVDEV
 							|| p==aABS
-#endif
 							) goto ev2;
 					}
 				    case XI_HierarchyChanged:
@@ -1540,13 +1545,16 @@ ev2:
 				end = (ev.xcookie.evtype == XI_TouchEnd
 						|| (e->flags & XITouchPendingEnd));
 				x2 = e->root_x + pf[p_round], y2 = e->root_y + pf[p_round];
-				g = ((int)x2 <= minf2.x) ? BUTTON_RIGHT : ((int)x2 >= minf2.x2) ? BUTTON_LEFT : ((int)y2 <= minf2.y) ? BUTTON_UP : ((int)y2 >= minf2.y2) ? BUTTON_DOWN : 0;
-				if (g) tt |= PH_BORDER;
 				if (resDev != devid) {
 					// slow for multiple touchscreens
-					if (resXY) getRes(x2,y2,0);
+					if (resXY && ((pi[p_safe]&1024)
+					    || !xiGetProp(devid,aABS,aFloat,&devABS,NdevABS,1)
+					    || !xiGetProp(devid,aMatrix,aFloat,&matrix,9,1)
+						)) getRes(x2,y2,0);
 					resDev = devid;
 				}
+				g = ((int)x2 <= minf2.x) ? BUTTON_RIGHT : ((int)x2 >= minf2.x2) ? BUTTON_LEFT : ((int)y2 <= minf2.y) ? BUTTON_UP : ((int)y2 >= minf2.y2) ? BUTTON_DOWN : 0;
+				if (g) tt |= PH_BORDER;
 				for(i=P; i!=N; i=TOUCH_N(i)){
 					Touch *t1 = &touch[i];
 					if (t1->touchid != e->detail || t1->deviceid != devid) continue;
