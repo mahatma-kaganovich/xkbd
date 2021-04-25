@@ -813,10 +813,8 @@ found:
 	if ((!found || !minf2.mwidth || !minf2.mheight)
 	    && (pf[p_touch_add] != 0 || pf[p_res]<0)
 	    ) {
-		if (mode != 2) {
-			if (devid) getEvRes();
-			else if (!resDev) resDev=1;
-		}
+		if (mode != 2) getEvRes();
+		else if (!resDev) resDev=1;
 		// +.5 ?
 		if (devABS[0]) minf2.mwidth = devABS[0];
 		if (devABS[1]) minf2.mheight = devABS[1];
