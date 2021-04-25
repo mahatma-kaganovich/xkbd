@@ -1,5 +1,5 @@
 /*
-	xtg v1.34 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.35 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -116,8 +116,9 @@ static inline long max(long x,long y){ return x>y?x:y; }
 //#define DEV_CHANGED
 int devid = 0;
 int xiopcode, xierror, xfopcode=0, xfevent=0, xferror=0;
-Atom aFloat,aMatrix,aABS;
+Atom aFloat,aMatrix,aABS,aDevMon;
 int floatFmt = sizeof(float) << 3;
+int atomFmt = sizeof(Atom) << 3;
 #ifdef USE_EVDEV
 Atom aNode;
 #endif
@@ -454,10 +455,11 @@ static _short _xiGetProp(int devid, Atom prop, Atom type, unsigned char **data, 
 	ret = NULL;
 	if (XIGetProperty(dpy,devid,prop,0,cnt,False,type,&t,&f,&n,&b,(void*)&ret) != Success || !ret) return (chk>3);
 	if (t == type && !b && (
-		(t==XA_STRING && f==8)
-		|| (t==aFloat && f==floatFmt && n==cnt)
-		|| (t==XA_CARDINAL && f==8 && n==cnt)
-		    )) {
+		(t==XA_STRING && f==8) || (n==cnt && (
+			(t==aFloat && f==floatFmt)
+//			|| (t==XA_CARDINAL && f==8)
+			|| (t==XA_ATOM && f==atomFmt)
+		    )))) {
 		if (*data) {
 			n*=(f>>3);
 			if (t == XA_STRING) n++;
@@ -478,7 +480,9 @@ static _short xiGetProp(int devid, Atom prop, Atom type, void *data, int cnt, _s
 
 static void xiSetProp(int devid, Atom prop, Atom type, void *data, int cnt, _short chk){
 	if (chk && xiGetProp(devid,prop,type,data,cnt,chk)) return;
-	XIChangeProperty(dpy,devid,prop,type,(type==XA_STRING)?8:(type==aFloat)?floatFmt:32,PropModeReplace,data,cnt);
+	XIChangeProperty(dpy,devid,prop,type,(type==XA_STRING
+//		||type==XA_CARDINAL
+		)?8:(type==aFloat)?floatFmt:(type==XA_ATOM)?atomFmt:32,PropModeReplace,data,cnt);
 }
 
 #ifdef USE_EVDEV
@@ -719,6 +723,7 @@ static void getRes(int x, int y, _short mode){
 	int i,j;
 	_int found = 0, nm = 0;
 	RROutput prim = 0;
+	char *name = NULL;
 
 //	XGetWindowAttributes(dpy, DefaultRootWindow(dpy), &wa);
 	memset(&minf1,0,sizeof(minf1));
@@ -739,6 +744,9 @@ static void getRes(int x, int y, _short mode){
 	}
 #endif
 	// try dont lock for libevent, but still unsure (got one fd lock)
+
+	if(!mon && xiGetProp(devid,aDevMon,XA_ATOM,NULL,1,0)) name = XGetAtomName(dpy,*(Atom*)ret);
+
 	_grabX();
 
 	if (!xrr || !(xrrr = XRRGetScreenResources(dpy,root))) goto noxrr;
@@ -751,7 +759,8 @@ static void getRes(int x, int y, _short mode){
 	if (!(pi[p_safe]&32)) prim0 = 0;
 	while (xrMons()) {
 		nm++;
-		if((!found
+		if (name && !strcmp(oinf->name,name)) minf2 = minf;
+		else if((!found
 #ifdef USE_EVDEV
 		    || (mon_sz && found == 1)
 #endif
@@ -804,7 +813,10 @@ found:
 	if ((!found || !minf2.mwidth || !minf2.mheight)
 	    && (pf[p_touch_add] != 0 || pf[p_res]<0)
 	    ) {
-		if (mode != 2) getEvRes();
+		if (mode != 2) {
+			if (devid) getEvRes();
+			else if (!resDev) resDev=1;
+		}
 		// +.5 ?
 		if (devABS[0]) minf2.mwidth = devABS[0];
 		if (devABS[1]) minf2.mheight = devABS[1];
@@ -907,6 +919,7 @@ rep_size:
 	}
 noxrr1:
 	_ungrabX();
+	if (name) XFree(name);
 	if (xrrr) XRRFreeScreenResources(xrrr);
 	xrrr = NULL;
 }
@@ -1332,6 +1345,7 @@ static void init(){
 #ifdef XTG
 	aFloat = XInternAtom(dpy, "FLOAT", False);
 	aMatrix = XInternAtom(dpy, "Coordinate Transformation Matrix", False);
+	aDevMon = XInternAtom(dpy, "xtg output", False);
 #ifdef USE_EVDEV
 	aNode = XInternAtom(dpy, "Device Node", False);
 	aABS = XInternAtom(dpy, "Device libinput ABS", False);
@@ -1440,6 +1454,8 @@ int main(int argc, char **argv){
 				"  2-fingers swipe right to 8 button: 0277:0 0377:0x88\n"
 				"  Audio prev/next keys to 2-left/right: 0277:0x8f:XF86AudioNext 0377:0x8f:XF86AudioNext 0266:0x8f:XF86AudioPrev 0366:0x8f:XF86AudioPrev\n"
 				"   - same for 1-left/right from screeen border: 057:0x8f:XF86AudioNext 056:0x8f:XF86AudioPrev\n"
+				"\nMonitor per touch device (if not '-R <name>'):\n"
+				"  xinput set-prop <device> --type=atom 'xtg output' <monitor>\n"
 				);
 			return 0;
 		}
