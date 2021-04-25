@@ -453,9 +453,13 @@ static _short _xiGetProp(int devid, Atom prop, Atom type, unsigned char **data, 
 	XFree(ret);
 	ret = NULL;
 	if (XIGetProperty(dpy,devid,prop,0,cnt,False,type,&t,&f,&n,&b,(void*)&ret) != Success || !ret) return (chk>3);
-	if (t == type && !b &&
-	    ((t==XA_STRING && f==8) || (t==aFloat && f==floatFmt && n==cnt))) {
+	if (t == type && !b && (
+		(t==XA_STRING && f==8)
+		|| (t==aFloat && f==floatFmt && n==cnt)
+		|| (t==XA_CARDINAL && f==8 && n==cnt)
+		    )) {
 		if (*data) {
+			n*=(f>>3);
 			if (t == XA_STRING) n++;
 			if (chk && !memcmp(*data,ret,n)) return 2;
 			else if (chk<2) memcpy(*data,ret,n);
