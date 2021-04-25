@@ -116,7 +116,7 @@ static inline long max(long x,long y){ return x>y?x:y; }
 //#define DEV_CHANGED
 int devid = 0;
 int xiopcode, xierror, xfopcode=0, xfevent=0, xferror=0;
-Atom aFloat,aMatrix,aABS,aDevMon;
+Atom aFloat,aMatrix,aABS,aDevMon,aDevMonCache;
 int floatFmt = sizeof(float) << 3;
 int atomFmt = sizeof(Atom) << 3;
 #ifdef USE_EVDEV
@@ -236,7 +236,8 @@ char *ph[MAX_PAR] = {
 	"		0=master (visual artefacts, but enable native masters touch clients)\n"
 	"		2=dynamic master/floating (firefox segfaults)",
 	"RandR monitor name\n"
-	"		or number 1+"
+	"		or number 1+\n"
+	"		'-' strict (only xinput prop 'xtg output' name)"
 #ifdef USE_EVDEV
 	"\n		or negative -<x> to find monitor, using evdev touch input size, grow +x\n"
 #endif
@@ -373,6 +374,7 @@ unsigned long mwidth,mheight;
 RROutput out;
 RRCrtc crt;
 Rotation rotation;
+Atom name;
 } minf_t;
 
 minf_t minf,minf1,minf2;
@@ -380,7 +382,8 @@ minf_t minf,minf1,minf2;
 int scr_width, scr_height, scr_mwidth, scr_mheight;
 //int scr_rotation;
 // usual dpi calculated from height only"
-_short resXY,mon,mon_sz;
+_short resXY,mon_sz,strict;
+Atom mon = 0;
 double mon_grow;
 
 _short grabcnt = 0;
@@ -619,6 +622,10 @@ static void fixMonSize(minf_t *minf, double *dpmw, double *dpmh) {
 	}
 }
 
+static void clearCache(int devid){
+	XIDeleteProperty(dpy,devid,aDevMonCache);
+}
+
 XRRScreenResources *xrrr = NULL;
 XRRCrtcInfo *cinf = NULL;
 XRROutputInfo *oinf = NULL;
@@ -642,6 +649,7 @@ next:
 		nout = -1;
 		return 0;
 	}
+	minf.name = XInternAtom(dpy, oinf->name, False);
 	minf.width = minf.width0 = cinf->width;
 	minf.height = minf.height0 = cinf->height;
 	minf.mwidth = oinf->mm_width;
@@ -723,7 +731,9 @@ static void getRes(int x, int y, _short mode){
 	int i,j;
 	_int found = 0, nm = 0;
 	RROutput prim = 0;
-	char *name = NULL;
+	Atom name,name0 = 0;
+
+
 
 //	XGetWindowAttributes(dpy, DefaultRootWindow(dpy), &wa);
 	memset(&minf1,0,sizeof(minf1));
@@ -733,10 +743,14 @@ static void getRes(int x, int y, _short mode){
 	minf2.width = scr_width;
 	minf2.height = scr_height;
 
+	if(mon) {
+		if (mode == 1) name=mon;
+	} else if (devid && xiGetProp(devid,aDevMon,XA_ATOM,NULL,1,0)) name = *(Atom*)ret;
+
 #ifdef USE_EVDEV
 	if (mode == 2) {
 		getEvRes();
-		if (devABS[0] == 0 || devABS[1] == 0) {
+		if ((devABS[0] == 0 || devABS[1] == 0) && !name) {
 			_grabX();
 			goto found;
 		}
@@ -744,8 +758,6 @@ static void getRes(int x, int y, _short mode){
 	}
 #endif
 	// try dont lock for libevent, but still unsure (got one fd lock)
-
-	if(!mon && xiGetProp(devid,aDevMon,XA_ATOM,NULL,1,0)) name = XGetAtomName(dpy,*(Atom*)ret);
 
 	_grabX();
 
@@ -759,13 +771,12 @@ static void getRes(int x, int y, _short mode){
 	if (!(pi[p_safe]&32)) prim0 = 0;
 	while (xrMons()) {
 		nm++;
-		if (name && !strcmp(oinf->name,name)) minf2 = minf;
-		else if((!found
+		if((!found
 #ifdef USE_EVDEV
 		    || (mon_sz && found == 1)
 #endif
 		    ) &&
-		    ((!mode && !found)
+		    ((!mode && !found && !strict)
 #ifdef USE_EVDEV
 			    || (mon_sz && (
 				(minf.mwidth <= devABS[0] && devABS[0] - minf.mwidth < mon_grow
@@ -774,8 +785,8 @@ static void getRes(int x, int y, _short mode){
 				    && minf.mwidth <= devABS[1] && devABS[1] - minf.mwidth < mon_grow)
 			    ))
 #endif
-			    || (mode == 1 && (pi[p_mon] == ++n ||
-				(pa[p_mon] && !strcmp(oinf->name,pa[p_mon]))))
+			    || (mode == 1 && (pi[p_mon] == ++n))
+			    || (name && name == minf.name)
 		    ) &&
 		    ( mode || (x >= cinf->x && y >= cinf->y && x < cinf->x + minf.width && y < cinf->y + minf.height)) &&
 		    (!found++ || !mode)) {
@@ -813,7 +824,7 @@ found:
 	if ((!found || !minf2.mwidth || !minf2.mheight)
 	    && (pf[p_touch_add] != 0 || pf[p_res]<0)
 	    ) {
-		if (mode != 2) getEvRes();
+		if (mode != 2 && devid) getEvRes();
 		if (!devid && !resDev) resDev=1;
 		// +.5 ?
 		if (devABS[0]) minf2.mwidth = devABS[0];
@@ -822,10 +833,13 @@ found:
 		if (!minf1.mwidth && minf1.width) minf1.mwidth = minf2.mwidth;
 	}
 #else
-	devABS[0] = minf2.mwidth;
-	devABS[1] = minf2.mheight;
-	xiSetProp(devid,aABS,aFloat,&devABS,NdevABS,2);
+	if (devid) {
+		devABS[0] = minf2.mwidth;
+		devABS[1] = minf2.mheight;
+		xiSetProp(devid,aABS,aFloat,&devABS,NdevABS,2);
+	}
 #endif
+	if (devid) xiSetProp(devid,aDevMonCache,XA_ATOM,&minf2.name,1,2);
 	minf2.x2 = minf2.x + minf2.width - 1;
 	minf2.y2 = minf2.y + minf2.height - 1;
 	if (minf2.mwidth > minf2.mheight && minf2.width < minf2.height && minf2.mheight) {
@@ -917,7 +931,6 @@ rep_size:
 	}
 noxrr1:
 	_ungrabX();
-	if (name) XFree(name);
 	if (xrrr) XRRFreeScreenResources(xrrr);
 	xrrr = NULL;
 }
@@ -947,6 +960,7 @@ int xtestPtr, xtestPtr0;
 _short showPtr, oldShowPtr = 0, curShow;
 _int tdevs = 0, tdevs2=0;
 //#define floating (pi[p_floating]==1)
+_short __init = 1;
 static void getHierarchy(){
 	static XIAttachSlaveInfo ca = {.type=XIAttachSlave};
 	static XIDetachSlaveInfo cf = {.type=XIDetachSlave};
@@ -999,6 +1013,10 @@ static void getHierarchy(){
 		devid = d2->deviceid;
 		short t = 0, rel = 0, abs = 0, scroll = 0;
 		busy = 0;
+		clearCache(devid);
+		if (__init) {
+			XIDeleteProperty(dpy,devid,aABS);
+		}
 		switch (d2->use) {
 		    case XIFloatingSlave: break;
 		    case XISlavePointer:
@@ -1183,6 +1201,7 @@ busy:
 	if (grabbed) _ungrabX();
 	tdevs -= tdevs2;
 	if (!resDev) resDev=1;
+	__init = 0;
 }
 
 static void setShowCursor(){
@@ -1343,8 +1362,9 @@ static void init(){
 #ifdef XTG
 	aFloat = XInternAtom(dpy, "FLOAT", False);
 	aMatrix = XInternAtom(dpy, "Coordinate Transformation Matrix", False);
-	aDevMon = XInternAtom(dpy, "xtg output", False);
+	aDevMon = XInternAtom(dpy, "xtg output", False);	aDevMonCache = XInternAtom(dpy, "xtg output cached", False);
 #ifdef USE_EVDEV
+
 	aNode = XInternAtom(dpy, "Device Node", False);
 	aABS = XInternAtom(dpy, "Device libinput ABS", False);
 #else
@@ -1482,9 +1502,11 @@ int main(int argc, char **argv){
 		return 1;
 	}
 	resX = resY = pf[p_res] < 0 ? 1 : pf[p_res];
+	strict = pa[p_mon] &&  pa[p_mon][0] == '-' && !pa[p_mon][1];
 	mon_sz = pi[p_mon] < 0;
 	mon_grow = -pf[p_mon];
-	mon = !mon_sz && pa[p_mon] && *pa[p_mon];
+	if (!strict && !mon_sz && pa[p_mon] && *pa[p_mon])
+		mon = XInternAtom(dpy, pa[p_mon], False);
 	resXY = !mon && pf[p_res]<0;
 #endif
 	if (!dpy) return 1;
@@ -1539,13 +1561,15 @@ ev2:
 					if (XGetEventData(dpy, &ev.xcookie)) {
 						TIME(T,e->time);
 						Atom p = e->property;
-						//int devid1 = e->deviceid;
+						int devid1 = e->deviceid;
 						XFreeEventData(dpy, &ev.xcookie);
 						if (
 							//devid!=devid1 ||
 							p==aMatrix
 							|| p==aABS
+							|| p==aDevMonCache
 							) goto ev2;
+						if (p==aDevMon) clearCache(devid1);
 					}
 				    case XI_HierarchyChanged:
 					resDev = 0;
@@ -1572,8 +1596,10 @@ ev2:
 				if (resDev != devid) {
 					// slow for multiple touchscreens
 					if (resXY && ((pi[p_safe]&1024)
-					    || !xiGetProp(devid,aABS,aFloat,&devABS,NdevABS,2)
-					    || !xiGetProp(devid,aMatrix,aFloat,&matrix,9,2)
+					    || xiGetProp(devid,aABS,aFloat,&devABS,NdevABS,1)!=2
+					    || !xiGetProp(devid,aDevMonCache,XA_ATOM,&minf2.name,1,2)
+					    //|| !xiGetProp(devid,aDevMon,XA_ATOM,&minf2.name,1,2)
+					    //|| !xiGetProp(devid,aMatrix,aFloat,&matrix,9,2)
 						)) getRes(x2,y2,0);
 					resDev = devid;
 				}
