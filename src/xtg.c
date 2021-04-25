@@ -440,6 +440,11 @@ static int _delay(Time delay){
 #endif
 float devABS[NdevABS] = {0,0,};
 
+// chk return 2=eq +:
+// 1 - read+cmp, 1=ok
+// 2 - - (to check event or xiSetProp() force)
+// 3 - 1=incompatible (xiSetProp() strict)
+// 4 - 1=incompatible or none (xiSetProp() strict if exists)
 static _short _xiGetProp(int devid, Atom prop, Atom type, unsigned char **data, int cnt, _short chk){
 	Atom t;
 	int f;
@@ -447,20 +452,20 @@ static _short _xiGetProp(int devid, Atom prop, Atom type, unsigned char **data, 
 
 	XFree(ret);
 	ret = NULL;
-	if (XIGetProperty(dpy,devid,prop,0,cnt,False,type,&t,&f,&n,&b,(void*)&ret) != Success || !ret) return 0;
-	_short r = 0;
+	if (XIGetProperty(dpy,devid,prop,0,cnt,False,type,&t,&f,&n,&b,(void*)&ret) != Success || !ret) return (chk>3);
 	if (t == type && !b &&
 	    ((t==XA_STRING && f==8) || (t==aFloat && f==floatFmt && n==cnt))) {
-		r++;
 		if (*data) {
-			n*=(f>>3);
 			if (t == XA_STRING) n++;
-			if (!memcmp(*data,ret,n)) r++;
-			else if (!chk) memcpy(*data,ret,n);
-			else r=0;
+			if (chk && !memcmp(*data,ret,n)) return 2;
+			else if (chk<2) memcpy(*data,ret,n);
+			else return 0
 		} else *data = ret;
-	} else fprintf(stderr,"incompatible XIGetProperty() result of %i %s %s\n",devid,XGetAtomName(dpy,prop),XGetAtomName(dpy,t));
-	return r;
+		return 1;
+	} else {
+		fprintf(stderr,"incompatible XIGetProperty() result of %i %s %s\n",devid,XGetAtomName(dpy,prop),XGetAtomName(dpy,t));
+		return (chk>2);
+	}
 }
 
 static _short xiGetProp(int devid, Atom prop, Atom type, void *data, int cnt, _short chk){
@@ -561,7 +566,7 @@ static void map_to(){
 	matrix[8]=1;
 	matrix[1-m]=w;
 	matrix[3+m]=h;
-	xiSetProp(devid,aMatrix,aFloat,&matrix,9,1);
+	xiSetProp(devid,aMatrix,aFloat,&matrix,9,4);
 }
 
 static void fixMonSize(minf_t *minf, double *dpmw, double *dpmh) {
@@ -805,7 +810,7 @@ found:
 #else
 	devABS[0] = minf2.mwidth;
 	devABS[1] = minf2.mheight;
-	xiSetProp(devid,aABS,aFloat,&devABS,NdevABS,1);
+	xiSetProp(devid,aABS,aFloat,&devABS,NdevABS,2);
 #endif
 	minf2.x2 = minf2.x + minf2.width - 1;
 	minf2.y2 = minf2.y + minf2.height - 1;
@@ -1549,8 +1554,8 @@ ev2:
 				if (resDev != devid) {
 					// slow for multiple touchscreens
 					if (resXY && ((pi[p_safe]&1024)
-					    || !xiGetProp(devid,aABS,aFloat,&devABS,NdevABS,1)
-					    || !xiGetProp(devid,aMatrix,aFloat,&matrix,9,1)
+					    || !xiGetProp(devid,aABS,aFloat,&devABS,NdevABS,2)
+					    || !xiGetProp(devid,aMatrix,aFloat,&matrix,9,2)
 						)) getRes(x2,y2,0);
 					resDev = devid;
 				}
