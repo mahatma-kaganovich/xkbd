@@ -459,7 +459,7 @@ static _short _xiGetProp(int devid, Atom prop, Atom type, unsigned char **data, 
 			if (t == XA_STRING) n++;
 			if (chk && !memcmp(*data,ret,n)) return 2;
 			else if (chk<2) memcpy(*data,ret,n);
-			else return 0
+			else return 0;
 		} else *data = ret;
 		return 1;
 	} else {
