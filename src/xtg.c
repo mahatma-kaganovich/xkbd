@@ -639,7 +639,7 @@ next:
 		cinf = NULL;
 		oinf = NULL;
 	}
-	while (xrrr && ++nout<xrrr->noutput) {
+	if (xrrr) while (++nout<xrrr->noutput) {
 		if (!(minf.out = xrrr->outputs[nout]) || !(oinf = XRRGetOutputInfo(dpy, xrrr, minf.out))) continue;
 		if (oinf->connection == RR_Connected && (minf.crt = oinf->crtc) && (cinf=XRRGetCrtcInfo(dpy, xrrr, minf.crt))) break;
 		XRRFreeOutputInfo(oinf);
@@ -708,7 +708,7 @@ next:
 
 unsigned int pan_x,pan_y,pan_cnt;
 static void _pan(minf_t *m) {
-	if (pi[p_safe]&64) return;
+	if (pi[p_safe]&64 || m->crt) return;
 	XRRPanning *p = XRRGetPanning(dpy,xrrr,m->crt);
 	if (!p) return;
 	if (p->top != pan_y || p->left || p->width != m->width1 || p->height != m->height1) {
@@ -762,7 +762,6 @@ static void getRes(int x, int y, _short mode){
 	_grabX();
 
 	if (!xrr || !(xrrr = XRRGetScreenResources(dpy,root))) goto noxrr;
-	int n = 0;
 	RROutput prim0 = prim = XRRGetOutputPrimary(dpy, root);
 	if ((pi[p_safe]&128)) {
 		pi[p_safe]=(pi[p_safe]|(32|64)) ^ (prim?32:64);
@@ -778,28 +777,22 @@ static void getRes(int x, int y, _short mode){
 		    ) &&
 		    ((!mode && !found && !strict)
 #ifdef USE_EVDEV
-			    || (mon_sz && (
+			    || (mon_sz && !name && (
 				(minf.mwidth <= devABS[0] && devABS[0] - minf.mwidth < mon_grow
 				    && minf.mheight <= devABS[1] && devABS[1] - minf.mheight < mon_grow)
 				|| (minf.mheight <= devABS[0] && devABS[0] - minf.mheight < mon_grow
 				    && minf.mwidth <= devABS[1] && devABS[1] - minf.mwidth < mon_grow)
 			    ))
 #endif
-			    || (mode == 1 && (pi[p_mon] == ++n))
+			    || (mode == 1 && (pi[p_mon] == nm))
 			    || (name && name == minf.name)
 		    ) &&
 		    ( mode || (x >= cinf->x && y >= cinf->y && x < cinf->x + minf.width && y < cinf->y + minf.height)) &&
-		    (!found++ || !mode)) {
-			minf2 = minf;
-			if ((prim0 == minf.out) || (!prim0 && minf.mheight > minf1.mheight)) {
-				minf1 = minf;
-				continue;
-			}
-		}
-		if (minf.mheight) {
-			if (!(minf1.height && prim0) && ((prim0 == minf.out) || (!prim0 && minf.mheight > minf1.mheight)))
-				minf1 = minf;
-		}
+		    (!found++ || !mode)) minf2 = minf;
+		else if (!minf.mheight
+//			|| (minf1.height && prim0)
+			) continue;
+		if ((prim0 == minf.out) || (!prim0 && minf.mheight > minf1.mheight)) minf1 = minf;
 	}
 noxrr:
 #ifdef USE_XINERAMA
@@ -879,7 +872,7 @@ found:
 			// in mode resolution - use one max density
 		}
 		_pan(&minf1);
-		if (nm != m2 + 1)
+		if (nm != (m2<<1))
 		    while (xrMons()) {
 			if (minf.crt != minf1.crt && minf.crt != minf2.crt) {
 				if (do_dpi && minf.mwidth && minf.mheight) {
