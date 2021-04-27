@@ -862,7 +862,6 @@ found:
 	_short do_dpi = minf1.mheight && minf1.mwidth && !(pi[p_safe]&16);
 	if ((do_dpi || !(pi[p_safe]&64))) {
 		double dpmh, dpmw;
-		_int m2 = minf1.crt && minf2.crt && (minf1.crt != minf2.crt);
 		pan_x = pan_y = pan_cnt = 0;
 		cinf = NULL;
 		if (do_dpi) {
@@ -871,8 +870,8 @@ found:
 			// auto resolution usual equal physical propotions
 			// in mode resolution - use one max density
 		}
-		_pan(&minf1);
-		if (nm != (m2<<1))
+		if (minf1.crt != minf2.crt) _pan(&minf1);
+		if (nm != ((!!minf1.crt) + (minf2.crt && minf1.crt != minf2.crt)))
 		    while (xrMons()) {
 			if (minf.crt != minf1.crt && minf.crt != minf2.crt) {
 				if (do_dpi && minf.mwidth && minf.mheight) {
@@ -883,7 +882,7 @@ found:
 				_pan(&minf);
 			}
 		}
-		if (m2) _pan(&minf2);
+		_pan(&minf2);
 
 		if (do_dpi) {
 			int mh, mw;
@@ -896,7 +895,7 @@ found:
 				XSync(dpy,False);
 			}
 
-			if (m2) fixMonSize(&minf2, &dpmw, &dpmh);
+			if (minf1.crt != minf2.crt) fixMonSize(&minf2, &dpmw, &dpmh);
 			fixMonSize(&minf1, &dpmw, &dpmh);
 rep_size:
 			if (!(pi[p_safe]&512))
