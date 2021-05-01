@@ -294,9 +294,10 @@ int pr_f;
 unsigned long pr_b,pr_n;
 
 
+#define _free(p) if (p) { XFree(p); p=NULL; }
+
 static Bool getRules(){
-	XFree(rul);
-	rul = NULL;
+	_free(rul);
 	rulLen = 0;
 	n1 = 0;
 	if (XGetWindowProperty(dpy,root,aXkbRules,0,256,False,XA_STRING,&pr_t,&pr_f,&rulLen,&pr_b,&rul)==Success && rul && rulLen>1 && pr_t==XA_STRING) {
@@ -308,8 +309,7 @@ static Bool getRules(){
 }
 
 static int getProp(Window w, Atom prop, Atom type, int size){
-	XFree(ret);
-	ret = NULL;
+	_free(ret);
 	if (!(XGetWindowProperty(dpy,w,prop,0,1024,False,type,&pr_t,&pr_f,&n,&pr_b,&ret)==Success && pr_f>>3 == size && ret))
 		n=0;
 	return n;
@@ -503,8 +503,7 @@ err:
 
 #ifdef _BACKLIGHT
 static _short xrGetProp(RROutput out, Atom prop, Atom type, void *data, int cnt, _short chk){
-	XFree(ret);
-	ret = NULL;
+	_free(ret);
 	XRRGetOutputProperty(dpy,out,prop,0,abs(cnt),False,True,type,&pr_t,&pr_f,&pr_n,&pr_b,(void*)&ret);
 	return _chk_prop("XRRGetOutputProperty",out,prop,type,(void*)&data,cnt,chk);
 }
@@ -535,8 +534,7 @@ static void xrChkProp(RROutput out, Atom prop, pinf_t *d) {
 float devABS[NdevABS] = {0,0,};
 
 static _short xiGetProp(int devid, Atom prop, Atom type, void *data, int cnt, _short chk){
-	XFree(ret);
-	ret = NULL;
+	_free(ret);
 	XIGetProperty(dpy,devid,prop,0,abs(cnt),False,type,&pr_t,&pr_f,&pr_n,&pr_b,(void*)&ret);
 	return _chk_prop("XIGetOutputProperty",devid,prop,type,(void*)&data,cnt,chk);
 }
