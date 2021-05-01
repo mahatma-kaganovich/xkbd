@@ -37,6 +37,9 @@
 //#define TOUCH_ORDER
 //#define USE_EVDEV
 //#undef USE_EVDEV
+// todo
+#define _BACKLIGHT
+#undef _BACKLIGHT
 #endif
 
 // fixme: no physical size, only map-to-output on unknown case
@@ -117,8 +120,13 @@ static inline long max(long x,long y){ return x>y?x:y; }
 int devid = 0;
 int xiopcode, xierror, xfopcode=0, xfevent=0, xferror=0;
 Atom aFloat,aMatrix,aABS,aDevMon,aDevMonCache;
+#ifdef _BACKLIGHT
+Atom aBl;
+#endif
 int floatFmt = sizeof(float) << 3;
 int atomFmt = sizeof(Atom) << 3;
+#define prop_int int32_t
+int intFmt = sizeof(prop_int) << 3;
 #ifdef USE_EVDEV
 Atom aNode;
 #endif
@@ -281,16 +289,17 @@ static void opendpy() {
 #endif
 }
 
-static Bool getRules(){
-	Atom t;
-	int f, i;
-	unsigned long b;
+Atom pr_t;
+int pr_f;
+unsigned long pr_b,pr_n;
 
+
+static Bool getRules(){
 	XFree(rul);
 	rul = NULL;
 	rulLen = 0;
 	n1 = 0;
-	if (XGetWindowProperty(dpy,root,aXkbRules,0,256,False,XA_STRING,&t,&f,&rulLen,&b,&rul)==Success && rul && rulLen>1 && t==XA_STRING) {
+	if (XGetWindowProperty(dpy,root,aXkbRules,0,256,False,XA_STRING,&pr_t,&pr_f,&rulLen,&pr_b,&rul)==Success && rul && rulLen>1 && pr_t==XA_STRING) {
 		rul2 = rul;
 		return True;
 	}
@@ -299,13 +308,9 @@ static Bool getRules(){
 }
 
 static int getProp(Window w, Atom prop, Atom type, int size){
-	Atom t;
-	int f;
-	unsigned long b;
-
 	XFree(ret);
 	ret = NULL;
-	if (!(XGetWindowProperty(dpy,w,prop,0,1024,False,type,&t,&f,&n,&b,&ret)==Success && f>>3 == size && ret))
+	if (!(XGetWindowProperty(dpy,w,prop,0,1024,False,type,&pr_t,&pr_f,&n,&pr_b,&ret)==Success && pr_f>>3 == size && ret))
 		n=0;
 	return n;
 }
@@ -365,16 +370,25 @@ static void WMState(Atom *states, short nn){
 
 #ifdef XTG
 
+typedef struct _pinf {
+	_short en;
+	long range[2];
+	prop_int val;
+} pinf_t;
+
 // width/height: real/mode
 // width0/height0: -||- or first preferred (default/max) - safe bit 9(+256)
 // width1/height1: -||- not rotated (for panning)
 typedef struct _minf {
-unsigned int x,y,x2,y2,width,height,width0,height0,width1,height1;
-unsigned long mwidth,mheight;
-RROutput out;
-RRCrtc crt;
-Rotation rotation;
-Atom name;
+	unsigned int x,y,x2,y2,width,height,width0,height0,width1,height1;
+	unsigned long mwidth,mheight;
+	RROutput out;
+	RRCrtc crt;
+	Rotation rotation;
+	Atom name;
+#ifdef _BACKLIGHT
+	pinf_t bl;
+#endif
 } minf_t;
 
 minf_t minf,minf1,minf2;
@@ -437,6 +451,82 @@ static int _delay(Time delay){
 	return !Select(fd+1, &rs, 0, 0, &tv);
 }
 
+static int fmtOf(Atom type,int def){
+	return (type==XA_STRING
+//		||type==XA_CARDINAL
+		)?8:(type==aFloat)?floatFmt:(type==XA_ATOM)?atomFmt:(type==XA_INTEGER)?intFmt:def;
+}
+
+// chk return 2=eq +:
+// 1 - read+cmp, 1=ok
+// 2 - - (to check event or xiSetProp() force)
+// 3 - 1=incompatible (xiSetProp() strict)
+// 4 - 1=incompatible or none (xiSetProp() strict if exists)
+
+static _short _chk_prop(char *pr, unsigned long who, Atom prop, Atom type, unsigned char **data, int cnt, _short chk){
+	if (!ret) return (chk>3);
+	if (pr_b || (cnt>0 && pr_n!=cnt)) goto err;
+	int f = fmtOf(pr_t,-1);
+	if (pr_t != type || pr_f != f) {
+#if 0
+		prop_int *d = (void*) ((*data && !chk) ? *data : ret);
+		if ((pr_f < f || (*data && !chk)) && pr_n == cnt && type == XA_INTEGER) {
+			long i = 0;
+			if (pr_t == XA_INTEGER && pr_f == 32) for (i; i>=0; i--) d[i] = ((int32_t*)ret)[i]; else
+			if (pr_t == XA_INTEGER && pr_f == 16) for (; i>=0; i--) d[i] = ((int16_t*)ret)[i]; else
+			if (pr_t == XA_INTEGER && pr_f == 8) for (; i>=0; i--) d[i] = ((int8_t*)ret)[i]; else
+			if (pr_t == XA_CARDINAL && pr_f == 32) for (; i>=0; i--) d[i] = ((uint32_t*)ret)[i]; else
+			if (pr_t == XA_CARDINAL && pr_f == 16) for (; i>=0; i--) d[i] = ((uint16_t*)ret)[i]; else
+			if (pr_t == XA_CARDINAL && pr_f == 8) for (; i>=0; i--) d[i] = ((uint8_t*)ret)[i]; else
+#else
+		{
+#endif
+			{
+err:
+				fprintf(stderr,"incompatible %s() result of %lu %s %s %i\n",pr,who,XGetAtomName(dpy,prop),XGetAtomName(dpy,pr_t),pr_f);
+				return (chk>2);
+			}
+		}
+#if 0
+		if (d == *data) return 1;
+#endif
+	}
+	if (*data) {
+		pr_n*=(pr_f>>3);
+		if (pr_t == XA_STRING) n++;
+		if (chk && !memcmp(*data,ret,pr_n)) return 2;
+		else if (chk<2) memcpy(*data,ret,pr_n);
+		else return 0;
+	} else *data = ret;
+	return 1;
+}
+
+#ifdef _BACKLIGHT
+static _short xrGetProp(RROutput out, Atom prop, Atom type, void *data, int cnt, _short chk){
+	XFree(ret);
+	ret = NULL;
+	XRRGetOutputProperty(dpy,out,prop,0,abs(cnt),False,True,type,&pr_t,&pr_f,&pr_n,&pr_b,(void*)&ret);
+	return _chk_prop("XRRGetOutputProperty",out,prop,type,(void*)&data,cnt,chk);
+}
+
+static void xrSetProp(RROutput out, Atom prop, Atom type, void *data, int cnt, _short chk){
+	if (chk && xrGetProp(out,prop,type,data,cnt,chk)) return;
+	XRRChangeOutputProperty(dpy,out,prop,type,fmtOf(type,32),PropModeReplace,data,cnt);
+}
+
+static void xrChkProp(RROutput out, Atom prop, pinf_t *d) {
+	XRRPropertyInfo *pinf;
+	if (xrGetProp(out,prop,XA_INTEGER,&d->val,1,0) && (pinf = XRRQueryOutputProperty(dpy,out,prop))) {
+		if (pinf->range && pinf->num_values == 2) {
+			d->en = 1;
+			d->range[0] = pinf->values[0];
+			d->range[1] = pinf->values[1];
+		}
+		XFree(pinf);
+	}
+}
+#endif
+
 #ifdef ABS_Z
 #define NdevABS 3
 #else
@@ -444,48 +534,16 @@ static int _delay(Time delay){
 #endif
 float devABS[NdevABS] = {0,0,};
 
-// chk return 2=eq +:
-// 1 - read+cmp, 1=ok
-// 2 - - (to check event or xiSetProp() force)
-// 3 - 1=incompatible (xiSetProp() strict)
-// 4 - 1=incompatible or none (xiSetProp() strict if exists)
-static _short _xiGetProp(int devid, Atom prop, Atom type, unsigned char **data, int cnt, _short chk){
-	Atom t;
-	int f;
-	unsigned long n,b;
-
+static _short xiGetProp(int devid, Atom prop, Atom type, void *data, int cnt, _short chk){
 	XFree(ret);
 	ret = NULL;
-	if (XIGetProperty(dpy,devid,prop,0,cnt,False,type,&t,&f,&n,&b,(void*)&ret) != Success || !ret) return (chk>3);
-	if (t == type && !b && (
-		(t==XA_STRING && f==8) || (n==cnt && (
-			(t==aFloat && f==floatFmt)
-//			|| (t==XA_CARDINAL && f==8)
-			|| (t==XA_ATOM && f==atomFmt)
-		    )))) {
-		if (*data) {
-			n*=(f>>3);
-			if (t == XA_STRING) n++;
-			if (chk && !memcmp(*data,ret,n)) return 2;
-			else if (chk<2) memcpy(*data,ret,n);
-			else return 0;
-		} else *data = ret;
-		return 1;
-	} else {
-		fprintf(stderr,"incompatible XIGetProperty() result of %i %s %s\n",devid,XGetAtomName(dpy,prop),XGetAtomName(dpy,t));
-		return (chk>2);
-	}
-}
-
-static _short xiGetProp(int devid, Atom prop, Atom type, void *data, int cnt, _short chk){
-	return _xiGetProp(devid,prop,type,(void*)&data,cnt,chk);
+	XIGetProperty(dpy,devid,prop,0,abs(cnt),False,type,&pr_t,&pr_f,&pr_n,&pr_b,(void*)&ret);
+	return _chk_prop("XIGetOutputProperty",devid,prop,type,(void*)&data,cnt,chk);
 }
 
 static void xiSetProp(int devid, Atom prop, Atom type, void *data, int cnt, _short chk){
 	if (chk && xiGetProp(devid,prop,type,data,cnt,chk)) return;
-	XIChangeProperty(dpy,devid,prop,type,(type==XA_STRING
-//		||type==XA_CARDINAL
-		)?8:(type==aFloat)?floatFmt:(type==XA_ATOM)?atomFmt:32,PropModeReplace,data,cnt);
+	XIChangeProperty(dpy,devid,prop,type,fmtOf(type,32),PropModeReplace,data,cnt);
 }
 
 #ifdef USE_EVDEV
@@ -498,10 +556,9 @@ static double _evsize(struct libevdev *dev, int c) {
 static void getEvRes(){
 	if (!(pi[p_safe]&1024) && xiGetProp(devid,aABS,aFloat,&devABS,NdevABS,0)) return;
 	memset(&devABS,0,sizeof(devABS));
-	unsigned char *name = NULL;
-	if (!_xiGetProp(devid,aNode,XA_STRING,&name,1024,0)) return;
+	if (!xiGetProp(devid,aNode,XA_STRING,NULL,-1024,0)) return;
 	if (grabcnt && (pi[p_safe]&2)) _Xungrab();
-	int fd = open(name, O_RDONLY|O_NONBLOCK);
+	int fd = open(ret, O_RDONLY|O_NONBLOCK);
 	if (fd < 0) goto ret;
 	struct libevdev *device;
 	if (!libevdev_new_from_fd(fd, &device)){
@@ -657,6 +714,9 @@ next:
 	minf.x = cinf->x;
 	minf.y = cinf->y;
 	minf.rotation = cinf->rotation;
+#ifdef _BACKLIGHT
+	xrChkProp(minf.out,aBl,&minf.bl);
+#endif
 	XRRModeInfo *m,*m0 = NULL,*m1 = NULL;
 	RRMode id = cinf->mode;
 	RRMode id0 = id + 1;
@@ -1355,8 +1415,10 @@ static void init(){
 	aFloat = XInternAtom(dpy, "FLOAT", False);
 	aMatrix = XInternAtom(dpy, "Coordinate Transformation Matrix", False);
 	aDevMon = XInternAtom(dpy, "xtg output", False);	aDevMonCache = XInternAtom(dpy, "xtg output cached", False);
+#ifdef _BACKLIGHT
+	aBl = XInternAtom(dpy, RR_PROPERTY_BACKLIGHT, False);
+#endif
 #ifdef USE_EVDEV
-
 	aNode = XInternAtom(dpy, "Device Node", False);
 	aABS = XInternAtom(dpy, "Device libinput ABS", False);
 #else
