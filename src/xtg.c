@@ -510,23 +510,21 @@ static void *fmt2fmt(void *from,Atom fromT,int fromF,void *to,Atom toT,int toF,u
 	long long x;
 	void *ret1 = ret;
 
-	if (!to) {
-		to = ret = malloc((toF>>3)*cnt);
-	}
+	if (!to) to = ret = malloc((toF>>3)*cnt);
 	for (i=0; i<cnt; i++) {
 		if (fromT == XA_INTEGER) {
 			switch (fromF) {
 			case 64: x = ((int64_t*)from)[i]; break;
 			case 32: x = ((int32_t*)from)[i]; break;
 			case 16: x = ((int16_t*)from)[i]; break;
-			case 8: x = ((int16_t*)from)[i]; break;
+			case 8: x = ((int8_t*)from)[i]; break;
 			}
 		} else {
 			switch (fromF) {
 			case 64: x = ((uint64_t*)from)[i]; break;
 			case 32: x = ((uint32_t*)from)[i]; break;
 			case 16: x = ((uint16_t*)from)[i]; break;
-			case 8: x = ((uint16_t*)from)[i]; break;
+			case 8: x = ((uint8_t*)from)[i]; break;
 			}
 		}
 		if (toT == XA_INTEGER) {
@@ -545,7 +543,7 @@ static void *fmt2fmt(void *from,Atom fromT,int fromF,void *to,Atom toT,int toF,u
 			}
 		}
 	}
-	if (ret != ret1) XFree(ret1);
+	if (ret != ret1 && ret1) XFree(ret1);
 	return to;
 }
 #endif
@@ -575,8 +573,8 @@ err:
 		}
 	}
 	if (*data) {
+		if (type == XA_STRING) pr_n++;
 		pr_n*=(f>>3);
-		if (pr_t == XA_STRING) n++;
 		if (chk && !memcmp(*data,ret,pr_n)) return 2;
 		else if (chk<2) memcpy(*data,ret,pr_n);
 		else return 0;
@@ -787,7 +785,6 @@ XRROutputInfo *oinf = NULL;
 int nout = -1;
 
 static _short xrMons(_short disconnected){
-next:
 	if (cinf) {
 		XRRFreeCrtcInfo(cinf);
 		cinf = NULL;
