@@ -800,10 +800,15 @@ static _short xrMons(_short disconnected){
 		oinf = NULL;
 	}
 	if (xrrr) while (++nout<xrrr->noutput) {
-		if (!(minf.out = xrrr->outputs[nout]) || !(oinf = XRRGetOutputInfo(dpy, xrrr, minf.out))) continue;
+		if (!(minf.out = xrrr->outputs[nout])) continue;
+#ifdef XSS
+		// simple reduce overhead
+		if (disconnected==1 && !noXSS) return 1;
+#endif
+		if (!(oinf = XRRGetOutputInfo(dpy, xrrr, minf.out))) continue;
 		if (oinf->connection == RR_Connected && (minf.crt = oinf->crtc) && (cinf=XRRGetCrtcInfo(dpy, xrrr, minf.crt))) break;
-//		if (disconnected) break;
-		if (disconnected) return 1;
+		if (disconnected==1) return 1;
+		if (disconnected) break;
 		XRRFreeOutputInfo(oinf);
 		oinf = NULL;
 	}
