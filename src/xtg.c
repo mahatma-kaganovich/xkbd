@@ -888,25 +888,30 @@ static void monFullScreen(int x, int y) {
 	while (xrMons()) {
 		Atom ct = 0;
 		if (!xrGetProp(minf.out,aCType,XA_ATOM,&ct,1,0) || !ct) continue;
-		XRRPropertyInfo *pinf = XRRQueryOutputProperty(dpy,minf.out,aCType);
-		if (!pinf) continue;
-		if (pinf->range) goto next;
-		int i;
-		for (i=0; i<pinf->num_values && (pinf->values[i]!=aCTFullScr); i++);
-		if (i>=pinf->num_values) goto next;
+		XRRPropertyInfo *pinf = NULL;
 		Atom ct1 = 0;
 		xrGetProp(minf.out,aCType1,XA_ATOM,&ct1,1,0);
-		if (noXSS && x>=minf.x && x<minf.x+minf.width && y>=minf.y && y<minf.y+minf.height) {
-			if (!ct1) XRRConfigureOutputProperty(dpy,minf.out,aCType1,False,pinf->range,pinf->num_values,pinf->values);
-			if (ct != ct1) xrSetProp(minf.out,aCType1,XA_ATOM,&ct,1,0);
-			ct1 = aCTFullScr;
+		if (noXSS && x>=minf.x && x<minf.x+minf.width && y>=minf.y && y<minf.y+minf.height
+		    && (pinf = XRRQueryOutputProperty(dpy,minf.out,aCType))
+		    && !pinf->range) {
+			int i;
+			for (i=0; i<pinf->num_values; i++) {
+				if (pinf->values[i]==aCTFullScr) {
+					if (ct != ct1) {
+						//if (!ct1)
+						    XRRConfigureOutputProperty(dpy,minf.out,aCType1,False,pinf->range,pinf->num_values,pinf->values);
+						xrSetProp(minf.out,aCType1,XA_ATOM,&ct,1,0);
+					}
+					ct1 = aCTFullScr;
+					break;
+				}
+			}
 		}
+		if (pinf) XFree(pinf);
 		if (ct1 && ct != ct1) {
 			DBG("monitor: %s content type: %s",oinf->name,XGetAtomName(dpy,ct1));
 			xrSetProp(minf.out,aCType,XA_ATOM,&ct1,1,0);
 		}
-next:
-		XFree(pinf);
 	}
 	XRRFreeScreenResources(xrrr);
 	xrrr = NULL;
