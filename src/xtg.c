@@ -141,6 +141,7 @@ Atom aNode;
 #endif
 #ifdef XSS
 Atom aCType, aCType1, aCTFullScr = 0;
+Atom aColorspace, aColorspace1, aCSFullScr = 0;
 #endif
 
 #define MASK_LEN XIMaskLen(XI_LASTEVENT)
@@ -238,13 +239,14 @@ static void _print_bmap(_int x, _short n, TouchTree *m) {
 #define p_max_dpi 13
 #define p_safe 14
 #define p_content_type 15
-#define MAX_PAR 16
+#define p_colorspace 16
+#define MAX_PAR 17
 char *pa[MAX_PAR] = {};
 // android: 125ms tap, 500ms long
-#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0,  14, 32, 72, 0, DEF_SAFE, 0 }
+#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0,  14, 32, 72, 0, DEF_SAFE, 0, 0 }
 int pi[] = PAR_DEFS;
 double pf[] = PAR_DEFS;
-char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:s:c:h";
+char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:s:c:C:h";
 char *ph[MAX_PAR] = {
 	"touch device 0=auto",
 	"min fingers",
@@ -288,7 +290,11 @@ char *ph[MAX_PAR] = {
 	"		(auto-panning for openbox+tint2: \"xrandr --noprimary\" on early init && \"-s 135\" (7+128))",
 	""
 #ifdef XSS
-	"fullscreen content type: see \"xrandr --props\" -> \"content type\" (I want \"Cinema\")"
+	"fullscreen \"content type\" prop.: see \"xrandr --props\" (I want \"Cinema\")"
+#endif
+	""
+#ifdef XSS
+	"fullscreen \"Colorspace\" prop.: see \"xrandr --props\"  (I want \"DCI-P3_RGB_Theater\")"
 #endif
 };
 #else
@@ -388,7 +394,7 @@ static void WMState(Atom *states, short nn){
 	if (noXSS1!=noXSS) {
 		XScreenSaverSuspend(dpy,noXSS=noXSS1);
 #ifdef XTG
-		if (aCTFullScr) {
+		if (aCTFullScr||aCSFullScr) {
 			XWindowAttributes wa;
 			XGetWindowAttributes(dpy, win, &wa);
 			monFullScreen(wa.x,wa.y);
@@ -885,35 +891,40 @@ static void _pan(minf_t *m) {
 }
 
 #ifdef XSS
-static void monFullScreen(int x, int y) {
-	if (!xrr || !(xrrr = XRRGetScreenResources(dpy,root))) return;
-	while (xrMons(1)) {
+static void _monFS(Atom prop,Atom save,Atom val,int x, int y){
 		Atom ct = 0;
-		if (!xrGetProp(minf.out,aCType,XA_ATOM,&ct,1,0) || !ct) continue;
+		if (!xrGetProp(minf.out,prop,XA_ATOM,&ct,1,0) || !ct) return;
 		XRRPropertyInfo *pinf = NULL;
 		Atom ct1 = 0;
-		xrGetProp(minf.out,aCType1,XA_ATOM,&ct1,1,0);
-		if (cinf && noXSS && x>=minf.x && x<=minf.x2 && y>=minf.y && y<=minf.y2
-		    && (pinf = XRRQueryOutputProperty(dpy,minf.out,aCType))
+		xrGetProp(minf.out,save,XA_ATOM,&ct1,1,0);
+		if (val && cinf && noXSS && x>=minf.x && x<=minf.x2 && y>=minf.y && y<=minf.y2
+		    && (pinf = XRRQueryOutputProperty(dpy,minf.out,prop))
 		    && !pinf->range) {
 			int i;
 			for (i=0; i<pinf->num_values; i++) {
-				if (pinf->values[i]==aCTFullScr) {
+				if (pinf->values[i]==val) {
 					if (ct != ct1) {
 						//if (!ct1)
-						    XRRConfigureOutputProperty(dpy,minf.out,aCType1,False,pinf->range,pinf->num_values,pinf->values);
-						xrSetProp(minf.out,aCType1,XA_ATOM,&ct,1,0);
+						    XRRConfigureOutputProperty(dpy,minf.out,save,False,pinf->range,pinf->num_values,pinf->values);
+						xrSetProp(minf.out,save,XA_ATOM,&ct,1,0);
 					}
-					ct1 = aCTFullScr;
+					ct1 = val;
 					break;
 				}
 			}
 		}
 		if (pinf) XFree(pinf);
 		if (ct1 && ct != ct1) {
-			DBG("output: %s content type: %s",oinf->name,XGetAtomName(dpy,ct1));
-			xrSetProp(minf.out,aCType,XA_ATOM,&ct1,1,0);
+			DBG("output: %s %s: %s -> %s",oinf->name,XGetAtomName(dpy,prop),XGetAtomName(dpy,ct),XGetAtomName(dpy,ct1));
+			xrSetProp(minf.out,prop,XA_ATOM,&ct1,1,0);
 		}
+}
+
+static void monFullScreen(int x, int y) {
+	if (!xrr || !(xrrr = XRRGetScreenResources(dpy,root))) return;
+	while (xrMons(1)) {
+		_monFS(aCType,aCType1,aCTFullScr,x,y);
+		_monFS(aColorspace,aColorspace1,aCSFullScr,x,y);
 	}
 	XRRFreeScreenResources(xrrr);
 	xrrr = NULL;
@@ -1561,7 +1572,10 @@ static void init(){
 #ifdef XSS
 	aCType = XInternAtom(dpy, "content type", False);
 	aCType1 = XInternAtom(dpy, "xtg saved content type", False);
+	aColorspace = XInternAtom(dpy, "Colorspace", False);
+	aColorspace1 = XInternAtom(dpy, "xtg saved Colorspace", False);
 	if (pa[p_content_type]) aCTFullScr = XInternAtom(dpy, pa[p_content_type], False);
+	if (pa[p_colorspace]) aCSFullScr = XInternAtom(dpy, pa[p_colorspace], False);
 #endif
 
 	XISetMask(ximaskButton, XI_ButtonPress);
