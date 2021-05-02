@@ -858,8 +858,8 @@ next:
 		minf.mwidth = minf.mheight;
 		minf.mheight = i;
 	}
-//	if (minf.width) minf.x2 = minf.x + minf.width;
-//	if (minf.height) minf.y2 = minf.y + minf.height;
+	minf.x2 = minf.x + minf.width - 1;
+	minf.y2 = minf.y + minf.height - 1;
 	return 1;
 }
 
@@ -891,7 +891,7 @@ static void monFullScreen(int x, int y) {
 		XRRPropertyInfo *pinf = NULL;
 		Atom ct1 = 0;
 		xrGetProp(minf.out,aCType1,XA_ATOM,&ct1,1,0);
-		if (noXSS && x>=minf.x && x<minf.x+minf.width && y>=minf.y && y<minf.y+minf.height
+		if (noXSS && x>=minf.x && x<=minf.x2 && y>=minf.y && y<=minf.y2
 		    && (pinf = XRRQueryOutputProperty(dpy,minf.out,aCType))
 		    && !pinf->range) {
 			int i;
@@ -979,7 +979,7 @@ static void getRes(int x, int y, _short mode){
 			    || (mode == 1 && (pi[p_mon] == nm))
 			    || (name && name == minf.name)
 		    ) &&
-		    ( mode || (x >= cinf->x && y >= cinf->y && x < cinf->x + minf.width && y < cinf->y + minf.height)) &&
+		    ( mode || (x >= minf.x && y >= minf.y && x <= minf.x2 && y <= minf.y2)) &&
 		    (!found++ || !mode)) minf2 = minf;
 		else if (!minf.mheight
 //			|| (minf1.height && prim0)
@@ -998,6 +998,8 @@ noxrr:
 			minf2.width = s[i].minf2.width;
 			minf2.height = s[i].minf2.height;
 			minf2.rotation = 0;
+			minf2.x2 = minf2.x + minf2.width - 1;
+			minf2.y2 = minf2.y + minf2.height - 1;
 		}
 		XFree(s);
 	}
@@ -1025,8 +1027,6 @@ found:
 	}
 #endif
 	if (devid) xiSetProp(devid,aDevMonCache,XA_ATOM,&minf2.name,1,2);
-	minf2.x2 = minf2.x + minf2.width - 1;
-	minf2.y2 = minf2.y + minf2.height - 1;
 	if (minf2.mwidth > minf2.mheight && minf2.width < minf2.height && minf2.mheight) {
 		i = minf2.mwidth;
 		minf2.mwidth = minf2.mheight;
