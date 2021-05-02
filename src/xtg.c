@@ -786,17 +786,21 @@ XRRCrtcInfo *cinf = NULL;
 XRROutputInfo *oinf = NULL;
 int nout = -1;
 
-static _short xrMons(){
+static _short xrMons(_short disconnected){
 next:
 	if (cinf) {
 		XRRFreeCrtcInfo(cinf);
-		XRRFreeOutputInfo(oinf);
 		cinf = NULL;
+	}
+	if (oinf) {
+		XRRFreeOutputInfo(oinf);
 		oinf = NULL;
 	}
 	if (xrrr) while (++nout<xrrr->noutput) {
 		if (!(minf.out = xrrr->outputs[nout]) || !(oinf = XRRGetOutputInfo(dpy, xrrr, minf.out))) continue;
 		if (oinf->connection == RR_Connected && (minf.crt = oinf->crtc) && (cinf=XRRGetCrtcInfo(dpy, xrrr, minf.crt))) break;
+//		if (disconnected) break;
+		if (disconnected) return 1;
 		XRRFreeOutputInfo(oinf);
 		oinf = NULL;
 	}
@@ -805,10 +809,11 @@ next:
 		return 0;
 	}
 	minf.name = XInternAtom(dpy, oinf->name, False);
-	minf.width = minf.width0 = cinf->width;
-	minf.height = minf.height0 = cinf->height;
 	minf.mwidth = oinf->mm_width;
 	minf.mheight = oinf->mm_height;
+	if (!cinf) return 1;
+	minf.width = minf.width0 = cinf->width;
+	minf.height = minf.height0 = cinf->height;
 	minf.x = cinf->x;
 	minf.y = cinf->y;
 	minf.rotation = cinf->rotation;
@@ -885,13 +890,13 @@ static void _pan(minf_t *m) {
 #ifdef XSS
 static void monFullScreen(int x, int y) {
 	if (!xrr || !(xrrr = XRRGetScreenResources(dpy,root))) return;
-	while (xrMons()) {
+	while (xrMons(1)) {
 		Atom ct = 0;
 		if (!xrGetProp(minf.out,aCType,XA_ATOM,&ct,1,0) || !ct) continue;
 		XRRPropertyInfo *pinf = NULL;
 		Atom ct1 = 0;
 		xrGetProp(minf.out,aCType1,XA_ATOM,&ct1,1,0);
-		if (noXSS && x>=minf.x && x<=minf.x2 && y>=minf.y && y<=minf.y2
+		if (cinf && noXSS && x>=minf.x && x<=minf.x2 && y>=minf.y && y<=minf.y2
 		    && (pinf = XRRQueryOutputProperty(dpy,minf.out,aCType))
 		    && !pinf->range) {
 			int i;
@@ -909,7 +914,7 @@ static void monFullScreen(int x, int y) {
 		}
 		if (pinf) XFree(pinf);
 		if (ct1 && ct != ct1) {
-			DBG("monitor: %s content type: %s",oinf->name,XGetAtomName(dpy,ct1));
+			DBG("output: %s content type: %s",oinf->name,XGetAtomName(dpy,ct1));
 			xrSetProp(minf.out,aCType,XA_ATOM,&ct1,1,0);
 		}
 	}
@@ -960,7 +965,7 @@ static void getRes(int x, int y, _short mode){
 		prim0 = 0;
 	}
 	if (!(pi[p_safe]&32)) prim0 = 0;
-	while (xrMons()) {
+	while (xrMons(0)) {
 		nm++;
 		if((!found
 #ifdef USE_EVDEV
@@ -1064,7 +1069,7 @@ found:
 		}
 		if (minf1.crt != minf2.crt) _pan(&minf1);
 		if (nm != ((!!minf1.crt) + (minf2.crt && minf1.crt != minf2.crt)))
-		    while (xrMons()) {
+		    while (xrMons(0)) {
 			if (minf.crt != minf1.crt && minf.crt != minf2.crt) {
 				if (do_dpi && minf.mwidth && minf.mheight) {
 					if ( !(minf.width == minf1.width && minf.height == minf1.height && minf.mwidth == minf1.mwidth && minf.mheight == minf1.mheight) &&
