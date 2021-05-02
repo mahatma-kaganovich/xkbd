@@ -40,6 +40,8 @@
 // todo
 #define _BACKLIGHT
 #undef _BACKLIGHT
+#define PROP_FMT
+#undef PROP_FMT
 #endif
 
 // fixme: no physical size, only map-to-output on unknown case
@@ -92,6 +94,13 @@
 
 #define PH_BORDER (1<<2)
 
+#define ERR(txt, args... ) fprintf(stderr, "Error: " txt "\n", ##args )
+#ifndef NDEBUG
+#define DBG(txt, args... ) fprintf(stderr, "" txt "\n", ##args )
+#else
+#define DBG(txt, args... ) /* nothing */
+#endif
+
 typedef uint_fast8_t _short;
 typedef uint_fast32_t _int;
 
@@ -129,6 +138,9 @@ int atomFmt = sizeof(Atom) << 3;
 int intFmt = sizeof(prop_int) << 3;
 #ifdef USE_EVDEV
 Atom aNode;
+#endif
+#ifdef XSS
+Atom aCType, aCType1, aFullScr = 0;
 #endif
 
 #define MASK_LEN XIMaskLen(XI_LASTEVENT)
@@ -225,13 +237,14 @@ static void _print_bmap(_int x, _short n, TouchTree *m) {
 #define p_min_dpi 12
 #define p_max_dpi 13
 #define p_safe 14
-#define MAX_PAR 15
+#define p_content_type 15
+#define MAX_PAR 16
 char *pa[MAX_PAR] = {};
 // android: 125ms tap, 500ms long
-#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0,  14, 32, 72, 0, DEF_SAFE }
+#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0,  14, 32, 72, 0, DEF_SAFE, 0 }
 int pi[] = PAR_DEFS;
 double pf[] = PAR_DEFS;
-char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:s:h";
+char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:s:c:h";
 char *ph[MAX_PAR] = {
 	"touch device 0=auto",
 	"min fingers",
@@ -273,6 +286,10 @@ char *ph[MAX_PAR] = {
 	"		10(+512) keep dpi different x & y (image panned non-aspected)\n"
 	"		11(+1024) don't use cached input ABS\n"
 	"		(auto-panning for openbox+tint2: \"xrandr --noprimary\" on early init && \"-s 135\" (7+128))",
+	""
+#ifdef XSS
+	"fullscreen content type: see \"xrandr --props\" -> \"content type\" (I want \"Cinema\")"
+#endif
 };
 #else
 #define TIME(T,t)
@@ -354,7 +371,11 @@ static void printGrp(){
 	fflush(stdout);
 }
 
+
 #ifdef XSS
+#ifdef XTG
+static void monFullScreen(int x, int y);
+#endif
 static void WMState(Atom *states, short nn){
 	short i;
 	noXSS1 = False;
@@ -364,7 +385,14 @@ static void WMState(Atom *states, short nn){
 			break;
 		}
 	}
-	if (noXSS1!=noXSS) XScreenSaverSuspend(dpy,noXSS=noXSS1);
+	if (noXSS1!=noXSS) {
+		XScreenSaverSuspend(dpy,noXSS=noXSS1);
+#ifdef XTG
+		XWindowAttributes wa;
+		XGetWindowAttributes(dpy, win, &wa);
+		monFullScreen(wa.x,wa.y);
+#endif
+	}
 }
 #endif
 
@@ -457,6 +485,69 @@ static int fmtOf(Atom type,int def){
 		)?8:(type==aFloat)?floatFmt:(type==XA_ATOM)?atomFmt:(type==XA_INTEGER)?intFmt:def;
 }
 
+#ifdef PROP_FMT
+static void *fmt2fmt(void *from,Atom fromT,int fromF,void *to,Atom toT,int toF,unsigned long cnt){
+	if (fromT == toT && fromF == toF && !to) return from;
+	if ((fromT != XA_INTEGER && fromT != XA_CARDINAL) || (toT != XA_INTEGER && toT != XA_CARDINAL)) return NULL;
+	switch (fromF) {
+	case 64:
+	case 32:
+	case 16:
+	case 8: break;
+	default: return NULL;
+	}
+	switch (toF) {
+	case 64:
+	case 32:
+	case 16:
+	case 8: break;
+	default: return NULL;
+	}
+
+	unsigned long i;
+	long long x;
+	void *ret1 = ret;
+
+	if (!to) {
+		to = ret = malloc((toF>>3)*cnt);
+	}
+	for (i=0; i<cnt; i++) {
+		if (fromT == XA_INTEGER) {
+			switch (fromF) {
+			case 64: x = ((int64_t*)from)[i]; break;
+			case 32: x = ((int32_t*)from)[i]; break;
+			case 16: x = ((int16_t*)from)[i]; break;
+			case 8: x = ((int16_t*)from)[i]; break;
+			}
+		} else {
+			switch (fromF) {
+			case 64: x = ((uint64_t*)from)[i]; break;
+			case 32: x = ((uint32_t*)from)[i]; break;
+			case 16: x = ((uint16_t*)from)[i]; break;
+			case 8: x = ((uint16_t*)from)[i]; break;
+			}
+		}
+		if (toT == XA_INTEGER) {
+			switch (toF) {
+			case 64: ((int64_t*)to)[i] = x; break;
+			case 32: ((int32_t*)to)[i] = x; break;
+			case 16: ((int16_t*)to)[i] = x; break;
+			case 8: ((int8_t*)to)[i] = x; break;
+			}
+		} else {
+			switch (toF) {
+			case 64: ((uint64_t*)to)[i] = x; break;
+			case 32: ((uint32_t*)to)[i] = x; break;
+			case 16: ((uint16_t*)to)[i] = x; break;
+			case 8: ((uint8_t*)to)[i] = x; break;
+			}
+		}
+	}
+	if (ret != ret1) XFree(ret1);
+	return to;
+}
+#endif
+
 // chk return 2=eq +:
 // 1 - read+cmp, 1=ok
 // 2 - - (to check event or xiSetProp() force)
@@ -468,31 +559,21 @@ static _short _chk_prop(char *pr, unsigned long who, Atom prop, Atom type, unsig
 	if (pr_b || (cnt>0 && pr_n!=cnt)) goto err;
 	int f = fmtOf(pr_t,-1);
 	if (pr_t != type || pr_f != f) {
-#if 0
-		prop_int *d = (void*) ((*data && !chk) ? *data : ret);
-		if ((pr_f < f || (*data && !chk)) && pr_n == cnt && type == XA_INTEGER) {
-			long i = 0;
-			if (pr_t == XA_INTEGER && pr_f == 32) for (i; i>=0; i--) d[i] = ((int32_t*)ret)[i]; else
-			if (pr_t == XA_INTEGER && pr_f == 16) for (; i>=0; i--) d[i] = ((int16_t*)ret)[i]; else
-			if (pr_t == XA_INTEGER && pr_f == 8) for (; i>=0; i--) d[i] = ((int8_t*)ret)[i]; else
-			if (pr_t == XA_CARDINAL && pr_f == 32) for (; i>=0; i--) d[i] = ((uint32_t*)ret)[i]; else
-			if (pr_t == XA_CARDINAL && pr_f == 16) for (; i>=0; i--) d[i] = ((uint16_t*)ret)[i]; else
-			if (pr_t == XA_CARDINAL && pr_f == 8) for (; i>=0; i--) d[i] = ((uint8_t*)ret)[i]; else
-#else
+#ifdef PROP_FMT
+		if (!chk) {
+			if (!fmt2fmt(ret,pr_t,pr_f,*data,type,f,pr_n)) goto err;
+			return 1;
+		} else if (!fmt2fmt(ret,pr_t,pr_f,NULL,type,f,pr_n)) goto err;
+		else
+#endif
 		{
-#endif
-			{
 err:
-				fprintf(stderr,"incompatible %s() result of %lu %s %s %i\n",pr,who,XGetAtomName(dpy,prop),XGetAtomName(dpy,pr_t),pr_f);
-				return (chk>2);
-			}
+			ERR("incompatible %s() result of %lu %s %s %i",pr,who,XGetAtomName(dpy,prop),XGetAtomName(dpy,pr_t),pr_f);
+			return (chk>2);
 		}
-#if 0
-		if (d == *data) return 1;
-#endif
 	}
 	if (*data) {
-		pr_n*=(pr_f>>3);
+		pr_n*=(f>>3);
 		if (pr_t == XA_STRING) n++;
 		if (chk && !memcmp(*data,ret,pr_n)) return 2;
 		else if (chk<2) memcpy(*data,ret,pr_n);
@@ -501,18 +582,27 @@ err:
 	return 1;
 }
 
-#ifdef _BACKLIGHT
 static _short xrGetProp(RROutput out, Atom prop, Atom type, void *data, int cnt, _short chk){
 	_free(ret);
-	XRRGetOutputProperty(dpy,out,prop,0,abs(cnt),False,True,type,&pr_t,&pr_f,&pr_n,&pr_b,(void*)&ret);
+	Bool pending = False;
+	XRRGetOutputProperty(dpy,out,prop,0,abs(cnt),False,pending,type,&pr_t,&pr_f,&pr_n,&pr_b,(void*)&ret);
 	return _chk_prop("XRRGetOutputProperty",out,prop,type,(void*)&data,cnt,chk);
 }
 
 static void xrSetProp(RROutput out, Atom prop, Atom type, void *data, int cnt, _short chk){
-	if (chk && xrGetProp(out,prop,type,data,cnt,chk)) return;
-	XRRChangeOutputProperty(dpy,out,prop,type,fmtOf(type,32),PropModeReplace,data,cnt);
+	int f = fmtOf(type,32);
+	if (chk) {
+		if (xrGetProp(out,prop,type,data,cnt,chk)) return;
+#ifdef PROP_FMT
+		data = fmt2fmt(data,type,f,NULL,pr_t,pr_f,cnt);
+		type = pr_t;
+		f = pr_f;
+#endif
+	}
+	if (data) XRRChangeOutputProperty(dpy,out,prop,type,f,PropModeReplace,data,cnt);
 }
 
+#ifdef _BACKLIGHT
 static void xrChkProp(RROutput out, Atom prop, pinf_t *d) {
 	XRRPropertyInfo *pinf;
 	if (xrGetProp(out,prop,XA_INTEGER,&d->val,1,0) && (pinf = XRRQueryOutputProperty(dpy,out,prop))) {
@@ -540,8 +630,16 @@ static _short xiGetProp(int devid, Atom prop, Atom type, void *data, int cnt, _s
 }
 
 static void xiSetProp(int devid, Atom prop, Atom type, void *data, int cnt, _short chk){
-	if (chk && xiGetProp(devid,prop,type,data,cnt,chk)) return;
-	XIChangeProperty(dpy,devid,prop,type,fmtOf(type,32),PropModeReplace,data,cnt);
+	int f = fmtOf(type,32);
+	if (chk) {
+		if (xiGetProp(devid,prop,type,data,cnt,chk)) return;
+#ifdef PROP_FMT
+		data = fmt2fmt(data,type,f,NULL,pr_t,pr_f,cnt);
+		type = pr_t;
+		f = pr_f;
+#endif
+	}
+	if (data) XIChangeProperty(dpy,devid,prop,type,f,PropModeReplace,data,cnt);
 }
 
 #ifdef USE_EVDEV
@@ -766,7 +864,7 @@ next:
 
 unsigned int pan_x,pan_y,pan_cnt;
 static void _pan(minf_t *m) {
-	if (pi[p_safe]&64 || m->crt) return;
+	if (pi[p_safe]&64 || !m->crt) return;
 	XRRPanning *p = XRRGetPanning(dpy,xrrr,m->crt);
 	if (!p) return;
 	if (p->top != pan_y || p->left || p->width != m->width1 || p->height != m->height1) {
@@ -774,13 +872,44 @@ static void _pan(minf_t *m) {
 		p->left = 0;
 		p->width = m->width1;
 		p->height = m->height1;
-		fprintf(stderr,"crtc %lu panning %ix%i+%i+%i/track:%ix%i+%i+%i/border:%i/%i/%i/%i\n",m->crt,p->width,p->height,p->left,p->top,  p->track_width,p->track_height,p->track_left,p->track_top,  p->border_left,p->border_top,p->border_right,p->border_bottom);
+		DBG("crtc %lu panning %ix%i+%i+%i/track:%ix%i+%i+%i/border:%i/%i/%i/%i",m->crt,p->width,p->height,p->left,p->top,  p->track_width,p->track_height,p->track_left,p->track_top,  p->border_left,p->border_top,p->border_right,p->border_bottom);
 		if (XRRSetPanning(dpy,xrrr,m->crt,p)==Success) pan_cnt++;
 	}
 	pan_y = max(pan_y,p->top + m->height0 + p->border_top + p->border_bottom);
 	pan_x = max(pan_x,p->left + m->width0 + p->border_left + p->border_right);
 	XRRFreePanning(p);
 }
+
+#ifdef XSS
+static void monFullScreen(int x, int y) {
+	if (!xrr || !(xrrr = XRRGetScreenResources(dpy,root))) return;
+	while (xrMons()) {
+		Atom ct = 0;
+		if (!xrGetProp(minf.out,aCType,XA_ATOM,&ct,1,0) || !ct) continue;
+		XRRPropertyInfo *pinf = XRRQueryOutputProperty(dpy,minf.out,aCType);
+		if (!pinf) continue;
+		if (pinf->range) goto next;
+		int i;
+		for (i=0; i<pinf->num_values && (pinf->values[i]!=aFullScr); i++);
+		if (i>=pinf->num_values) goto next;
+		Atom ct1 = 0;
+		xrGetProp(minf.out,aCType1,XA_ATOM,&ct1,1,0);
+		if (noXSS && x>=minf.x && x<minf.x+minf.width && y>=minf.y && y<minf.y+minf.height) {
+			if (!ct1) XRRConfigureOutputProperty(dpy,minf.out,aCType1,False,pinf->range,pinf->num_values,pinf->values);
+			if (ct != ct1) xrSetProp(minf.out,aCType1,XA_ATOM,&ct,1,0);
+			ct1 = aFullScr;
+		}
+		if (ct1 && ct != ct1) {
+			DBG("monitor: %s content type: %s",oinf->name,XGetAtomName(dpy,ct1));
+			xrSetProp(minf.out,aCType,XA_ATOM,&ct1,1,0);
+		}
+next:
+		XFree(pinf);
+	}
+	XRRFreeScreenResources(xrrr);
+	xrrr = NULL;
+}
+#endif
 
 // mode: 0 - x,y, 1 - mon, 2 - mon_sz
 // mode 0 need only for scroll resolution
@@ -789,9 +918,7 @@ static void getRes(int x, int y, _short mode){
 	int i,j;
 	_int found = 0, nm = 0;
 	RROutput prim = 0;
-	Atom name,name0 = 0;
-
-
+	Atom name=0,name0 = 0;
 
 //	XGetWindowAttributes(dpy, DefaultRootWindow(dpy), &wa);
 	memset(&minf1,0,sizeof(minf1));
@@ -905,7 +1032,7 @@ found:
 	if (pf[p_res]<0) {
 		if (!minf2.mwidth && !minf2.mheight) {
 			resX = resY = -pf[p_res];
-			fprintf(stderr,"Screen dimensions in mm unknown. Use resolution in dots.\n");
+			ERR("Screen dimensions in mm unknown. Use resolution in dots.");
 		} else {
 			if (minf2.mwidth) resX = (0.+scr_width)/minf2.mwidth*(-pf[p_res]);
 			resY = minf2.mheight ? (0.+scr_height)/minf2.mheight*(-pf[p_res]) : resX;
@@ -914,7 +1041,7 @@ found:
 	}
 	if (!xrr || !(xrrr = xrrr ? : XRRGetScreenResources(dpy,root))) goto noxrr1;
 	if (!(pi[p_safe]&32) && minf1.out  && minf1.out != prim) {
-		fprintf(stderr,"primary output %lu\n",minf1.out);
+		DBG("primary output %lu",minf1.out);
 		XRRSetOutputPrimary(dpy,root,prim = minf1.out);
 	}
 	_short do_dpi = minf1.mheight && minf1.mwidth && !(pi[p_safe]&16);
@@ -964,7 +1091,7 @@ rep_size:
 			mw = pan_x / dpmw +.5;
     
 			if (mw != scr_mwidth || mh != scr_mheight || pan_y != scr_height || pan_x != scr_width) {
-				fprintf(stderr,"dpi %.1fx%.1f -> %.1fx%.1f dots/mm %ix%i/%ix%i -> %ix%i/%ix%i\n",25.4*scr_width/scr_mwidth,25.4*scr_height/scr_mheight,25.4*pan_x/mw,25.4*pan_y/mh,scr_width,scr_height,scr_mwidth,scr_mheight,pan_x,pan_y,mw,mh);
+				DBG("dpi %.1fx%.1f -> %.1fx%.1f dots/mm %ix%i/%ix%i -> %ix%i/%ix%i",25.4*scr_width/scr_mwidth,25.4*scr_height/scr_mheight,25.4*pan_x/mw,25.4*pan_y/mh,scr_width,scr_height,scr_mwidth,scr_mheight,pan_x,pan_y,mw,mh);
 				_error = 0;
 				XRRSetScreenSize(dpy, root, pan_x, pan_y, mw, mh);
 				if (pan_x != scr_width || pan_y != scr_height) {
@@ -1378,7 +1505,7 @@ old:
 	static int oldErr = 0;
 	if (oldErr != err->error_code) {
 		oldErr=err->error_code;
-		fprintf(stderr, "XError: type=%i XID=0x%lx serial=%lu error_code=%i%s request_code=%i minor_code=%i xierror=%i\n",
+		ERR("XError: type=%i XID=0x%lx serial=%lu error_code=%i%s request_code=%i minor_code=%i xierror=%i",
 			err->type, err->resourceid, err->serial, oldErr,
 			oldErr == xierror ? "=XI" : oldErr == xrerror ?"=XrandR":"s",
 			err->request_code, err->minor_code, xierror);
@@ -1421,6 +1548,11 @@ static void init(){
 	aABS = XInternAtom(dpy, "Device libinput ABS", False);
 #else
 	aABS = XInternAtom(dpy, "xtg ABS", False);
+#endif
+#ifdef XSS
+	aCType = XInternAtom(dpy, "content type", False);
+	aCType1 = XInternAtom(dpy, "xtg saved content type", False);
+	if (pa[p_content_type]) aFullScr = XInternAtom(dpy, pa[p_content_type], False);
 #endif
 
 	XISetMask(ximaskButton, XI_ButtonPress);
@@ -1476,6 +1608,7 @@ static void init(){
 #endif
 	XSelectInput(dpy, root, evmask);
 	oldxerrh = XSetErrorHandler(xerrh);
+	
 	win = root;
 	win1 = None;
 	grp = NO_GRP;
@@ -1487,6 +1620,9 @@ static void init(){
 	curShow = 0;
 	showPtr = 1;
 	XFixesShowCursor(dpy,root);
+#ifdef XSS
+	monFullScreen(0,0);
+#endif
 #endif
 }
 
@@ -1550,7 +1686,7 @@ int main(int argc, char **argv){
 			SET_BMAP(x,y,z);
 			continue;
 		}
-		fprintf(stderr,"Error: invalid map item '%s', -h to help\n",*a);
+		ERR("invalid map item '%s', -h to help",*a);
 		return 1;
 	}
 	resX = resY = pf[p_res] < 0 ? 1 : pf[p_res];
@@ -1664,7 +1800,7 @@ ev2:
 					goto tfound;
 				}
 				if (oldShowPtr && N!=P) {
-					fprintf(stderr,"Drop %i touches\n",TOUCH_CNT);
+					ERR("Drop %i touches",TOUCH_CNT);
 					N=P;
 				}
 //				{
