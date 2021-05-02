@@ -140,7 +140,7 @@ int intFmt = sizeof(prop_int) << 3;
 Atom aNode;
 #endif
 #ifdef XSS
-Atom aCType, aCType1, aFullScr = 0;
+Atom aCType, aCType1, aCTFullScr = 0;
 #endif
 
 #define MASK_LEN XIMaskLen(XI_LASTEVENT)
@@ -388,9 +388,11 @@ static void WMState(Atom *states, short nn){
 	if (noXSS1!=noXSS) {
 		XScreenSaverSuspend(dpy,noXSS=noXSS1);
 #ifdef XTG
-		XWindowAttributes wa;
-		XGetWindowAttributes(dpy, win, &wa);
-		monFullScreen(wa.x,wa.y);
+		if (aCTFullScr) {
+			XWindowAttributes wa;
+			XGetWindowAttributes(dpy, win, &wa);
+			monFullScreen(wa.x,wa.y);
+		}
 #endif
 	}
 }
@@ -890,14 +892,14 @@ static void monFullScreen(int x, int y) {
 		if (!pinf) continue;
 		if (pinf->range) goto next;
 		int i;
-		for (i=0; i<pinf->num_values && (pinf->values[i]!=aFullScr); i++);
+		for (i=0; i<pinf->num_values && (pinf->values[i]!=aCTFullScr); i++);
 		if (i>=pinf->num_values) goto next;
 		Atom ct1 = 0;
 		xrGetProp(minf.out,aCType1,XA_ATOM,&ct1,1,0);
 		if (noXSS && x>=minf.x && x<minf.x+minf.width && y>=minf.y && y<minf.y+minf.height) {
 			if (!ct1) XRRConfigureOutputProperty(dpy,minf.out,aCType1,False,pinf->range,pinf->num_values,pinf->values);
 			if (ct != ct1) xrSetProp(minf.out,aCType1,XA_ATOM,&ct,1,0);
-			ct1 = aFullScr;
+			ct1 = aCTFullScr;
 		}
 		if (ct1 && ct != ct1) {
 			DBG("monitor: %s content type: %s",oinf->name,XGetAtomName(dpy,ct1));
@@ -1552,7 +1554,7 @@ static void init(){
 #ifdef XSS
 	aCType = XInternAtom(dpy, "content type", False);
 	aCType1 = XInternAtom(dpy, "xtg saved content type", False);
-	if (pa[p_content_type]) aFullScr = XInternAtom(dpy, pa[p_content_type], False);
+	if (pa[p_content_type]) aCTFullScr = XInternAtom(dpy, pa[p_content_type], False);
 #endif
 
 	XISetMask(ximaskButton, XI_ButtonPress);
