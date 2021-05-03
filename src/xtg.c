@@ -1753,7 +1753,8 @@ static void init(){
 	} else xssevent = -1;
 #endif
 #ifdef USE_DPMS
-	dpms_enabled = dpms_enabled ? : XQueryExtension(dpy, "DPMS", &dpmsopcode, &dpmsevent, &dpmserror);
+	if (dpms_enabled)
+		dpms_enabled = XQueryExtension(dpy, "DPMS", &dpmsopcode, &dpmsevent, &dpmserror);
 #endif
 #endif
 	if (XQueryExtension(dpy, "XFIXES", &xfopcode, &xfevent, &xferror)) {
