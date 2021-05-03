@@ -1748,12 +1748,12 @@ static void init(){
 			timeSkip--;
 		XFree(x);
 #ifdef USE_DPMS
-		dmps_enabled = 0;
+		dpms_enabled = 0;
 #endif
 	} else xssevent = -1;
 #endif
 #ifdef USE_DPMS
-	dpms_enabled = dmps_enabled ? : XQueryExtension(dpy, "DPMS", &dpmsopcode, &dpmsevent, &dpmserror);
+	dpms_enabled = dpms_enabled ? : XQueryExtension(dpy, "DPMS", &dpmsopcode, &dpmsevent, &dpmserror);
 #endif
 #endif
 	if (XQueryExtension(dpy, "XFIXES", &xfopcode, &xfevent, &xferror)) {
