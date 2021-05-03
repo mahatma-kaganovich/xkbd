@@ -287,6 +287,7 @@ char *ph[MAX_PAR] = {
 	"		9(+256) use mode sizes for panning (errors in xrandr tool!)\n"
 	"		10(+512) keep dpi different x & y (image panned non-aspected)\n"
 	"		11(+1024) don't use cached input ABS\n"
+	"		12(+2048) try delete unused (saved) properity\n"
 	"		(auto-panning for openbox+tint2: \"xrandr --noprimary\" on early init && \"-s 135\" (7+128))",
 	""
 #ifdef XSS
@@ -559,6 +560,7 @@ static void *fmt2fmt(void *from,Atom fromT,int fromF,void *to,Atom toT,int toF,u
 // 2 - - (to check event or xiSetProp() force)
 // 3 - 1=incompatible (xiSetProp() strict)
 // 4 - 1=incompatible or none (xiSetProp() strict if exists)
+// *SetProp: |0x10 - check (read) after write
 
 static _short _chk_prop(char *pr, unsigned long who, Atom prop, Atom type, unsigned char **data, int cnt, _short chk){
 	if (!ret) return (chk>3);
@@ -595,17 +597,20 @@ static _short xrGetProp(RROutput out, Atom prop, Atom type, void *data, int cnt,
 	return _chk_prop("XRRGetOutputProperty",out,prop,type,(void*)&data,cnt,chk);
 }
 
-static void xrSetProp(RROutput out, Atom prop, Atom type, void *data, int cnt, _short chk){
+static _short xrSetProp(RROutput out, Atom prop, Atom type, void *data, int cnt, _short chk){
 	int f = fmtOf(type,32);
-	if (chk) {
-		if (xrGetProp(out,prop,type,data,cnt,chk)) return;
+	if (chk&0xf) {
+		_short r;
+		if ((r=xrGetProp(out,prop,type,data,cnt,chk&0xf))) return r==2;
 #ifdef PROP_FMT
 		data = fmt2fmt(data,type,f,NULL,pr_t,pr_f,cnt);
 		type = pr_t;
 		f = pr_f;
 #endif
 	}
-	if (data) XRRChangeOutputProperty(dpy,out,prop,type,f,PropModeReplace,data,cnt);
+	if (!data) return 0;
+	XRRChangeOutputProperty(dpy,out,prop,type,f,PropModeReplace,data,cnt);
+	return !(chk&0x10) || xrGetProp(out,prop,type,data,cnt,2) == 2;
 }
 
 #ifdef _BACKLIGHT
@@ -635,17 +640,20 @@ static _short xiGetProp(int devid, Atom prop, Atom type, void *data, int cnt, _s
 	return _chk_prop("XIGetOutputProperty",devid,prop,type,(void*)&data,cnt,chk);
 }
 
-static void xiSetProp(int devid, Atom prop, Atom type, void *data, int cnt, _short chk){
+static _short xiSetProp(int devid, Atom prop, Atom type, void *data, int cnt, _short chk){
 	int f = fmtOf(type,32);
-	if (chk) {
-		if (xiGetProp(devid,prop,type,data,cnt,chk)) return;
+	if (chk&0xf) {
+		_short r;
+		if ((r=xiGetProp(devid,prop,type,data,cnt,chk&0xf))) return r==2;
 #ifdef PROP_FMT
 		data = fmt2fmt(data,type,f,NULL,pr_t,pr_f,cnt);
 		type = pr_t;
 		f = pr_f;
 #endif
 	}
-	if (data) XIChangeProperty(dpy,devid,prop,type,f,PropModeReplace,data,cnt);
+	if (!data) return 0;
+	XIChangeProperty(dpy,devid,prop,type,f,PropModeReplace,data,cnt);
+	return !(chk&0x10) || xiGetProp(devid,prop,type,data,cnt,2) == 2;
 }
 
 #ifdef USE_EVDEV
@@ -897,18 +905,50 @@ static void _pan(minf_t *m) {
 
 #ifdef XSS
 static void _monFS(Atom prop,Atom save,Atom val,int x, int y){
+#if 1
+		// optimized X calls, but stricter (?) off/on states
 		Atom ct1 = 0;
-		if (!noXSS) { // optimize
-			if(xrGetProp(minf.out,save,XA_ATOM,&ct1,1,0) && ct1)
-				xrSetProp(minf.out,prop,XA_ATOM,&ct1,1,4);
+		if (!noXSS) {
+saved:
+			if(xrGetProp(minf.out,save,XA_ATOM,&ct1,1,0) && ct1) {
+				_short del = !val || !!(pi[p_safe]&2048);
+				if (xrSetProp(minf.out,prop,XA_ATOM,&ct1,1,4|(del<<4)) && del)
+					XRRDeleteOutputProperty(dpy,minf.out,save);
+			}
 			return;
 		}
+		if (!val) return;
+		// repair disconnected
+		if (!cinf) goto saved;
+		// repair unordered
+		if (!(x>=minf.x && x<=minf.x2 && y>=minf.y && y<=minf.y2)) goto saved;
 		Atom ct = 0;
 		if (!xrGetProp(minf.out,prop,XA_ATOM,&ct,1,0) || !ct) return;
+		XRRPropertyInfo *pinf = NULL;
+		if (!xrGetProp(minf.out,save,XA_ATOM,&ct1,1,0) || !ct1) {
+reconf:
+			if (!(pinf = XRRQueryOutputProperty(dpy,minf.out,prop))) return
+			XRRConfigureOutputProperty(dpy,minf.out,save,False,pinf->range,pinf->num_values,pinf->values);
+			XFree(pinf);
+		}
+		if (ct != ct1) {
+			//xrSetProp(minf.out,save,XA_ATOM,&ct,1,0);
+			if (!xrSetProp(minf.out,save,XA_ATOM,&ct,1,0x14)) {
+				if (!pinf) goto reconf;
+				ERR("output: %s prop: %s change: %s -> %s",oinf->name,XGetAtomName(dpy,prop),XGetAtomName(dpy,ct),XGetAtomName(dpy,ct1));
+				return;
+			}
+		}
+		if (ct != val)
+			xrSetProp(minf.out,prop,XA_ATOM,&val,1,0);
+#else
+		// simple, slow
+		Atom ct = 0;
+		if (!xrGetProp(minf.out,prop,XA_ATOM,&ct,1,0) || !ct) return;
+		Atom ct1 = 0;
 		xrGetProp(minf.out,save,XA_ATOM,&ct1,1,0);
 		XRRPropertyInfo *pinf = NULL;
-//		if (noXSS)
-		if (val && cinf && x>=minf.x && x<=minf.x2 && y>=minf.y && y<=minf.y2
+		if (val && cinf && noXSS && x>=minf.x && x<=minf.x2 && y>=minf.y && y<=minf.y2
 		    && (pinf = XRRQueryOutputProperty(dpy,minf.out,prop))
 		    && !pinf->range) {
 			int i;
@@ -926,9 +966,10 @@ static void _monFS(Atom prop,Atom save,Atom val,int x, int y){
 		}
 		if (pinf) XFree(pinf);
 		if (ct1 && ct != ct1) {
-//			DBG("output: %s %s: %s -> %s",oinf?oinf->name:"",XGetAtomName(dpy,prop),XGetAtomName(dpy,ct),XGetAtomName(dpy,ct1));
+			DBG("output: %s %s: %s -> %s",oinf?oinf->name:"",XGetAtomName(dpy,prop),XGetAtomName(dpy,ct),XGetAtomName(dpy,ct1));
 			xrSetProp(minf.out,prop,XA_ATOM,&ct1,1,0);
 		}
+#endif
 }
 
 static void monFullScreen(int x, int y) {
