@@ -927,14 +927,21 @@ saved:
 		XRRPropertyInfo *pinf = NULL;
 		if (!xrGetProp(minf.out,save,XA_ATOM,&ct1,1,0) || !ct1) {
 reconf:
-			if (!(pinf = XRRQueryOutputProperty(dpy,minf.out,prop))) return
+			if (!(pinf = XRRQueryOutputProperty(dpy,minf.out,prop))) return;
+			int i;
+			for (i=0; i<pinf->num_values; i++) if (pinf->values[i] == val) goto ok;
+			XFree(pinf);
+			return;
+ok:
 			XRRConfigureOutputProperty(dpy,minf.out,save,False,pinf->range,pinf->num_values,pinf->values);
 			XFree(pinf);
 		}
 		if (ct != ct1) {
-			//xrSetProp(minf.out,save,XA_ATOM,&ct,1,0);
 			if (!xrSetProp(minf.out,save,XA_ATOM,&ct,1,0x10)) {
-				if (!pinf) goto reconf;
+				if (!pinf) {
+					XRRDeleteOutputProperty(dpy,minf.out,save);
+					goto reconf;
+				}
 				ERR("output: %s prop: %s change: %s -> %s",oinf->name,XGetAtomName(dpy,save),XGetAtomName(dpy,ct1),XGetAtomName(dpy,ct));
 				return;
 			}
