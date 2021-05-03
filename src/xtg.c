@@ -900,7 +900,7 @@ static void _monFS(Atom prop,Atom save,Atom val,int x, int y){
 		Atom ct1 = 0;
 		if (!noXSS) { // optimize
 			if(xrGetProp(minf.out,save,XA_ATOM,&ct1,1,0) && ct1)
-				xrSetProp(minf.out,prop,XA_ATOM,&ct1,1,2);
+				xrSetProp(minf.out,prop,XA_ATOM,&ct1,1,4);
 			return;
 		}
 		Atom ct = 0;
