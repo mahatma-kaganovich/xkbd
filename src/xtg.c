@@ -897,12 +897,18 @@ static void _pan(minf_t *m) {
 
 #ifdef XSS
 static void _monFS(Atom prop,Atom save,Atom val,int x, int y){
+		Atom ct1 = 0;
+		if (!noXSS) { // optimize
+			if(xrGetProp(minf.out,save,XA_ATOM,&ct1,1,0) && ct1)
+				xrSetProp(minf.out,prop,XA_ATOM,&ct1,1,2);
+			return;
+		}
 		Atom ct = 0;
 		if (!xrGetProp(minf.out,prop,XA_ATOM,&ct,1,0) || !ct) return;
-		XRRPropertyInfo *pinf = NULL;
-		Atom ct1 = 0;
 		xrGetProp(minf.out,save,XA_ATOM,&ct1,1,0);
-		if (val && cinf && noXSS && x>=minf.x && x<=minf.x2 && y>=minf.y && y<=minf.y2
+		XRRPropertyInfo *pinf = NULL;
+//		if (noXSS)
+		if (val && cinf && x>=minf.x && x<=minf.x2 && y>=minf.y && y<=minf.y2
 		    && (pinf = XRRQueryOutputProperty(dpy,minf.out,prop))
 		    && !pinf->range) {
 			int i;
@@ -920,7 +926,7 @@ static void _monFS(Atom prop,Atom save,Atom val,int x, int y){
 		}
 		if (pinf) XFree(pinf);
 		if (ct1 && ct != ct1) {
-			DBG("output: %s %s: %s -> %s",oinf->name,XGetAtomName(dpy,prop),XGetAtomName(dpy,ct),XGetAtomName(dpy,ct1));
+//			DBG("output: %s %s: %s -> %s",oinf?oinf->name:"",XGetAtomName(dpy,prop),XGetAtomName(dpy,ct),XGetAtomName(dpy,ct1));
 			xrSetProp(minf.out,prop,XA_ATOM,&ct1,1,0);
 		}
 }
