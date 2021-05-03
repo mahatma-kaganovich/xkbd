@@ -1,5 +1,5 @@
 /*
-	xtg v1.35 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.36 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -33,6 +33,7 @@
 */
 #ifndef NO_ALL
 #define XSS
+#define USE_DPMS
 #define XTG
 //#define TOUCH_ORDER
 //#define USE_EVDEV
@@ -43,6 +44,7 @@
 #define PROP_FMT
 #undef PROP_FMT
 #endif
+
 
 // fixme: no physical size, only map-to-output on unknown case
 #undef USE_XINERAMA
@@ -56,7 +58,13 @@
 #include <X11/XKBlib.h>
 
 #ifdef XSS
+#define USE_XSS
+#ifdef USE_DPMS
+#include <X11/extensions/dpms.h>
+#endif
+#ifdef USE_XSS
 #include <X11/extensions/scrnsaver.h>
+#endif
 #endif
 
 #ifdef XTG
@@ -77,6 +85,8 @@
 #include <string.h>
 //#include <sys/time.h>
 #include <X11/Xpoll.h>
+// internal extensions list
+//#include <X11/Xlibint.h>
 #endif
 
 #define NO_GRP 99
@@ -113,6 +123,11 @@ Bool _error;
 #ifdef XSS
 Atom aWMState, aFullScreen;
 Bool noXSS, noXSS1;
+Bool xss_enabled = 1;
+#ifdef USE_DPMS
+Bool dpms_enabled = 1;
+int dpmsopcode, dpmsevent, dpmserror;
+#endif
 #endif
 CARD32 grp, grp1;
 unsigned char *rul, *rul2;
@@ -121,8 +136,9 @@ int xkbEventType, xkbError, n1, revert;
 XEvent ev;
 unsigned char *ret;
 
-static inline long min(long x,long y){ return x<y?x:y; }
-static inline long max(long x,long y){ return x>y?x:y; }
+// min/max: X11/Xlibint.h
+static inline long _min(long x,long y){ return x<y?x:y; }
+static inline long _max(long x,long y){ return x>y?x:y; }
 
 #ifdef XTG
 //#define DEV_CHANGED
@@ -171,7 +187,7 @@ _short P=0,N=0;
 
 double resX, resY;
 int resDev;
-int xrr, xrevent, xrerror;
+int xrr, xropcode, xrevent, xrerror;
 Atom aMonName = None;
 #ifdef USE_XINERAMA
 int xir, xirevent, xirerror;
@@ -393,7 +409,24 @@ static void WMState(Atom *states, short nn){
 		}
 	}
 	if (noXSS1!=noXSS) {
-		XScreenSaverSuspend(dpy,noXSS=noXSS1);
+		noXSS=noXSS1;
+#ifdef USE_XSS
+		if (xss_enabled)
+			XScreenSaverSuspend(dpy,noXSS);
+#endif
+#ifdef USE_DPMS
+		if (dpms_enabled) {
+			static _short noDPMS = 0;
+			BOOL dpms_en = 1;
+			CARD16 dpms_st;
+			if (DPMSInfo(dpy,&dpms_st,&dpms_en) == Success) {
+				if (noXSS) noDPMS = !dpms_en;
+				if (!noDPMS) {
+					if (noXSS) DPMSDisable(dpy); else DPMSEnable(dpy);
+				}
+			}
+		}
+#endif
 #ifdef XTG
 		if (aCTFullScr||aCSFullScr) {
 			XWindowAttributes wa;
@@ -898,20 +931,22 @@ static void _pan(minf_t *m) {
 		DBG("crtc %lu panning %ix%i+%i+%i/track:%ix%i+%i+%i/border:%i/%i/%i/%i",m->crt,p->width,p->height,p->left,p->top,  p->track_width,p->track_height,p->track_left,p->track_top,  p->border_left,p->border_top,p->border_right,p->border_bottom);
 		if (XRRSetPanning(dpy,xrrr,m->crt,p)==Success) pan_cnt++;
 	}
-	pan_y = max(pan_y,p->top + m->height0 + p->border_top + p->border_bottom);
-	pan_x = max(pan_x,p->left + m->width0 + p->border_left + p->border_right);
+	pan_y = _max(pan_y,p->top + m->height0 + p->border_top + p->border_bottom);
+	pan_x = _max(pan_x,p->left + m->width0 + p->border_left + p->border_right);
 	XRRFreePanning(p);
 }
 
 #ifdef XSS
+#define INIT_X 0xfffffff
 static void _monFS(Atom prop,Atom save,Atom val,int x, int y){
 #if 1
 		// optimized X calls, but stricter (?) off/on states
+		if (!val && x != INIT_X) return;
 		Atom ct1 = 0;
 		if (!noXSS) {
 saved:
 			if(xrGetProp(minf.out,save,XA_ATOM,&ct1,1,0) && ct1) {
-				_short del = !val || !!(pi[p_safe]&2048);
+				_short del = !val || !!(pi[p_safe]&2048) || x == INIT_X;
 				if (xrSetProp(minf.out,prop,XA_ATOM,&ct1,1,4|(del<<4)) && del)
 					XRRDeleteOutputProperty(dpy,minf.out,save);
 			}
@@ -962,6 +997,7 @@ ok:
 			for (i=0; i<pinf->num_values; i++) {
 				if (pinf->values[i]==val) {
 					if (ct != ct1) {
+						XRRDeleteOutputProperty(dpy,minf.out,save);
 						//if (!ct1)
 						    XRRConfigureOutputProperty(dpy,minf.out,save,False,pinf->range,pinf->num_values,pinf->values);
 						xrSetProp(minf.out,save,XA_ATOM,&ct,1,0);
@@ -1554,6 +1590,36 @@ static void getPropWin1(){
 int (*oldxerrh) (Display *, XErrorEvent *);
 static int xerrh(Display *dpy, XErrorEvent *err){
 	_error = True;
+#ifdef XTG
+	char *c = "";
+	static int oldErr = 0;
+	if (err->request_code == xropcode) {
+		c = "RANDR";
+		switch (err->minor_code) {
+		case X_RRChangeOutputProperty:
+		case X_RRDeleteOutputProperty: return 0;
+		case X_RRSetScreenSize: goto msg;
+		}
+	} else if (err->request_code == xfopcode) {
+		c = "XFixes";
+		switch (err->minor_code) {
+		case X_XFixesShowCursor:
+			// XShowCursor() before XHideCursor()
+			curShow = 1;
+			oldShowPtr |= 1;
+			return 0;
+		}
+	} else if (err->request_code == xiopcode) {
+		c = "XI";
+		switch (err->error_code) {
+		case BadAccess: // second XI_Touch* root listener
+			oldShowPtr |= 2;
+			showPtr = 1;
+		}
+		//return 0;
+		goto msg;
+	}
+#endif
 	switch (err->error_code) {
 	    case BadWindow: win1 = None; break;
 #ifdef XTG
@@ -1561,34 +1627,30 @@ static int xerrh(Display *dpy, XErrorEvent *err){
 		oldShowPtr |= 2;
 		showPtr = 1;
 		break;
-	    case BadMatch:
-		// XShowCursor() before XHideCursor()
-		if (err->request_code == xfopcode) {
-			if (err->minor_code == X_XFixesShowCursor) {
-				curShow = 1;
-				oldShowPtr |= 1;
-			}
-			return 0;
-		}
-		// RRSetScreenSize() on bad XRandr state;
-		break;
 #endif
 	    default:
-#ifdef XTG
-		if (err->error_code==xierror) break; // changes on device list
-old:
-#endif
 		oldxerrh(dpy,err);
 	}
+msg:
 #ifdef XTG
-	static int oldErr = 0;
-	if (oldErr != err->error_code) {
-		oldErr=err->error_code;
-		ERR("XError: type=%i XID=0x%lx serial=%lu error_code=%i%s request_code=%i minor_code=%i xierror=%i",
-			err->type, err->resourceid, err->serial, oldErr,
-			oldErr == xierror ? "=XI" : oldErr == xrerror ?"=XrandR":"s",
-			err->request_code, err->minor_code, xierror);
+	if (oldErr == err->error_code) return 0;
+	oldErr=err->error_code;
+
+	char s[256];
+	s[sizeof(s)-1] = s[0] = 0;
+	XGetErrorText(dpy,err->error_code,s,sizeof(s)-1);
+
+#ifdef _X11_XLIBINT_H_
+	_XExtension *ext;
+	for (ext = dpy->ext_procs; ext; ext = ext->next) if (ext->codes.major_opcode == err->request_code) {
+		c = ext->name;
+		break;
 	}
+#endif
+
+	ERR("X type=%i XID=0x%lx serial=%lu codes: error=%i request=%i minor=%i :: %s: %s",
+		err->type, err->resourceid, err->serial, err->error_code,
+		err->request_code, err->minor_code, c, s);
 #endif
 	return 0;
 }
@@ -1665,7 +1727,9 @@ static void init(){
 	    = -1;
 	_grabX();
 	if (pf[p_res]<0 || mon || mon_sz) {
-		if (xrr = XRRQueryExtension(dpy, &xrevent, &xrerror)) {
+//		if (xrr = XRRQueryExtension(dpy, &xrevent, &xrerror)) {
+		// need xropcode
+		if (xrr = XQueryExtension(dpy, "RANDR", &xropcode, &xrevent, &xrerror)) {
 			xrevent += RRScreenChangeNotify;
 			XRRSelectInput(dpy, root, RRScreenChangeNotifyMask);
 		};
@@ -1676,13 +1740,21 @@ static void init(){
 	_scr_size();
 	//forceUngrab();
 #ifdef XSS
-	if (XScreenSaverQueryExtension(dpy, &xssevent, &xsserror)) {
+#ifdef USE_XSS
+	if (xss_enabled = XScreenSaverQueryExtension(dpy, &xssevent, &xsserror)) {
 		XScreenSaverSelectInput(dpy, root, ScreenSaverNotifyMask);
 		XScreenSaverInfo *x = XScreenSaverAllocInfo();
 		if (x && XScreenSaverQueryInfo(dpy, root, x) == Success && x->state == ScreenSaverOn)
 			timeSkip--;
 		XFree(x);
+#ifdef USE_DPMS
+		dmps_enabled = 0;
+#endif
 	} else xssevent = -1;
+#endif
+#ifdef USE_DPMS
+	dpms_enabled = dmps_enabled ? : XQueryExtension(dpy, "DPMS", &dpmsopcode, &dpmsevent, &dpmserror);
+#endif
 #endif
 	if (XQueryExtension(dpy, "XFIXES", &xfopcode, &xfevent, &xferror)) {
 //		XFixesSelectCursorInput(dpy,root,XFixesDisplayCursorNotifyMask);
@@ -1703,7 +1775,7 @@ static void init(){
 	showPtr = 1;
 	XFixesShowCursor(dpy,root);
 #ifdef XSS
-	monFullScreen(0,0);
+	monFullScreen(INIT_X,INIT_X);
 #endif
 #endif
 }
@@ -2135,6 +2207,7 @@ evfree:
 			}
 #ifdef XTG
 #ifdef XSS
+#ifdef USE_XSS
 #undef e
 #define e ((XScreenSaverNotifyEvent*)&ev)
 			else if (ev.type == xssevent) {
@@ -2146,6 +2219,7 @@ evfree:
 					break;
 				}
 			}
+#endif
 #endif
 #undef e
 #define e ((XRRScreenChangeNotifyEvent*)&ev)
