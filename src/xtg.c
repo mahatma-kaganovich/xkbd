@@ -935,7 +935,7 @@ reconf:
 			//xrSetProp(minf.out,save,XA_ATOM,&ct,1,0);
 			if (!xrSetProp(minf.out,save,XA_ATOM,&ct,1,0x14)) {
 				if (!pinf) goto reconf;
-				ERR("output: %s prop: %s change: %s -> %s",oinf->name,XGetAtomName(dpy,prop),XGetAtomName(dpy,ct),XGetAtomName(dpy,ct1));
+				ERR("output: %s prop: %s change: %s -> %s",oinf->name,XGetAtomName(dpy,save),XGetAtomName(dpy,ct1),XGetAtomName(dpy,ct));
 				return;
 			}
 		}
