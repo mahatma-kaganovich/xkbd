@@ -13,10 +13,10 @@ xkbdd_LDADD = -lX11
 
 xkbdd_xss_SOURCES = xtg.c
 xkbdd_xss_CPPFLAGS = -DNO_ALL -DXSS
-xkbdd_xss_LDADD = -lX11 -lXss
-
 # Xss linked to Xext, so no problem to force -lXext
-xtg_LDADD = @X_EXTRA_LIBS@ -lX11 -lXss -lXi -lXfixes -lXtst -lXrandr -lXext
+xkbdd_xss_LDADD = -lX11 -lXss -lXext
+
+xtg_LDADD = @X_EXTRA_LIBS@ -lX11 -lXss -lXext -lXi -lXfixes -lXtst -lXrandr
 
 xssevent_LDADD = -lX11 -lXss
 xkbswitch_LDADD = -lX11
