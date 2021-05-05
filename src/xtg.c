@@ -452,20 +452,15 @@ static void WMState(Atom *states, short nn){
 	}
 	if (noXSS1!=noXSS) {
 		noXSS=noXSS1;
-		// xss status say ScreenSaverDisabled, but "suspend" dpms too
 #ifdef USE_XSS
-		if (xss_enabled
-//		    && xss_status()!=3	// correct but overcode
-			) XScreenSaverSuspend(dpy,noXSS);
+		if (xss_enabled) XScreenSaverSuspend(dpy,noXSS);
 		else
 #endif
 #ifdef USE_DPMS
-		// this "suspend" is power state, status tracking
 		if (dpms_enabled) {
 			static _short on = 0;
 			if (noXSS) {
-				on = (dpms_status()!=3);
-				if (on) DPMSDisable(dpy);
+				if ((on = (dpms_status()!=3))) DPMSDisable(dpy);
 			} else if (on) DPMSEnable(dpy);
 		}
 #endif
