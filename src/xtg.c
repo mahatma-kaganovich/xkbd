@@ -126,13 +126,13 @@ Atom aWMState, aFullScreen;
 Bool noXSS, noXSS1;
 
 #ifdef USE_XSS
-_short xss_enabled = 1;
+_short xss_enabled;
 #else
 #define xss_enabled 0
 #endif
 
 #ifdef USE_DPMS
-_short dpms_enabled = 1;
+_short dpms_enabled;
 int dpmsopcode=0, dpmsevent=-1;
 #else
 #define dpms_enabled 0
@@ -405,6 +405,39 @@ static void printGrp(){
 
 
 #ifdef XSS
+// DPMSInfo() and XScreenSaverQueryInfo() result is boolean (but type is "Status")
+// use transparent values instead
+#ifdef USE_XSS
+static _short xss_status(){
+	_short r = 3;
+	XScreenSaverInfo *x = XScreenSaverAllocInfo();
+	if (x) {
+		x->state = ScreenSaverDisabled;
+		XScreenSaverQueryInfo(dpy, root, x);
+#if ScreenSaverDisabled == 3 && ScreenSaverOn == 1
+		r = x->state;
+#else
+		switch (x->state) {
+		case ScreenSaverOff: r = 0; break;
+		case ScreenSaverOn: r = 1; break;
+		case ScreenSaverCycle: r = 2; break;
+		//case ScreenSaverDisabled: r = 3; break; // or dpms
+		}
+#endif
+		XFree(x);
+	}
+	return r;
+}
+#endif
+#ifdef USE_DPMS
+// to xss style
+static _short dpms_status(){
+	BOOL en = 0;
+	CARD16 s = 0;
+	DPMSInfo(dpy,&s,&en);
+	return en ? (s != DPMSModeOn) : 3;
+}
+#endif
 #ifdef XTG
 static void monFullScreen(int x, int y);
 #endif
@@ -419,23 +452,24 @@ static void WMState(Atom *states, short nn){
 	}
 	if (noXSS1!=noXSS) {
 		noXSS=noXSS1;
+		// xss status say ScreenSaverDisabled, but "suspend" dpms too
 #ifdef USE_XSS
-		if (xss_enabled)
-			XScreenSaverSuspend(dpy,noXSS);
+		if (xss_enabled
+//		    && xss_status()!=3	// correct but overcode
+			) XScreenSaverSuspend(dpy,noXSS);
+		else
 #endif
 #ifdef USE_DPMS
+		// this "suspend" is power state, status tracking
 		if (dpms_enabled) {
-			static _short noDPMS = 0;
-			BOOL dpms_en = 1;
-			CARD16 dpms_st;
-			if (DPMSInfo(dpy,&dpms_st,&dpms_en) == Success) {
-				if (noXSS) noDPMS = !dpms_en;
-				if (!noDPMS) {
-					if (noXSS) DPMSDisable(dpy); else DPMSEnable(dpy);
-				}
-			}
+			static _short on = 0;
+			if (noXSS) {
+				on = (dpms_status()!=3);
+				if (on) DPMSDisable(dpy);
+			} else if (on) DPMSEnable(dpy);
 		}
 #endif
+		;
 #ifdef XTG
 		if (aCTFullScr||aCSFullScr) {
 			XWindowAttributes wa;
@@ -1693,8 +1727,7 @@ static void init(){
 	xss_enabled = XScreenSaverQueryExtension(dpy, &xssevent, &ierr);
 #endif
 #ifdef USE_DPMS
-//	dpms_enabled = !xss_enabled && XQueryExtension(dpy, "DPMS", &dpmsopcode, &dpmsevent, &ierr);
-	dpms_enabled = !xss_enabled && DPMSQueryExtension(dpy, &dpmsevent, &ierr);
+	dpms_enabled = DPMSQueryExtension(dpy, &dpmsevent, &ierr) && DPMSCapable(dpy);
 #endif
 #endif
 
@@ -1768,14 +1801,18 @@ static void init(){
 	}
 	_scr_size();
 	//forceUngrab();
-#if defined(XSS) && defined(USE_XSS)
+#ifdef XSS
+#ifdef USE_XSS
 	if (xss_enabled) {
 		XScreenSaverSelectInput(dpy, root, ScreenSaverNotifyMask);
-		XScreenSaverInfo *x = XScreenSaverAllocInfo();
-		if (x && XScreenSaverQueryInfo(dpy, root, x) == Success && x->state == ScreenSaverOn)
-			timeSkip--;
-		XFree(x);
+		if (xss_status() == 1) timeSkip--;
 	}
+#endif
+#ifdef USE_DPMS
+	if (dpms_enabled) {
+		if (xss_status() == 1) timeSkip--;
+	}
+#endif
 #endif
 	if (XQueryExtension(dpy, "XFIXES", &xfopcode, &xfevent, &ierr)) {
 //		XFixesSelectCursorInput(dpy,root,XFixesDisplayCursorNotifyMask);
@@ -1901,7 +1938,7 @@ ev2:
 #ifdef XTG
 		    case GenericEvent:
 			if (ev.xcookie.extension == xiopcode) {
-//				fprintf(stderr,"ev %i\n",ev.xcookie.evtype);
+//				DBG("ev %i",ev.xcookie.evtype);
 				if (ev.xcookie.evtype < XI_TouchBegin) switch (ev.xcookie.evtype) {
 #ifdef DEV_CHANGED
 				    case XI_DeviceChanged:
