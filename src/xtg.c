@@ -931,11 +931,11 @@ static _short xrMons(_short disconnected){
 		// simple reduce overhead
 		if (disconnected==1 && !noXSS) return 1;
 #endif
-		if (!(oinf = XRRGetOutputInfo(dpy, xrrr, minf.out))) continue;
 		minf.non_desktop = 0;
 		xrGetProp(aNonDesk,XA_INTEGER,&minf.non_desktop,1,0);
+		if (!disconnected && minf.non_desktop) continue;
+		if (!(oinf = XRRGetOutputInfo(dpy, xrrr, minf.out))) continue;
 		if (oinf->connection == RR_Connected
-			&& (disconnected || !minf.non_desktop)
 			&& (minf.crt = oinf->crtc)
 			&& (cinf=XRRGetCrtcInfo(dpy, xrrr, minf.crt))
 			) break;
