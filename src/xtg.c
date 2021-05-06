@@ -154,7 +154,7 @@ static inline long _max(long x,long y){ return x>y?x:y; }
 //#define DEV_CHANGED
 int devid = 0;
 int xiopcode=0, xfopcode=0, xfevent=-100;
-Atom aFloat,aMatrix,aABS,aDevMon,aDevMonCache;
+Atom aFloat,aMatrix,aABS,aDevMon,aDevMonCache,aNonDesk;
 #ifdef _BACKLIGHT
 Atom aBl;
 #endif
@@ -504,6 +504,7 @@ typedef struct _minf {
 #ifdef _BACKLIGHT
 	pinf_t bl;
 #endif
+	prop_int non_desktop;
 } minf_t;
 
 minf_t minf,minf1,minf2;
@@ -931,7 +932,13 @@ static _short xrMons(_short disconnected){
 		if (disconnected==1 && !noXSS) return 1;
 #endif
 		if (!(oinf = XRRGetOutputInfo(dpy, xrrr, minf.out))) continue;
-		if (oinf->connection == RR_Connected && (minf.crt = oinf->crtc) && (cinf=XRRGetCrtcInfo(dpy, xrrr, minf.crt))) break;
+		minf.non_desktop = 0;
+		xrGetProp(aNonDesk,XA_INTEGER,&minf.non_desktop,1,0);
+		if (oinf->connection == RR_Connected
+			&& (disconnected || !minf.non_desktop)
+			&& (minf.crt = oinf->crtc)
+			&& (cinf=XRRGetCrtcInfo(dpy, xrrr, minf.crt))
+			) break;
 		if (disconnected==1) return 1;
 		if (disconnected) break;
 		XRRFreeOutputInfo(oinf);
@@ -1797,12 +1804,13 @@ static void init(){
 	aFloat = XInternAtom(dpy, "FLOAT", False);
 	aMatrix = XInternAtom(dpy, "Coordinate Transformation Matrix", False);
 	aDevMon = XInternAtom(dpy, "xtg output", False);	aDevMonCache = XInternAtom(dpy, "xtg output cached", False);
+	aNonDesk = XInternAtom(dpy, RR_PROPERTY_NON_DESKTOP, False);
 #ifdef _BACKLIGHT
 	aBl = XInternAtom(dpy, RR_PROPERTY_BACKLIGHT, False);
 #endif
 #ifdef USE_EVDEV
 	aNode = XInternAtom(dpy, "Device Node", False);
-	aABS = XInternAtom(dpy, "Device libinput ABS", False);
+	aABS = XInternAtom(dpy, "Device libevdev ABS", False);
 #else
 	aABS = XInternAtom(dpy, "xtg ABS", False);
 #endif
