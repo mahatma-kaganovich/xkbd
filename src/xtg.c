@@ -357,7 +357,7 @@ static Bool getRules(){
 	return False;
 }
 
-static int getProp(Window w, Atom prop, Atom type, int size){
+static int getWProp(Window w, Atom prop, Atom type, int size){
 	_free(ret);
 	if (!(XGetWindowProperty(dpy,w,prop,0,1024,False,type,&pr_t,&pr_f,&n,&pr_b,&ret)==Success && pr_f>>3 == size && ret))
 		n=0;
@@ -640,6 +640,7 @@ static void *fmt2fmt(void *from,Atom fromT,int fromF,void *to,Atom toT,int toF,u
 // 4 - 1=incompatible or none (xiSetProp() strict if exists)
 // *SetProp: |0x10 - check (read) after write
 
+char *_pr_name;
 static _short _chk_prop(char *pr, unsigned long who, Atom prop, Atom type, unsigned char **data, int cnt, _short chk){
 	if (!ret) return (chk>3);
 	if (pr_b || (cnt>0 && pr_n!=cnt)) goto err;
@@ -668,18 +669,43 @@ err:
 	return 1;
 }
 
-static _short xrGetProp(RROutput out, Atom prop, Atom type, void *data, int cnt, _short chk){
+typedef enum {
+	pr_win,
+	pr_out,
+	pr_input,
+} pr_target_t;
+
+pr_target_t target;
+
+static _short getProp(Atom prop, Atom type, void *data, int cnt, _short chk){
 	_free(ret);
-	Bool pending = False;
-	XRRGetOutputProperty(dpy,out,prop,0,abs(cnt),False,pending,type,&pr_t,&pr_f,&pr_n,&pr_b,(void*)&ret);
-	return _chk_prop("XRRGetOutputProperty",out,prop,type,(void*)&data,cnt,chk);
+	switch (target) {
+	    case pr_win:
+		_pr_name = "XGetWindowProperty";
+		XGetWindowProperty(dpy,win,prop,0,abs(cnt),False,type,&pr_t,&pr_f,&pr_n,&pr_b,(void*)&ret);
+//		XGetWindowProperty(dpy,w,prop,0,1024,False,type,&pr_t,&pr_f,&n,&pr_b,&ret)
+		break;
+	    case pr_out:
+		_pr_name = "XRRGetOutputProperty";
+		Bool pending = False;
+		XRRGetOutputProperty(dpy,minf.out,prop,0,abs(cnt),False,pending,type,&pr_t,&pr_f,&pr_n,&pr_b,(void*)&ret);
+		break;
+	    case pr_input:
+		_pr_name = "XRRGetOutputProperty";
+		XIGetProperty(dpy,devid,prop,0,abs(cnt),False,type,&pr_t,&pr_f,&pr_n,&pr_b,(void*)&ret);
+		break;
+	    default:
+		ERR("BUG!");
+		return 0;
+	}
+	return _chk_prop(_pr_name,minf.out,prop,type,(void*)&data,cnt,chk);
 }
 
-static _short xrSetProp(RROutput out, Atom prop, Atom type, void *data, int cnt, _short chk){
+static _short setProp(Atom prop, Atom type, void *data, int cnt, _short chk){
 	int f = fmtOf(type,32);
 	if (chk&0xf) {
 		_short r;
-		if ((r=xrGetProp(out,prop,type,data,cnt,chk&0xf))) return r==2;
+		if ((r=getProp(prop,type,data,cnt,chk&0xf))) return r==2;
 #ifdef PROP_FMT
 		data = fmt2fmt(data,type,f,NULL,pr_t,pr_f,cnt);
 		type = pr_t;
@@ -687,8 +713,43 @@ static _short xrSetProp(RROutput out, Atom prop, Atom type, void *data, int cnt,
 #endif
 	}
 	if (!data) return 0;
-	XRRChangeOutputProperty(dpy,out,prop,type,f,PropModeReplace,data,cnt);
-	return !(chk&0x10) || xrGetProp(out,prop,type,data,cnt,2) == 2;
+	switch (target) {
+	    case pr_win:
+		XChangeProperty(dpy,devid,prop,type,f,PropModeReplace,data,cnt);
+		break;
+	    case pr_out:
+		XRRChangeOutputProperty(dpy,minf.out,prop,type,f,PropModeReplace,data,cnt);
+		break;
+	    case pr_input:
+		XIChangeProperty(dpy,devid,prop,type,f,PropModeReplace,data,cnt);
+		break;
+	    default:
+		ERR("BUG!");
+		return 0;
+	}
+
+	return !(chk&0x10) || getProp(prop,type,data,cnt,2) == 2;
+}
+
+
+static _short xrGetProp(Atom prop, Atom type, void *data, int cnt, _short chk){
+	target = pr_out;
+	return getProp(prop,type,data,cnt,chk);
+}
+
+static _short xrSetProp(Atom prop, Atom type, void *data, int cnt, _short chk){
+	target = pr_out;
+	return setProp(prop,type,data,cnt,chk);
+}
+
+static _short xiGetProp(Atom prop, Atom type, void *data, int cnt, _short chk){
+	target = pr_input;
+	return getProp(prop,type,data,cnt,chk);
+}
+
+static _short xiSetProp(Atom prop, Atom type, void *data, int cnt, _short chk){
+	target = pr_input;
+	return setProp(prop,type,data,cnt,chk);
 }
 
 #ifdef _BACKLIGHT
@@ -712,28 +773,6 @@ static void xrChkProp(RROutput out, Atom prop, pinf_t *d) {
 #endif
 float devABS[NdevABS] = {0,0,};
 
-static _short xiGetProp(int devid, Atom prop, Atom type, void *data, int cnt, _short chk){
-	_free(ret);
-	XIGetProperty(dpy,devid,prop,0,abs(cnt),False,type,&pr_t,&pr_f,&pr_n,&pr_b,(void*)&ret);
-	return _chk_prop("XIGetOutputProperty",devid,prop,type,(void*)&data,cnt,chk);
-}
-
-static _short xiSetProp(int devid, Atom prop, Atom type, void *data, int cnt, _short chk){
-	int f = fmtOf(type,32);
-	if (chk&0xf) {
-		_short r;
-		if ((r=xiGetProp(devid,prop,type,data,cnt,chk&0xf))) return r==2;
-#ifdef PROP_FMT
-		data = fmt2fmt(data,type,f,NULL,pr_t,pr_f,cnt);
-		type = pr_t;
-		f = pr_f;
-#endif
-	}
-	if (!data) return 0;
-	XIChangeProperty(dpy,devid,prop,type,f,PropModeReplace,data,cnt);
-	return !(chk&0x10) || xiGetProp(devid,prop,type,data,cnt,2) == 2;
-}
-
 #ifdef USE_EVDEV
 static double _evsize(struct libevdev *dev, int c) {
 	double r = 0;
@@ -742,9 +781,9 @@ static double _evsize(struct libevdev *dev, int c) {
 	return r;
 }
 static void getEvRes(){
-	if (!(pi[p_safe]&1024) && xiGetProp(devid,aABS,aFloat,&devABS,NdevABS,0)) return;
+	if (!(pi[p_safe]&1024) && xiGetProp(aABS,aFloat,&devABS,NdevABS,0)) return;
 	memset(&devABS,0,sizeof(devABS));
-	if (!xiGetProp(devid,aNode,XA_STRING,NULL,-1024,0)) return;
+	if (!xiGetProp(aNode,XA_STRING,NULL,-1024,0)) return;
 	if (grabcnt && (pi[p_safe]&2)) _Xungrab();
 	int fd = open(ret, O_RDONLY|O_NONBLOCK);
 	if (fd < 0) goto ret;
@@ -756,7 +795,7 @@ static void getEvRes(){
 		devABS[2] = _evsize(device,ABS_Z);
 #endif
 		libevdev_free(device);
-		xiSetProp(devid,aABS,aFloat,&devABS,NdevABS,0);
+		xiSetProp(aABS,aFloat,&devABS,NdevABS,0);
 	}
 	close(fd);
 ret:
@@ -822,7 +861,7 @@ static void map_to(){
 	matrix[8]=1;
 	matrix[1-m]=w;
 	matrix[3+m]=h;
-	xiSetProp(devid,aMatrix,aFloat,&matrix,9,4);
+	xiSetProp(aMatrix,aFloat,&matrix,9,4);
 }
 
 static void fixMonSize(minf_t *minf, double *dpmw, double *dpmh) {
@@ -867,7 +906,7 @@ static void fixMonSize(minf_t *minf, double *dpmw, double *dpmh) {
 	}
 }
 
-static void clearCache(int devid){
+static void clearCache(){
 	XIDeleteProperty(dpy,devid,aDevMonCache);
 }
 
@@ -990,9 +1029,9 @@ static void _monFS(Atom prop,Atom save,Atom val,int x, int y){
 		Atom ct1 = 0;
 		if (!noXSS) {
 saved:
-			if(xrGetProp(minf.out,save,XA_ATOM,&ct1,1,0) && ct1) {
+			if(xrGetProp(save,XA_ATOM,&ct1,1,0) && ct1) {
 				_short del = !val || !!(pi[p_safe]&2048) || x == INIT_X;
-				if (xrSetProp(minf.out,prop,XA_ATOM,&ct1,1,4|(del<<4)) && del)
+				if (xrSetProp(prop,XA_ATOM,&ct1,1,4|(del<<4)) && del)
 					XRRDeleteOutputProperty(dpy,minf.out,save);
 			}
 			return;
@@ -1003,9 +1042,9 @@ saved:
 		// repair unordered
 		if (!(x>=minf.x && x<=minf.x2 && y>=minf.y && y<=minf.y2)) goto saved;
 		Atom ct = 0;
-		if (!xrGetProp(minf.out,prop,XA_ATOM,&ct,1,0) || !ct) return;
+		if (!xrGetProp(prop,XA_ATOM,&ct,1,0) || !ct) return;
 		XRRPropertyInfo *pinf = NULL;
-		if (!xrGetProp(minf.out,save,XA_ATOM,&ct1,1,0) || !ct1) {
+		if (!xrGetProp(save,XA_ATOM,&ct1,1,0) || !ct1) {
 reconf:
 			if (!(pinf = XRRQueryOutputProperty(dpy,minf.out,prop))) return;
 			int i;
@@ -1017,7 +1056,7 @@ ok:
 			XFree(pinf);
 		}
 		if (ct != ct1) {
-			if (!xrSetProp(minf.out,save,XA_ATOM,&ct,1,0x10)) {
+			if (!xrSetProp(save,XA_ATOM,&ct,1,0x10)) {
 				if (!pinf) {
 					XRRDeleteOutputProperty(dpy,minf.out,save);
 					goto reconf;
@@ -1027,13 +1066,13 @@ ok:
 			}
 		}
 		if (ct != val)
-			xrSetProp(minf.out,prop,XA_ATOM,&val,1,0);
+			xrSetProp(prop,XA_ATOM,&val,1,0);
 #else
 		// simple, slow
 		Atom ct = 0;
-		if (!xrGetProp(minf.out,prop,XA_ATOM,&ct,1,0) || !ct) return;
+		if (!xrGetProp(prop,XA_ATOM,&ct,1,0) || !ct) return;
 		Atom ct1 = 0;
-		xrGetProp(minf.out,save,XA_ATOM,&ct1,1,0);
+		xrGetProp(save,XA_ATOM,&ct1,1,0);
 		XRRPropertyInfo *pinf = NULL;
 		if (val && cinf && noXSS && x>=minf.x && x<=minf.x2 && y>=minf.y && y<=minf.y2
 		    && (pinf = XRRQueryOutputProperty(dpy,minf.out,prop))
@@ -1045,7 +1084,7 @@ ok:
 						XRRDeleteOutputProperty(dpy,minf.out,save);
 						//if (!ct1)
 						    XRRConfigureOutputProperty(dpy,minf.out,save,False,pinf->range,pinf->num_values,pinf->values);
-						xrSetProp(minf.out,save,XA_ATOM,&ct,1,0);
+						xrSetProp(save,XA_ATOM,&ct,1,0);
 					}
 					ct1 = val;
 					break;
@@ -1055,7 +1094,7 @@ ok:
 		if (pinf) XFree(pinf);
 		if (ct1 && ct != ct1) {
 			DBG("output: %s %s: %s -> %s",oinf?oinf->name:"",XGetAtomName(dpy,prop),XGetAtomName(dpy,ct),XGetAtomName(dpy,ct1));
-			xrSetProp(minf.out,prop,XA_ATOM,&ct1,1,0);
+			xrSetProp(prop,XA_ATOM,&ct1,1,0);
 		}
 #endif
 }
@@ -1090,7 +1129,7 @@ static void getRes(int x, int y, _short mode){
 
 	if(mon) {
 		if (mode == 1) name=mon;
-	} else if (devid && xiGetProp(devid,aDevMon,XA_ATOM,NULL,1,0)) name = *(Atom*)ret;
+	} else if (devid && xiGetProp(aDevMon,XA_ATOM,NULL,1,0)) name = *(Atom*)ret;
 
 #ifdef USE_EVDEV
 	if (mode == 2) {
@@ -1176,10 +1215,10 @@ found:
 	if (devid) {
 		devABS[0] = minf2.mwidth;
 		devABS[1] = minf2.mheight;
-		xiSetProp(devid,aABS,aFloat,&devABS,NdevABS,2);
+		xiSetProp(aABS,aFloat,&devABS,NdevABS,2);
 	}
 #endif
-	if (devid) xiSetProp(devid,aDevMonCache,XA_ATOM,&minf2.name,1,2);
+	if (devid) xiSetProp(aDevMonCache,XA_ATOM,&minf2.name,1,2);
 	if (minf2.mwidth > minf2.mheight && minf2.width < minf2.height && minf2.mheight) {
 		i = minf2.mwidth;
 		minf2.mwidth = minf2.mheight;
@@ -1229,39 +1268,47 @@ found:
 		}
 		_pan(&minf2);
 
-		if (do_dpi) {
-			int mh, mw;
-			if (!pan_x)
-				pan_x = scr_width;
-			if (!pan_y)
-				pan_y = scr_height;
-			if (pan_cnt && (pan_x != scr_width || pan_y != scr_height)) {
-				XFlush(dpy);
-				XSync(dpy,False);
-			}
+		if (!pan_x)
+			pan_x = scr_width;
+		if (!pan_y)
+			pan_y = scr_height;
+		if (pan_cnt && (pan_x != scr_width || pan_y != scr_height)) {
+			XFlush(dpy);
+			XSync(dpy,False);
+		} else if (!do_dpi) goto noxrr1;
 
+		if (do_dpi) {
 			if (minf1.crt != minf2.crt) fixMonSize(&minf2, &dpmw, &dpmh);
 			fixMonSize(&minf1, &dpmw, &dpmh);
+		}
+
+		int mh, mw;
 rep_size:
+		if (do_dpi) {
 			if (!(pi[p_safe]&512))
 				if (dpmh > dpmw) dpmw = dpmh;
 				else dpmh = dpmw;
-
 			mh = pan_y / dpmh + .5;
-			mw = pan_x / dpmw +.5;
-    
-			if (mw != scr_mwidth || mh != scr_mheight || pan_y != scr_height || pan_x != scr_width) {
-				DBG("dpi %.1fx%.1f -> %.1fx%.1f dots/mm %ix%i/%ix%i -> %ix%i/%ix%i",25.4*scr_width/scr_mwidth,25.4*scr_height/scr_mheight,25.4*pan_x/mw,25.4*pan_y/mh,scr_width,scr_height,scr_mwidth,scr_mheight,pan_x,pan_y,mw,mh);
-				_error = 0;
-				XRRSetScreenSize(dpy, root, pan_x, pan_y, mw, mh);
-				if (pan_x != scr_width || pan_y != scr_height) {
-					XFlush(dpy);
-					XSync(dpy,False);
-					if (_error) {
-						pan_x = scr_width;
-						pan_y = scr_height;
-						goto rep_size;
-					}
+			mw = pan_x / dpmw + .5;
+		} else {
+			// keep dpi after panning
+			mh = (pan_y * scr_mheight + .0) / scr_height + .5;
+			mw = (pan_x * scr_mwidth + .0) / scr_width + .5;
+		}
+
+		if (
+		    pan_cnt ||	// force RRScreenChangeNotify event after panning for pre-RandR 1.2 clients
+		    mw != scr_mwidth || mh != scr_mheight || pan_y != scr_height || pan_x != scr_width) {
+			DBG("dpi %.1fx%.1f -> %.1fx%.1f dots/mm %ix%i/%ix%i -> %ix%i/%ix%i",25.4*scr_width/scr_mwidth,25.4*scr_height/scr_mheight,25.4*pan_x/mw,25.4*pan_y/mh,scr_width,scr_height,scr_mwidth,scr_mheight,pan_x,pan_y,mw,mh);
+			_error = 0;
+			XRRSetScreenSize(dpy, root, pan_x, pan_y, mw, mh);
+			if (pan_x != scr_width || pan_y != scr_height) {
+				XFlush(dpy);
+				XSync(dpy,False);
+				if (_error) {
+					pan_x = scr_width;
+					pan_y = scr_height;
+					goto rep_size;
 				}
 			}
 		}
@@ -1350,7 +1397,7 @@ static void getHierarchy(){
 		devid = d2->deviceid;
 		short t = 0, rel = 0, abs = 0, scroll = 0;
 		busy = 0;
-		clearCache(devid);
+		clearCache();
 		if (__init) {
 			XIDeleteProperty(dpy,devid,aABS);
 		}
@@ -1608,14 +1655,14 @@ static void getWinGrp(){
 	}
 	win = win1;
 	grp1 = 0;
-	if (win!=root && getProp(win,aKbdGrp,XA_CARDINAL,sizeof(CARD32)))
+	if (win!=root && getWProp(win,aKbdGrp,XA_CARDINAL,sizeof(CARD32)))
 		grp1 = *(CARD32*)ret;
 	while (grp1 != grp && XkbLockGroup(dpy, XkbUseCoreKbd, grp1)!=Success && grp1) {
 		XDeleteProperty(dpy,win,aKbdGrp);
 		grp1 = 0;
 	}
 #ifdef XSS
-	getProp(win,aWMState,XA_ATOM,sizeof(Atom));
+	getWProp(win,aWMState,XA_ATOM,sizeof(Atom));
 	WMState(((Atom*)ret),n);
 #endif
 }
@@ -1628,7 +1675,7 @@ static void setWinGrp(){
 }
 
 static void getPropWin1(){
-	if (getProp(root,aActWin,XA_WINDOW,sizeof(Window)))
+	if (getWProp(root,aActWin,XA_WINDOW,sizeof(Window)))
 		win1 = *(Window*)ret;
 }
 
@@ -1969,7 +2016,7 @@ ev2:
 					if (XGetEventData(dpy, &ev.xcookie)) {
 						TIME(T,e->time);
 						Atom p = e->property;
-						int devid1 = e->deviceid;
+						devid = e->deviceid;
 						XFreeEventData(dpy, &ev.xcookie);
 						if (
 							//devid!=devid1 ||
@@ -1977,7 +2024,7 @@ ev2:
 							|| p==aABS
 							|| p==aDevMonCache
 							) goto ev2;
-						if (p==aDevMon) clearCache(devid1);
+						if (p==aDevMon) clearCache();
 					}
 				    case XI_HierarchyChanged:
 					resDev = 0;
@@ -2004,10 +2051,10 @@ ev2:
 				if (resDev != devid) {
 					// slow for multiple touchscreens
 					if (resXY && ((pi[p_safe]&1024)
-					    || xiGetProp(devid,aABS,aFloat,&devABS,NdevABS,1)!=2
-					    || !xiGetProp(devid,aDevMonCache,XA_ATOM,&minf2.name,1,2)
-					    //|| !xiGetProp(devid,aDevMon,XA_ATOM,&minf2.name,1,2)
-					    //|| !xiGetProp(devid,aMatrix,aFloat,&matrix,9,2)
+					    || xiGetProp(aABS,aFloat,&devABS,NdevABS,1)!=2
+					    || !xiGetProp(aDevMonCache,XA_ATOM,&minf2.name,1,2)
+					    //|| !xiGetProp(aDevMon,XA_ATOM,&minf2.name,1,2)
+					    //|| !xiGetProp(aMatrix,aFloat,&matrix,9,2)
 						)) getRes(x2,y2,0);
 					resDev = devid;
 				}
