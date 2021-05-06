@@ -121,7 +121,7 @@ Atom aActWin, aKbdGrp, aXkbRules;
 Bool _error;
 
 #ifdef XSS
-int xssevent=-1;
+int xssevent=-100;
 Atom aWMState, aFullScreen;
 Bool noXSS, noXSS1;
 
@@ -133,7 +133,7 @@ _short xss_enabled;
 
 #ifdef USE_DPMS
 _short dpms_enabled;
-int dpmsopcode=0, dpmsevent=-1;
+int dpmsopcode=0, dpmsevent=-100;
 #else
 #define dpms_enabled 0
 #endif
@@ -142,7 +142,7 @@ int dpmsopcode=0, dpmsevent=-1;
 CARD32 grp, grp1;
 unsigned char *rul, *rul2;
 unsigned long rulLen, n;
-int xkbEventType, xkbError, n1, revert;
+int xkbEventType=-100, xkbError, n1, revert;
 XEvent ev;
 unsigned char *ret;
 
@@ -153,7 +153,7 @@ static inline long _max(long x,long y){ return x>y?x:y; }
 #ifdef XTG
 //#define DEV_CHANGED
 int devid = 0;
-int xiopcode=0, xfopcode=0, xfevent=-1;
+int xiopcode=0, xfopcode=0, xfevent=-100;
 Atom aFloat,aMatrix,aABS,aDevMon,aDevMonCache;
 #ifdef _BACKLIGHT
 Atom aBl;
@@ -197,10 +197,10 @@ _short P=0,N=0;
 
 double resX, resY;
 int resDev;
-int xrr, xropcode=0, xrevent=-1;
+int xrr, xropcode=0, xrevent=-100, xrevent1=-100;
 Atom aMonName = None;
 #ifdef USE_XINERAMA
-int xir, xirevent=-1;
+int xir, xirevent=-100;
 #endif
 
 Time timeSkip = 0, timeHold = 0;
@@ -408,30 +408,35 @@ static void printGrp(){
 // DPMSInfo() and XScreenSaverQueryInfo() result is boolean (but type is "Status")
 // use transparent values instead
 #ifdef USE_XSS
-static _short xss_status(){
-	_short r = 3;
+_short xssState = 3;
+#if ScreenSaverDisabled == 3 && ScreenSaverOn == 1 && ScreenSaverOff == 0
+#define xssStateSet(s) xssState = (s)
+#else
+static void xssStateSet(_short s){
+	switch (s) {
+	    case ScreenSaverOff: xssState = 0; break;
+	    case ScreenSaverOn: xssState = 1; break;
+	    case ScreenSaverCycle: xssState = 2; break;
+//	    case ScreenSaverDisabled:
+	    default:
+		    xssState = 3; break; // or dpms
+	}
+}
+#endif
+static _short xss_state(){
 	XScreenSaverInfo *x = XScreenSaverAllocInfo();
 	if (x) {
 		x->state = ScreenSaverDisabled;
 		XScreenSaverQueryInfo(dpy, root, x);
-#if ScreenSaverDisabled == 3 && ScreenSaverOn == 1
-		r = x->state;
-#else
-		switch (x->state) {
-		case ScreenSaverOff: r = 0; break;
-		case ScreenSaverOn: r = 1; break;
-		case ScreenSaverCycle: r = 2; break;
-		//case ScreenSaverDisabled: r = 3; break; // or dpms
-		}
-#endif
+		xssStateSet(x->state);
 		XFree(x);
 	}
-	return r;
+	return xssState;
 }
 #endif
 #ifdef USE_DPMS
 // to xss style
-static _short dpms_status(){
+static _short dpms_state(){
 	BOOL en = 0;
 	CARD16 s = 0;
 	DPMSInfo(dpy,&s,&en);
@@ -453,14 +458,16 @@ static void WMState(Atom *states, short nn){
 	if (noXSS1!=noXSS) {
 		noXSS=noXSS1;
 #ifdef USE_XSS
-		if (xss_enabled) XScreenSaverSuspend(dpy,noXSS);
+		if (xss_enabled
+//			&& xssState != 3
+			) XScreenSaverSuspend(dpy,noXSS);
 		else
 #endif
 #ifdef USE_DPMS
 		if (dpms_enabled) {
 			static _short on = 0;
 			if (noXSS) {
-				if ((on = (dpms_status()!=3))) DPMSDisable(dpy);
+				if ((on = (dpms_state()!=3))) DPMSDisable(dpy);
 			} else if (on) DPMSEnable(dpy);
 		}
 #endif
@@ -1787,8 +1794,13 @@ static void init(){
 //		if (xrr = XRRQueryExtension(dpy, &xrevent, &ierr)) {
 		// need xropcode
 		if (xrr = XQueryExtension(dpy, "RANDR", &xropcode, &xrevent, &ierr)) {
+			xrevent1 = xrevent + RRNotify;
 			xrevent += RRScreenChangeNotify;
-			XRRSelectInput(dpy, root, RRScreenChangeNotifyMask);
+			XRRSelectInput(dpy, root, RRScreenChangeNotifyMask
+				|RRCrtcChangeNotifyMask
+				|RROutputChangeNotifyMask
+//				|RROutputPropertyNotifyMask
+				);
 		};
 #ifdef USE_XINERAMA
 		xir = XineramaQueryExtension(dpy, &xirevent, &ierr);
@@ -1800,16 +1812,17 @@ static void init(){
 #ifdef USE_XSS
 	if (xss_enabled) {
 		XScreenSaverSelectInput(dpy, root, ScreenSaverNotifyMask);
-		if (xss_status() == 1) timeSkip--;
+		if (xss_state() == 1) timeSkip--;
 	}
 #endif
 #ifdef USE_DPMS
 	if (dpms_enabled) {
-		if (xss_status() == 1) timeSkip--;
+		if (xss_state() == 1) timeSkip--;
 	}
 #endif
 #endif
 	if (XQueryExtension(dpy, "XFIXES", &xfopcode, &xfevent, &ierr)) {
+//		xfevent += XFixesCursorNotify;
 //		XFixesSelectCursorInput(dpy,root,XFixesDisplayCursorNotifyMask);
 	}
 #endif
@@ -2265,9 +2278,10 @@ evfree:
 #define e ((XScreenSaverNotifyEvent*)&ev)
 			else if (ev.type == xssevent) {
 				TIME(T,e->time); // no sense for touch
-				switch (e->state) {
-//				    case ScreenSaverDisabled:
-				    case ScreenSaverOff:
+				xssStateSet(e->state);
+				switch (xssState) {
+//				    case 3:
+				    case 0:
 					timeSkip = e->time;
 					break;
 				}
@@ -2277,14 +2291,23 @@ evfree:
 #undef e
 #define e ((XRRScreenChangeNotifyEvent*)&ev)
 			else if (ev.type == xrevent) {
-				TIME(T,e->timestamp > e->config_timestamp ? e->timestamp : e->config_timestamp);
+				// RANDR time(s) is static
+				//TIME(T,e->timestamp > e->config_timestamp ? e->timestamp : e->config_timestamp);
 				XRRUpdateConfiguration(&ev);
 				_scr_size();
 				//scr_rotation = e->rotation;
 			}
 #undef e
+#define e ((XRRNotifyEvent*)&ev)
+			else if (ev.type == xrevent1) {
+				// RANDR time(s) is static
+				//XRRTimes(dpy,screen,&T);
+				resDev = 0;
+				oldShowPtr |= 2;
+			}
+#undef e
 #define e ((XFixesCursorNotifyEvent*)&ev)
-//			else if (xfevent && ev.type == xfevent + XFixesCursorNotify) {
+//			else if (ev.type == xfevent) {
 //				    TIME(T,e->timestamp);
 //			}
 #endif

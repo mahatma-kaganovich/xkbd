@@ -631,10 +631,10 @@ stop_argv:
       if(dock & 2048) aActions = _atom("_NET_WM_ALLOWED_ACTIONS");
 
 #ifdef USE_XR
-	int xrevent, xrerror, xrr;
+	int xrevent = -100, xrevent1, xrerror, xrr;
 	xrr = XRRQueryExtension(display, &xrevent, &xrerror);
+	xrevent1 = xrevent + RRNotify;
 	xrevent += RRScreenChangeNotify;
-	if (!xrr) xrevent = 0;
 #endif
 #ifdef USE_XI
 	int xiopcode, xievent = 0, xierror, xi, ximajor = 2, ximinor = 2;
@@ -893,7 +893,11 @@ re_crts:
 #endif
 
 #ifdef USE_XR
-      if (xrr) XRRSelectInput(display, win, RRScreenChangeNotifyMask);
+      if (xrr) XRRSelectInput(display, win, RRScreenChangeNotifyMask
+	|RRCrtcChangeNotifyMask
+	|RROutputChangeNotifyMask
+//	|RROutputPropertyNotifyMask
+	);
 #endif
 
 #ifdef USE_XI
@@ -1110,16 +1114,23 @@ _remapped:
 #ifdef USE_XR
 #undef e
 #define e ((XRRScreenChangeNotifyEvent*)&ev)
+		static unsigned long xrserial = 0;
 		if (ev.type == xrevent) {
-// reduce blinking, but possible bugs (?)
-#if 0
-			static int serial = 0;
-			if (e->serial == serial) continue;
-			serial = e->serial;
-#endif
+			// reduce blinking, but possible bugs (?)
+//			if (e->serial == xrserial) continue; xrserial = e->serial;
+
 			unmapOrRestart();
 			subpixel_order = e->subpixel_order;
 			XRRUpdateConfiguration(&ev);
+			goto chScreen;
+		}
+#undef e
+#define e ((XRRNotifyEvent*)&ev)
+		if (ev.type == xrevent1) {
+			// reduce blinking, but possible bugs (?)
+//			if (e->serial == xrserial) continue; xrserial = e->serial;
+
+			unmapOrRestart();
 			goto chScreen;
 		}
 #endif
