@@ -1841,12 +1841,16 @@ static void init(){
 //		if (xrr = XRRQueryExtension(dpy, &xrevent, &ierr)) {
 		// need xropcode
 		if (xrr = XQueryExtension(dpy, "RANDR", &xropcode, &xrevent, &ierr)) {
+#ifdef RRCrtcChangeNotifyMask
 			xrevent1 = xrevent + RRNotify;
+#endif
 			xrevent += RRScreenChangeNotify;
 			XRRSelectInput(dpy, root, RRScreenChangeNotifyMask
+#ifdef RRCrtcChangeNotifyMask
 				|RRCrtcChangeNotifyMask
 				|RROutputChangeNotifyMask
 //				|RROutputPropertyNotifyMask
+#endif
 				);
 		};
 #ifdef USE_XINERAMA
@@ -2317,13 +2321,14 @@ evfree:
 				    //case XkbNewKeyboardNotify:
 					//break;
 				}
+				break;
 			}
 #ifdef XTG
 #ifdef XSS
 #ifdef USE_XSS
 #undef e
 #define e ((XScreenSaverNotifyEvent*)&ev)
-			else if (ev.type == xssevent) {
+			if (ev.type == xssevent) {
 				TIME(T,e->time); // no sense for touch
 				xssStateSet(e->state);
 				switch (xssState) {
@@ -2332,33 +2337,39 @@ evfree:
 					timeSkip = e->time;
 					break;
 				}
+				break;
 			}
 #endif
 #endif
 #undef e
 #define e ((XRRScreenChangeNotifyEvent*)&ev)
-			else if (ev.type == xrevent) {
+			if (ev.type == xrevent) {
 				// RANDR time(s) is static
 				//TIME(T,e->timestamp > e->config_timestamp ? e->timestamp : e->config_timestamp);
 				XRRUpdateConfiguration(&ev);
 				_scr_size();
 				//scr_rotation = e->rotation;
+				break;
 			}
+#ifdef RRCrtcChangeNotifyMask
 #undef e
 #define e ((XRRNotifyEvent*)&ev)
-			else if (ev.type == xrevent1) {
+			if (ev.type == xrevent1) {
 				// RANDR time(s) is static
 				//XRRTimes(dpy,screen,&T);
 				resDev = 0;
 				oldShowPtr |= 2;
+				break;
 			}
+#endif
 #undef e
 #define e ((XFixesCursorNotifyEvent*)&ev)
-//			else if (ev.type == xfevent) {
-//				    TIME(T,e->timestamp);
+//			if (ev.type == xfevent) {
+//				TIME(T,e->timestamp);
+//				break;
 //			}
 #endif
-//			else fprintf(stderr,"ev? %i\n",ev.type);
+//			fprintf(stderr,"ev? %i\n",ev.type);
 			break;
 		}
 	}
