@@ -722,6 +722,10 @@ static _short setProp(Atom prop, Atom type, void *data, int cnt, _short chk){
 #endif
 	}
 	if (!data) return 0;
+	if ((chk&0x10)) {
+		XFlush(dpy);
+		XSync(dpy,False);
+	}
 	_error = 0;
 	switch (target) {
 	    case pr_win:
