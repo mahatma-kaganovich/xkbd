@@ -1,5 +1,5 @@
 /*
-	xtg v1.37 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.36 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
