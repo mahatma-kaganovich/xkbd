@@ -934,7 +934,15 @@ static void xrMons0(){
     int nout = -1;
     xrrFree();
     xrrSet();
-    if (xrrr) while(1) {
+    if (!xrrr) return;
+    if (noutput != xrrr->noutput) {
+	if (outputs) free(outputs);
+	outputs = NULL;
+	noutput = xrrr->noutput;
+    }
+    if (!outputs) outputs = calloc(noutput?:1,sizeof(minf_t));
+    else memset(outputs,sizeof(minf_t)*noutput,0);
+    while(1) {
 	if (cinf) {
 		XRRFreeCrtcInfo(cinf);
 		cinf = NULL;
@@ -942,14 +950,6 @@ static void xrMons0(){
 	if (oinf) {
 		XRRFreeOutputInfo(oinf);
 		oinf = NULL;
-	}
-	if (noutput != xrrr->noutput) {
-		free(outputs);
-		outputs = NULL;
-	}
-	if (!outputs) {
-		noutput = xrrr->noutput;
-		outputs = calloc(noutput?:1,sizeof(minf_t));
 	}
 	while (++nout<xrrr->noutput) {
 		minf = &outputs[nout];
