@@ -39,7 +39,7 @@
 //#undef USE_EVDEV
 // todo
 #define _BACKLIGHT
-#undef _BACKLIGHT
+//#undef _BACKLIGHT
 #define PROP_FMT
 #undef PROP_FMT
 #endif
@@ -71,6 +71,7 @@
 #include <libevdev/libevdev.h>
 #endif
 #include <X11/extensions/XInput2.h>
+#include <X11/extensions/XI2proto.h>
 
 #include <X11/extensions/XTest.h>
 #include <X11/extensions/Xfixes.h>
@@ -112,13 +113,12 @@ Window win, win1;
 int screen;
 Window root;
 Atom aActWin, aKbdGrp, aXkbRules;
-Bool _error;
+unsigned char _error;
 
 #ifdef XSS
 int xssevent=-100;
 Atom aWMState, aFullScreen;
 Bool noXSS, noXSS1;
-
 #ifdef USE_XSS
 _short xss_enabled;
 #else
@@ -151,10 +151,12 @@ int xiopcode=0, xfopcode=0, xfevent=-100;
 Atom aFloat,aMatrix,aABS,aDevMon,aDevMonCache,aNonDesk;
 XRRScreenResources *xrrr = NULL;
 #ifdef _BACKLIGHT
-Atom aBl;
+Atom aBl,aBlSave;
+_short checkEntered = 0;
 #endif
 int floatFmt = sizeof(float) << 3;
 int atomFmt = sizeof(Atom) << 3;
+int winFmt = sizeof(Window) << 3;
 #define prop_int int32_t
 int intFmt = sizeof(prop_int) << 3;
 #ifdef USE_EVDEV
@@ -171,6 +173,10 @@ typedef unsigned char xiMask[MASK_LEN];
 xiMask ximaskButton = {}, ximaskTouch = {}, ximask0 = {};
 XIEventMask ximask = { .deviceid = XIAllDevices, .mask_len = MASK_LEN, .mask = (void*)&ximask0 };
 //#define MASK(m) ((void*)ximask.mask=m)
+#ifdef _BACKLIGHT
+xiMask ximaskWin0 = {};
+XIEventMask ximaskWin = { .deviceid = XIAllDevices, .mask_len = MASK_LEN, .mask = (void*)&ximaskWin0 };
+#endif
 
 Time T;
 #define TIME(T,t) (T = (t))
@@ -306,6 +312,9 @@ char *ph[MAX_PAR] = {
 	"		10(+512) keep dpi different x & y (image panned non-aspected)\n"
 	"		11(+1024) don't use cached input ABS\n"
 	"		12(+2048) try delete unused (saved) properity\n"
+#ifdef _BACKLIGHT
+	"		13(+4096) track backlight-controlled monitors and off when empty (under construction)\n"
+#endif
 	"		(auto-panning for openbox+tint2: \"xrandr --noprimary\" on early init && \"-s 135\" (7+128))",
 	""
 #ifdef XSS
@@ -337,6 +346,13 @@ unsigned long pr_b,pr_n;
 
 
 #define _free(p) if (p) { XFree(p); p=NULL; }
+
+char *_aret[5] = {NULL,NULL,NULL,NULL,NULL};
+static char *natom(int i,Atom a){
+	_free(_aret[i]);
+	return _aret[i] = XGetAtomName(dpy,a);
+}
+
 
 static Bool getRules(){
 	_free(rul);
@@ -481,7 +497,8 @@ static void WMState(Atom *states, short nn){
 typedef struct _pinf {
 	_short en;
 	long range[2];
-	prop_int val;
+	prop_int val,val0;
+	Atom prop,save;
 } pinf_t;
 
 // width/height: real/mode
@@ -497,6 +514,8 @@ typedef struct _minf {
 	_short connection;
 #ifdef _BACKLIGHT
 	pinf_t bl;
+	Window win;
+	int obscured,entered;
 #endif
 	prop_int non_desktop;
 } minf_t;
@@ -564,7 +583,7 @@ static int _delay(Time delay){
 static int fmtOf(Atom type,int def){
 	return (type==XA_STRING
 //		||type==XA_CARDINAL
-		)?8:(type==aFloat)?floatFmt:(type==XA_ATOM)?atomFmt:(type==XA_INTEGER)?intFmt:def;
+		)?8:(type==aFloat)?floatFmt:(type==XA_ATOM)?atomFmt:(type==XA_INTEGER)?intFmt:(type==XA_WINDOW)?winFmt:def;
 }
 
 #ifdef PROP_FMT
@@ -647,7 +666,7 @@ static void xrrFree(){
 // *SetProp: |0x10 - check (read) after write
 
 char *_pr_name;
-static _short _chk_prop(char *pr, unsigned long who, Atom prop, Atom type, unsigned char **data, int cnt, _short chk){
+static _short _chk_prop(char *pr, unsigned long who, Atom prop, Atom type, unsigned char **data, long cnt, _short chk){
 	if (!ret) return (chk>3);
 	if (pr_b || (cnt>0 && pr_n!=cnt)) goto err;
 	int f = fmtOf(pr_t,-1);
@@ -661,7 +680,7 @@ static _short _chk_prop(char *pr, unsigned long who, Atom prop, Atom type, unsig
 #endif
 		{
 err:
-			ERR("incompatible %s() result of %lu %s %s %i",pr,who,XGetAtomName(dpy,prop),XGetAtomName(dpy,pr_t),pr_f);
+			ERR("incompatible %s() result of %lu %s %s %i",pr,who,natom(0,prop),natom(1,pr_t),pr_f);
 			return (chk>2);
 		}
 	}
@@ -683,38 +702,43 @@ typedef enum {
 
 pr_target_t target;
 
-static _short getProp(Atom prop, Atom type, void *data, int cnt, _short chk){
+static _short getProp(Atom prop, Atom type, void *data, int pos, long cnt, _short chk){
 	_free(ret);
+	int N = abs(cnt);
+	_error = 0;
 	switch (target) {
 	    case pr_win:
 		_pr_name = "XGetWindowProperty";
-		XGetWindowProperty(dpy,win,prop,0,abs(cnt),False,type,&pr_t,&pr_f,&pr_n,&pr_b,(void*)&ret);
-//		XGetWindowProperty(dpy,w,prop,0,1024,False,type,&pr_t,&pr_f,&n,&pr_b,&ret)
+		XGetWindowProperty(dpy,win,prop,pos,N,False,type,&pr_t,&pr_f,&pr_n,&pr_b,(void*)&ret);
 		break;
 	    case pr_out:
 		_pr_name = "XRRGetOutputProperty";
 		Bool pending = False;
-		XRRGetOutputProperty(dpy,minf->out,prop,0,abs(cnt),False,pending,type,&pr_t,&pr_f,&pr_n,&pr_b,(void*)&ret);
+		XRRGetOutputProperty(dpy,minf->out,prop,pos,N,False,pending,type,&pr_t,&pr_f,&pr_n,&pr_b,(void*)&ret);
 		break;
 	    case pr_input:
 		_pr_name = "XIGetOutputProperty";
-		XIGetProperty(dpy,devid,prop,0,abs(cnt),False,type,&pr_t,&pr_f,&pr_n,&pr_b,(void*)&ret);
+		XIGetProperty(dpy,devid,prop,0,N,False,type,&pr_t,&pr_f,&pr_n,&pr_b,(void*)&ret);
 		break;
 	    default:
 		ERR("BUG!");
 		return 0;
 	}
-	return _chk_prop(_pr_name,minf->out,prop,type,(void*)&data,cnt,chk);
+	if ((chk&0x10) && !_error) {
+//		XFlush(dpy);
+		XSync(dpy,False);
+	}
+	return _chk_prop(_pr_name,minf->out,prop,type,(void*)&data,cnt,chk&0x0f);
 }
 
 
 //static void xrMons0();
 
-static _short setProp(Atom prop, Atom type, void *data, int cnt, _short chk){
+static _short setProp(Atom prop, Atom type, int mode, void *data, long cnt, _short chk){
 	int f = fmtOf(type,32);
 	if (chk&0xf) {
 		_short r;
-		if ((r=getProp(prop,type,data,cnt,chk&0xf))) return r==2;
+		if ((r=getProp(prop,type,data,0,cnt,chk))) return r==2;
 #ifdef PROP_FMT
 		data = fmt2fmt(data,type,f,NULL,pr_t,pr_f,cnt);
 		type = pr_t;
@@ -729,59 +753,56 @@ static _short setProp(Atom prop, Atom type, void *data, int cnt, _short chk){
 	_error = 0;
 	switch (target) {
 	    case pr_win:
-		XChangeProperty(dpy,win,prop,type,f,PropModeReplace,data,cnt);
+		XChangeProperty(dpy,win,prop,type,f,mode,data,cnt);
 		break;
 	    case pr_out:
-		XRRChangeOutputProperty(dpy,minf->out,prop,type,f,PropModeReplace,data,cnt);
+		XRRChangeOutputProperty(dpy,minf->out,prop,type,f,mode,data,cnt);
 		break;
 	    case pr_input:
-		XIChangeProperty(dpy,devid,prop,type,f,PropModeReplace,data,cnt);
+		XIChangeProperty(dpy,devid,prop,type,f,mode,data,cnt);
 		break;
 	    default:
 		ERR("BUG!");
 		return 0;
 	}
-	if ((chk&0x10)) {
-		XFlush(dpy);
+	if ((chk&0x10) && !_error) {
+//		XFlush(dpy);
 		XSync(dpy,False);
 	}
 	return !_error;
 }
 
 
-static _short xrGetProp(Atom prop, Atom type, void *data, int cnt, _short chk){
+static _short xrGetProp(Atom prop, Atom type, void *data, long cnt, _short chk){
 	target = pr_out;
-	return getProp(prop,type,data,cnt,chk);
+	return getProp(prop,type,data,0,cnt,chk);
 }
 
-static _short xrSetProp(Atom prop, Atom type, void *data, int cnt, _short chk){
+static _short xrSetProp(Atom prop, Atom type, void *data, long cnt, _short chk){
 	target = pr_out;
-	return setProp(prop,type,data,cnt,chk);
+	return setProp(prop,type,PropModeReplace,data,cnt,chk);
 }
 
-static _short xiGetProp(Atom prop, Atom type, void *data, int cnt, _short chk){
+static _short xiGetProp(Atom prop, Atom type, void *data, long cnt, _short chk){
 	target = pr_input;
-	return getProp(prop,type,data,cnt,chk);
+	return getProp(prop,type,data,0,cnt,chk);
 }
 
-static _short xiSetProp(Atom prop, Atom type, void *data, int cnt, _short chk){
+static _short xiSetProp(Atom prop, Atom type, void *data, long cnt, _short chk){
 	target = pr_input;
-	return setProp(prop,type,data,cnt,chk);
+	return setProp(prop,type,PropModeReplace,data,cnt,chk);
 }
 
-#ifdef _BACKLIGHT
-static void xrChkProp(RROutput out, Atom prop, pinf_t *d) {
-	XRRPropertyInfo *pinf;
-	if (xrGetProp(out,prop,XA_INTEGER,&d->val,1,0) && (pinf = XRRQueryOutputProperty(dpy,out,prop))) {
-		if (pinf->range && pinf->num_values == 2) {
-			d->en = 1;
-			d->range[0] = pinf->values[0];
-			d->range[1] = pinf->values[1];
-		}
-		XFree(pinf);
-	}
+static _short wGetProp(Atom prop, Atom type, void *data, long cnt, _short chk){
+	target = pr_win;
+	return getProp(prop,type,data,0,cnt,chk);
 }
-#endif
+
+static _short wSetProp(Atom prop, Atom type, void *data, long cnt, _short chk){
+	target = pr_win;
+	return setProp(prop,type,PropModeReplace,data,cnt,chk);
+}
+
 
 #ifdef ABS_Z
 #define NdevABS 3
@@ -932,6 +953,57 @@ int nout = -1;
 minf_t *outputs = NULL;
 int noutput = 0;
 
+#define ACTIVE(minf) (minf->crt)
+#define _BUFSIZE 1048576
+
+#ifdef _BACKLIGHT
+static void xrGetRangeProp(Atom prop, Atom save, pinf_t *d) {
+	XRRPropertyInfo *pinf;
+	d->en = 0;
+	if (!xrGetProp(prop,XA_INTEGER,&d->val,1,0) || !(pinf = XRRQueryOutputProperty(dpy,minf->out,prop))) return;
+	if (!pinf->range || pinf->num_values != 2) goto free;
+	d->en = 1;
+	d->prop = prop;
+	d->save = save;
+	d->range[0] = pinf->values[0];
+	d->range[1] = pinf->values[1];
+	d->val0 = d->val;
+	if (!xrGetProp(save,XA_INTEGER,&d->val0,1,0)) {
+		XRRConfigureOutputProperty(dpy,minf->out,save,False,1,2,pinf->values);
+		xrSetProp(save,XA_INTEGER,&d->val0,1,0);
+	}
+free:
+	XFree(pinf);
+}
+
+static void xrSetRangeProp(pinf_t *d, prop_int val) {
+//	if (!d->en) return;
+	if (val == d->val) return;
+	if (val < d->range[0]) val = d->range[0];
+	if (val > d->range[1]) val = d->range[1];
+	d->val = val;
+	xrSetProp(d->prop,XA_INTEGER,&val,1,0);
+}
+
+static void chBL1(_short obscured, _short entered) {
+	if (obscured != 2) minf->obscured = obscured;
+	if (entered != 2) minf->entered = entered;
+	xrSetRangeProp(&minf->bl,(minf->obscured || minf->entered) ? minf->bl.save : minf->bl.range[0]);
+}
+
+static void chBL(Window w, _short obscured, _short entered) {
+	int i;
+	for (i=0; i<noutput; i++) {
+		minf = &outputs[i];
+		if (minf->bl.en && minf->win == w) {
+			chBL1(obscured,entered);
+			break;
+		}
+	}
+}
+
+#endif
+
 static void xrMons0(){
     XRRCrtcInfo *cinf = NULL;
     XRROutputInfo *oinf = NULL;
@@ -940,12 +1012,20 @@ static void xrMons0(){
     xrrSet();
     if (!xrrr) return;
     if (noutput != xrrr->noutput) {
-	if (outputs) free(outputs);
-	outputs = NULL;
+	if (outputs) {
+#ifdef _BACKLIGHT
+		int i;
+		for (i=0; i<noutput; i++) {
+			minf = &outputs[i];
+			if (minf->win) XDestroyWindow(dpy,minf->win);
+		}
+#endif
+		free(outputs);
+		outputs = NULL;
+	}
 	noutput = xrrr->noutput;
     }
     if (!outputs) outputs = calloc(noutput?:1,sizeof(minf_t));
-    else memset(outputs,sizeof(minf_t)*noutput,0);
     while(1) {
 	if (cinf) {
 		XRRFreeCrtcInfo(cinf);
@@ -957,30 +1037,35 @@ static void xrMons0(){
 	}
 	while (++nout<xrrr->noutput) {
 		minf = &outputs[nout];
+		minf->crt = 0;
+		minf->non_desktop = 0;
 		if ((minf->out = xrrr->outputs[nout]) && (oinf = XRRGetOutputInfo(dpy, xrrr, minf->out))) break;
 	}
-	if (!oinf) {
-		nout = -1;
-		break;
-	}
+	if (!oinf) break;
 	minf->name = XInternAtom(dpy, oinf->name, False);
 	xrGetProp(aNonDesk,XA_INTEGER,&minf->non_desktop,1,0);
 	minf->mwidth = oinf->mm_width;
 	minf->mheight = oinf->mm_height;
 	minf->connection = oinf->connection;
+#ifdef _BACKLIGHT
+	if (pi[p_safe]&4096)
+		xrGetRangeProp(aBl,aBlSave,&minf->bl);
+#endif
 	if (
 	    minf->connection == RR_Connected &&
 	    (minf->crt = oinf->crtc)
 		) cinf=XRRGetCrtcInfo(dpy, xrrr, minf->crt);
-	if (!cinf) continue;
+	if (!cinf) {
+#ifdef _BACKLIGHT
+		if (minf->win) XDestroyWindow(dpy,minf->win);
+#endif
+		continue;
+	}
 	minf->width = minf->width0 = cinf->width;
 	minf->height = minf->height0 = cinf->height;
 	minf->x = cinf->x;
 	minf->y = cinf->y;
 	minf->rotation = cinf->rotation;
-#ifdef _BACKLIGHT
-	xrChkProp(minf->out,aBl,&minf->bl);
-#endif
 	XRRModeInfo *m,*m0 = NULL,*m1 = NULL;
 	RRMode id = cinf->mode;
 	RRMode id0 = id + 1;
@@ -1026,14 +1111,48 @@ static void xrMons0(){
 	}
 	minf->x2 = minf->x + minf->width - 1;
 	minf->y2 = minf->y + minf->height - 1;
+#ifdef _BACKLIGHT
+	win = minf->win;
+	if (minf->bl.en) {
+		static XSetWindowAttributes a = {
+			.override_redirect = True,
+			.do_not_propagate_mask = ~(long)VisibilityChangeMask,
+			.event_mask = VisibilityChangeMask,
+			// |EnterWindowMask|LeaveWindowMask|ButtonPressMask|ButtonReleaseMask
+		};
+		if (win) {
+			getGeometry();
+			// no MoveResize: visibility event (for new size) generating after create
+			if (wa.x != minf->x || wa.y != minf->y || wa.width != minf->width || wa.height != minf->height) {
+				XDestroyWindow(dpy,win);
+				win = 0;
+			}
+		}
+		if (!win) {
+			win = XCreateSimpleWindow(dpy, root, minf->x,minf->y,minf->width,minf->height,0,0,BlackPixel(dpy, screen));
+			XChangeWindowAttributes(dpy, win, CWOverrideRedirect|CWEventMask, &a);
+			XISelectEvents(dpy, win, &ximaskWin, 1);
+			XLowerWindow(dpy, win);
+			XMapWindow(dpy, win);
+			//DBG("window 0x%lx",win);
+			checkEntered = 1;
+		}
+	} else if (win) {
+		XDestroyWindow(dpy,win);
+		win = 0;
+	}
+	minf->win = win;
+	win = win1;
+#endif
     }
+    nout = -1;
 }
 
 static _short xrMons(_short disconnected){
 	while (++nout<noutput) {
 		minf = &outputs[nout];
 		if (!minf->out) continue;
-		if (disconnected || (minf->connection == RR_Connected && minf->crt && !minf->non_desktop))
+		if (disconnected || ACTIVE(minf))
 			return 1;
 	}
 	nout = -1;
@@ -1063,7 +1182,6 @@ static void _pan(minf_t *m) {
 #ifdef XSS
 static void _monFS(Atom prop,Atom save,Atom val,int x, int y, _short mode){
 #if 1
-if (!(minf->connection == RR_Connected && minf->crt)) return;
 		// optimized X calls, but stricter (?) off/on states
 		if (!val && mode) return;
     		Atom ct1 = 0;
@@ -1078,7 +1196,7 @@ saved:
 		}
 		if (!val) return;
 		// repair disconnected
-		if (!(minf->connection == RR_Connected && minf->crt)) goto saved;
+		if (!ACTIVE(minf)) goto saved;
 		// repair unordered
 		if (!(x>=minf->x && x<=minf->x2 && y>=minf->y && y<=minf->y2)) goto saved;
 		Atom ct = 0;
@@ -1113,7 +1231,7 @@ ok:
 		Atom ct1 = 0;
 		xrGetProp(save,XA_ATOM,&ct1,1,0);
 		XRRPropertyInfo *pinf = NULL;
-		if (val && minf->connection == RR_Connected && minf->crt && noXSS && x>=minf->x && x<=minf->x2 && y>=minf->y && y<=minf->y2
+		if (val && ACTIVE(minf) && noXSS && x>=minf->x && x<=minf->x2 && y>=minf->y && y<=minf->y2
 		    && (pinf = XRRQueryOutputProperty(dpy,minf->out,prop))
 		    && !pinf->range) {
 			int i;
@@ -1132,7 +1250,7 @@ ok:
 		}
 		if (pinf) XFree(pinf);
 		if (ct1 && ct != ct1) {
-			DBG("output: %s %s: %s -> %s",minf?XGetAtomName(dpy,minf->name):"",XGetAtomName(dpy,prop),XGetAtomName(dpy,ct),XGetAtomName(dpy,ct1));
+			DBG("output: %s %s: %s -> %s",minf?natom(0,minf->name):"",natom(1,prop),natom(2,ct),natom(3,ct1));
 			xrSetProp(prop,XA_ATOM,&ct1,1,0);
 		}
 #endif
@@ -1186,6 +1304,7 @@ static void getRes(int x, int y, _short mode){
 	}
 	if (!(pi[p_safe]&32)) prim0 = 0;
 	while (xrMons(0)) {
+		if (minf->non_desktop) continue;
 		nm++;
 		if((!found
 #ifdef USE_EVDEV
@@ -1273,6 +1392,7 @@ found:
 		if (minf1 && minf1->crt != minf2->crt) _pan(minf1);
 		if (nm != ((minf1 && minf1->crt != minf2->crt) + (!!minf2->crt)))
 		    while (xrMons(0)) {
+			if (minf->non_desktop) continue;
 			if (minf->crt != minf1->crt && minf->crt != minf2->crt) {
 				if (do_dpi && minf->mwidth && minf->mheight) {
 					if ( !(minf->width == minf1->width && minf->height == minf1->height && minf->mwidth == minf1->mwidth && minf->mheight == minf1->mheight) &&
@@ -1415,6 +1535,26 @@ static void getHierarchy(){
 		if (__init) {
 			XIDeleteProperty(dpy,devid,aABS);
 		}
+#ifdef _BACKLIGHT
+		if (checkEntered) switch (d2->use) {
+		    //case XIFloatingSlave: break;
+		    case XISlavePointer:
+		    case XIMasterPointer: {
+			Window rw,rc;
+			XIButtonState b;
+			XIModifierState m;
+			XIGroupState g;
+			double x, y, root_x = -1,root_y = -1;
+			if (XIQueryPointer(dpy,d2->deviceid,root,&rw,&rc,&root_x,&root_y,&x,&y,&b,&m,&g))
+			    for (j=0; j<noutput; j++) {
+				minf = &outputs[i];
+				if (minf->bl.en)
+					chBL1(2,root_x>=minf->x && root_y>=minf->y && root_x<=minf->x2 && root_y<=minf->y2);
+			}
+			break;
+			}
+		}
+#endif
 		switch (d2->use) {
 		    case XIFloatingSlave: break;
 		    case XISlavePointer:
@@ -1695,7 +1835,7 @@ static void getPropWin1(){
 
 int (*oldxerrh) (Display *, XErrorEvent *);
 static int xerrh(Display *dpy, XErrorEvent *err){
-	_error = True;
+	_error = err->error_code;
 #ifdef XTG
 	char *c = "";
 	static int oldErr = 0;
@@ -1705,7 +1845,7 @@ static int xerrh(Display *dpy, XErrorEvent *err){
 #endif
 		switch (err->minor_code) {
 		case X_RRChangeOutputProperty:
-		case X_RRDeleteOutputProperty: return 0;
+		case X_RRDeleteOutputProperty: goto ex;
 		case X_RRSetScreenSize: goto msg;
 		}
 	} else if (err->request_code == xfopcode) {
@@ -1717,12 +1857,15 @@ static int xerrh(Display *dpy, XErrorEvent *err){
 			// XShowCursor() before XHideCursor()
 			curShow = 1;
 			oldShowPtr |= 1;
-			return 0;
+			goto ex;
 		}
 	} else if (err->request_code == xiopcode) {
 #ifndef _X11_XLIBINT_H_
 		c = "XI";
 #endif
+		switch (err->minor_code) {
+		case X_XIQueryPointer: goto ex; // FloatingSlave keyboard
+		}
 		switch (err->error_code) {
 		case BadAccess: // second XI_Touch* root listener
 			oldShowPtr |= 2;
@@ -1740,7 +1883,11 @@ static int xerrh(Display *dpy, XErrorEvent *err){
 #endif
 #endif
 	switch (err->error_code) {
-	    case BadWindow: win1 = None; break;
+	    case BadDrawable:
+	    case BadWindow:
+		if (err->resourceid == win1) win1 = None;
+		else if (err->resourceid == win) return 0;
+		break;
 #ifdef XTG
 	    case BadAccess: // second XI_Touch* root listener
 		oldShowPtr |= 2;
@@ -1771,6 +1918,8 @@ msg:
 		err->type, err->resourceid, err->serial, err->error_code,
 		err->request_code, err->minor_code, c, s);
 #endif
+ex:
+//	return err->error_code;
 	return 0;
 }
 
@@ -1784,7 +1933,6 @@ static void init(){
 	aActWin = XInternAtom(dpy, "_NET_ACTIVE_WINDOW", False);
 	aKbdGrp = XInternAtom(dpy, "_KBD_ACTIVE_GROUP", False);
 	aXkbRules = XInternAtom(dpy, "_XKB_RULES_NAMES", False);
-
 #ifdef XSS
 #ifdef USE_XSS
 	xss_enabled = XScreenSaverQueryExtension(dpy, &xssevent, &ierr);
@@ -1810,10 +1958,17 @@ static void init(){
 #ifdef XTG
 	aFloat = XInternAtom(dpy, "FLOAT", False);
 	aMatrix = XInternAtom(dpy, "Coordinate Transformation Matrix", False);
-	aDevMon = XInternAtom(dpy, "xtg output", False);	aDevMonCache = XInternAtom(dpy, "xtg output cached", False);
+	aDevMon = XInternAtom(dpy, "xtg output", False);
+	aDevMonCache = XInternAtom(dpy, "xtg output cached", False);
 	aNonDesk = XInternAtom(dpy, RR_PROPERTY_NON_DESKTOP, False);
 #ifdef _BACKLIGHT
 	aBl = XInternAtom(dpy, RR_PROPERTY_BACKLIGHT, False);
+	aBlSave = XInternAtom(dpy, "xtg saved " RR_PROPERTY_BACKLIGHT, False);
+	XISetMask(ximaskWin0,XI_Leave);
+	XISetMask(ximaskWin0,XI_Enter);
+	XISetMask(ximaskWin0, XI_ButtonPress);
+	XISetMask(ximaskWin0, XI_ButtonRelease);
+//	XISetMask(ximaskWin0, XI_Motion);
 #endif
 #ifdef USE_EVDEV
 	aNode = XInternAtom(dpy, "Device Node", False);
@@ -2006,6 +2161,7 @@ ev2:
 		forceUngrab();
 #endif
 		XNextEvent(dpy, &ev);
+//		DBG("ev %i",ev.type);
 		switch (ev.type) {
 #ifdef XTG
 		    case GenericEvent:
@@ -2047,6 +2203,17 @@ ev2:
 					resDev = 0;
 					oldShowPtr |= 2;
 					continue;
+#ifdef _BACKLIGHT
+#undef e
+#define e ((XIEnterEvent*)ev.xcookie.data)
+				    case XI_Enter:
+				    case XI_Leave:
+					if (XGetEventData(dpy, &ev.xcookie)) {
+						chBL(e->event,2,ev.xcookie.evtype==XI_Enter);
+						XFreeEventData(dpy, &ev.xcookie);
+					}
+					continue;
+#endif
 				    default:
 					showPtr = 1;
 					timeHold = 0;
@@ -2288,7 +2455,7 @@ evfree:
 #define e (ev.xproperty)
 		    case PropertyNotify:
 			TIME(T,e.time);
-			//fprintf(stderr,"Prop %s\n",XGetAtomName(dpy,e.atom));
+			//fprintf(stderr,"Prop %s\n",natom(0,e.atom));
 			//if (e.window!=root) break;
 			if (e.atom==aActWin) {
 				win1 = None;
@@ -2303,21 +2470,47 @@ evfree:
 				rul2 = NULL;
 			}
 			break;
+		    case DestroyNotify:
+			if (win1 == ev.xany.window) win1 = None;
+			break;
 /*
-		    case CreateNotify:
 		    case UnmapNotify:
 		    case MapNotify:
 		    case ReparentNotify:
-		    case DestroyNotify:
 			goto ev;
 			break;
 */
 #ifdef XTG
+#ifdef _BACKLIGHT
+#undef e
+#define e (ev.xvisibility)
+		    case VisibilityNotify:
+			chBL(e.window,e.state != VisibilityUnobscured,2);
+			goto ev;
+#undef e
+#define e (ev.xcrossing)
+//		    case EnterNotify:
+//		    case LeaveNotify:
+//			TIME(T,e.time);
+//			chBL(e.window,2,ev.type == EnterNotify);
+//			goto ev;
+#undef e
+#define e (ev.xbutton)
+		    case MotionNotify: // XButtonEvent = XMotionEvent
+		    case ButtonPress:
+		    case ButtonRelease:
+			TIME(T,e.time);
+			DBG("button");
+			// trick from tint2
+			XUngrabPointer(dpy, e.time);
+			e.x = e.x_root;
+			e.y = e.y_root;
+			e.window = root;
+			XSendEvent(dpy, root, False, ButtonPressMask, &ev);
+#endif
 #undef e
 #define e (ev.xconfigure)
 		    case ConfigureNotify:
-			//if (e.window != root) {
-			//}
 			if (xrr || !XRRUpdateConfiguration(&ev)) goto ev;
 			_scr_size();
 			break;

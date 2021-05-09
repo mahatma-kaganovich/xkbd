@@ -435,7 +435,12 @@ int main(int argc, char **argv)
 
    XEvent ev;
    int xkbEventType = 0;
-   long evmask = ExposureMask|StructureNotifyMask|VisibilityChangeMask;
+
+//   long evmask;
+   XSetWindowAttributes setWA;
+#define evmask setWA.event_mask
+   evmask = ExposureMask|StructureNotifyMask|VisibilityChangeMask;
+
 
    int i,j,w,h;
    char *s,*r;
@@ -467,6 +472,7 @@ int main(int argc, char **argv)
 #ifdef USE_XR
 	" + cached Xrandr/rotation"
 #endif
+	",\n	4096=override_redirect"
 	".\n		(_NET_WM_WINDOW_TYPE_DOCK is hardwired, but can hide\n\
 		other toolbar/panel, so use pending hack where possible)\n\
 	For OpenBox I use 4018 = $[2+16+32+128+256+512+1024+2048]," },
@@ -633,7 +639,9 @@ stop_argv:
 #ifdef USE_XR
 	int xrevent = -100, xrevent1, xrerror, xrr;
 	xrr = XRRQueryExtension(display, &xrevent, &xrerror);
+#ifdef RRCrtcChangeNotifyMask
 	xrevent1 = xrevent + RRNotify;
+#endif
 	xrevent += RRScreenChangeNotify;
 #endif
 #ifdef USE_XI
@@ -805,7 +813,7 @@ re_crts:
 	  } else conf_file = DEFAULTCONFIG;
 	}
 	win = XCreateSimpleWindow(display, rootWin, x, y, w, h,
-		0, WhitePixel(display, screen), BlackPixel(display, screen));
+		0, 0, BlackPixel(display, screen));
 	XSetStandardProperties(display, win, window_name,
 		icon_name, None, argv, argc, None);
 
@@ -894,9 +902,11 @@ re_crts:
 
 #ifdef USE_XR
       if (xrr) XRRSelectInput(display, win, RRScreenChangeNotifyMask
+#ifdef RRCrtcChangeNotifyMask
 	|RRCrtcChangeNotifyMask
 	|RROutputChangeNotifyMask
 //	|RROutputPropertyNotifyMask
+#endif
 	);
 #endif
 
@@ -924,7 +934,10 @@ re_crts:
 //	Button1MotionMask |
       evmask|=ButtonPressMask|ButtonReleaseMask|((fake_touch&4)?0:ButtonMotionMask);
 
-      XSelectInput(display, win, evmask);
+
+      setWA.override_redirect = !!(dock & 4096);
+//      XSelectInput(display, win, evmask);
+      XChangeWindowAttributes(display, win, CWOverrideRedirect|CWEventMask, &setWA);
 
       signal(SIGUSR1, handle_sig); /* for extenal mapping / unmapping */
       signal(SIG_HIDE, _hide);
@@ -1124,6 +1137,7 @@ _remapped:
 			XRRUpdateConfiguration(&ev);
 			goto chScreen;
 		}
+#ifdef RRCrtcChangeNotifyMask
 #undef e
 #define e ((XRRNotifyEvent*)&ev)
 		if (ev.type == xrevent1) {
@@ -1133,6 +1147,7 @@ _remapped:
 			unmapOrRestart();
 			goto chScreen;
 		}
+#endif
 #endif
 	    }
 	    while (kb_do_repeat(kb, active_but) && !XPending(display))
