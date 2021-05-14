@@ -1334,7 +1334,7 @@ static void _pan(minf_t *m) {
 }
 
 #ifdef XSS
-Atom aCTypeSaved,aColorspaceSaved = 0;
+Atom aCTypeSaved = 0,aColorspaceSaved = 0;
 static void _monFS(Atom prop,Atom save,Atom val,int x, int y, _short mode,Atom *saved){
 		// optimized X calls, but stricter (?) off/on states
 //		if (!val && mode) return;
