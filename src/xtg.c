@@ -559,7 +559,7 @@ typedef struct _dinf {
 #define o_directTouch 8
 ///#define o_scroll 16
 
-#define NINPUT_STEP 2
+#define NINPUT_STEP 4
 dinf_t *inputs = NULL, *inputs1, *dinf, *dinf1, *dinf_last = NULL;
 _int ninput = 0, ninput1 = 0;
 #define DINF(x) for(dinf=inputs; (dinf!=dinf_last); dinf++) if (x)
@@ -1422,10 +1422,20 @@ static int scrWin() {
 #endif
 
 static void fixGeometry(){
-	_int nm = 0,found;
+	_int nm = 0;
 	minf2 = minf1 = NULL;
 	if (!xrr) return;
-	DINF((dinf->type&o_directTouch) && (!devid || devid == dinf->devid)) {
+	if (devid) {
+		DINF(dinf->devid == devid) {
+			MINF(dinf->mon == minf->name) {
+				minf2 = minf;
+				goto find1;
+			}
+			return;
+		}
+		return;
+	}
+	DINF((dinf->type&o_directTouch)) {
 		MINF(minf->type&o_active && dinf->mon == minf->name) {
 			minf2 = minf;
 			goto find1;
@@ -1434,17 +1444,14 @@ static void fixGeometry(){
 find1:
 	MINF_T(o_active) {
 		nm++;
-		if (!minf2) DINF(dinf->mon == minf->name && (!devid || devid == dinf->devid)){
+		if (!minf2) DINF(dinf->mon == minf->name){
 			minf2 = minf;
 			break;
 		};
 		if ((prim0 == minf->out) || (!prim0 && (!minf1 || minf->mheight > minf1->mheight)))
 		    minf1 = minf;
 	}
-	if (!minf2) {
-		if (devid) goto ex;
-		minf2 = &minf0;
-	}
+	if (!minf2) minf2 = &minf0;
 	if (!xrrr) {
 		//xrMons0();
 		xrrSet(); 
