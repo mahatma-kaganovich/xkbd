@@ -64,6 +64,7 @@
 #endif
 
 #ifdef XTG
+#include <signal.h>
 #include <X11/extensions/Xrandr.h>
 #include <X11/extensions/randr.h>
 //#include <X11/extensions/XInput.h>
@@ -155,6 +156,7 @@ int xiopcode=0, xfopcode=0, xfevent=-100;
 Atom aFloat,aMatrix,aABS,aDevMon,aNonDesk,aNonDeskSave;
 XRRScreenResources *xrrr = NULL;
 _short showPtr, oldShowPtr = 0, curShow;
+_short _quit = 0;
 #ifdef _BACKLIGHT
 Atom aBl,aBlSave;
 #endif
@@ -1111,6 +1113,8 @@ static void simpleWin(_short mode) {
 		w = XCreateSimpleWindow(dpy, root, minf->x,minf->y,minf->width,minf->height,0,0,BlackPixel(dpy, screen));
 		XChangeWindowAttributes(dpy, w, CWOverrideRedirect|CWEventMask, &winattr);
 		XISelectEvents(dpy, w, ximaskWin, Nximask);
+	} else if (minf->geom_ch) {
+		XMoveResizeWindow(dpy,w,minf->x,minf->y,minf->width,minf->height);
 	}
 	if (mode&2) XRaiseWindow(dpy,w);
 	else XLowerWindow(dpy, w);
@@ -1330,17 +1334,25 @@ static void _pan(minf_t *m) {
 }
 
 #ifdef XSS
-static void _monFS(Atom prop,Atom save,Atom val,int x, int y, _short mode){
-#if 1
+Atom aCTypeSaved,aColorspaceSaved = 0;
+static void _monFS(Atom prop,Atom save,Atom val,int x, int y, _short mode,Atom *saved){
 		// optimized X calls, but stricter (?) off/on states
-		if (!val && mode) return;
-		Atom ct1 = 0;
+//		if (!val && mode) return;
+		if (mode == 9) {
+			if (*saved) {
+				xrSetProp(prop,XA_ATOM,&saved,1,0);
+				_quit = 1;
+			}
+			return;
+		}
 		if (!noXSS) {
 saved:
-			if(xrGetProp(save,XA_ATOM,&ct1,1,0) && ct1) {
+			if(*saved || (xrGetProp(save,XA_ATOM,saved,1,0) && *saved)) {
 				_short del = !val || !!(pi[p_safe]&2048) || !mode;
-				if (xrSetProp(prop,XA_ATOM,&ct1,1,4|(del<<4)) && del)
+				if (xrSetProp(prop,XA_ATOM,saved,1,4|(del<<4)) && del) {
 					XRRDeleteOutputProperty(dpy,minf->out,save);
+				}
+				*saved = 0;
 			} 
 			return;
 		}
@@ -1352,7 +1364,7 @@ saved:
 		Atom ct = 0;
 		if (!xrGetProp(prop,XA_ATOM,&ct,1,0) || !ct) return;
 		XRRPropertyInfo *pinf = NULL;
-		if (!xrGetProp(save,XA_ATOM,&ct1,1,0) || !ct1) {
+		if (!xrGetProp(save,XA_ATOM,saved,1,0) || !saved) {
 reconf:
 			if (!(pinf = XRRQueryOutputProperty(dpy,minf->out,prop))) return;
 			int i;
@@ -1363,7 +1375,7 @@ ok:
 			XRRConfigureOutputProperty(dpy,minf->out,save,False,pinf->range,pinf->num_values,pinf->values);
 			XFree(pinf);
 		}
-		if (ct != ct1) {
+		if (ct != *saved) {
 			if (!xrSetProp(save,XA_ATOM,&ct,1,0x10)) {
 				if (!pinf) {
 					XRRDeleteOutputProperty(dpy,minf->out,save);
@@ -1374,43 +1386,13 @@ ok:
 		}
 		if (ct != val)
 			xrSetProp(prop,XA_ATOM,&val,1,0);
-#else
-		// simple, slow
-		Atom ct = 0;
-		if (!xrGetProp(prop,XA_ATOM,&ct,1,0) || !ct) return;
-		Atom ct1 = 0;
-		xrGetProp(save,XA_ATOM,&ct1,1,0);
-		XRRPropertyInfo *pinf = NULL;
-		if (val && ACTIVE(minf) && noXSS && x>=minf->x && x<=minf->x2 && y>=minf->y && y<=minf->y2
-		    && (pinf = XRRQueryOutputProperty(dpy,minf->out,prop))
-		    && !pinf->range) {
-			int i;
-			for (i=0; i<pinf->num_values; i++) {
-				if (pinf->values[i]==val) {
-					if (ct != ct1) {
-						XRRDeleteOutputProperty(dpy,minf->out,save);
-						//if (!ct1)
-						    XRRConfigureOutputProperty(dpy,minf->out,save,False,pinf->range,pinf->num_values,pinf->values);
-						xrSetProp(save,XA_ATOM,&ct,1,0);
-					}
-					ct1 = val;
-					break;
-				}
-			}
-		}
-		if (pinf) XFree(pinf);
-		if (ct1 && ct != ct1) {
-			DBG("output: %s %s: %s -> %s",minf?natom(0,minf->name):"",natom(1,prop),natom(2,ct),natom(3,ct1));
-			xrSetProp(prop,XA_ATOM,&ct1,1,0);
-		}
-#endif
 }
 
 static void monFullScreen(int x, int y, _short mode) {
 	xrrSet(); // flush
 	MINF_T(o_out) {
-		_monFS(aCType,aCType1,aCTFullScr,x,y,mode);
-		_monFS(aColorspace,aColorspace1,aCSFullScr,x,y,mode);
+		_monFS(aCType,aCType1,aCTFullScr,x,y,mode,&aCTypeSaved);
+		_monFS(aColorspace,aColorspace1,aCSFullScr,x,y,mode,&aColorspaceSaved);
 	}
 
 }
@@ -1957,6 +1939,29 @@ busy:
 	__init = 0;
 }
 
+static void _signals(void *f){
+	signal(SIGINT,f);
+	signal(SIGABRT,f);
+	signal(SIGQUIT,f);
+}
+
+static void _eXit(int sig){
+	_signals(SIG_DFL);
+#ifdef _BACKLIGHT
+	MINF(minf->bl.en && !minf->bl.val && minf->bl.save) {
+		xrSetRangeProp(&minf->bl,minf->bl.save);
+		_quit = 1;
+	}
+#endif
+#ifdef XSS
+	if (noXSS) {
+		monFullScreen(0,0,9);
+	}
+#endif
+	if (!_quit) exit(1);
+	XFlush(dpy);
+}
+
 static void setShowCursor(){
 	switch (oldShowPtr&0xf8) {
 	    case 0: goto x0;
@@ -2278,6 +2283,7 @@ static void init(){
 	rul2 =NULL;
 	ret = NULL;
 #ifdef XTG
+	_signals(_eXit);
 	curShow = 0;
 	showPtr = 1;
 	oldShowPtr |= 8;
@@ -2808,6 +2814,7 @@ evfree:
 #undef e
 #define e ((XRROutputPropertyNotifyEvent*)&ev)
 				    case RRNotify_OutputProperty:
+					if (_quit) goto exit;
 					// required reinit XRRGetScreenResources(dpy,root) to flush
 					xrrFree();
 					if (e->property != aNonDesk) break;
@@ -2832,4 +2839,8 @@ evfree:
 			break;
 		}
 	}
+#ifdef XTG
+exit:
+	XCloseDisplay(dpy);
+#endif
 }
