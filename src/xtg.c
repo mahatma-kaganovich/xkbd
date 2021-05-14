@@ -1340,7 +1340,7 @@ static void _monFS(Atom prop,Atom save,Atom val,int x, int y, _short mode,Atom *
 //		if (!val && mode) return;
 		if (mode == 9) {
 			if (*saved) {
-				xrSetProp(prop,XA_ATOM,&saved,1,0);
+				xrSetProp(prop,XA_ATOM,saved,1,0);
 				_quit = 1;
 			}
 			return;
