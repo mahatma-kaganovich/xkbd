@@ -363,7 +363,7 @@ unsigned long pr_b,pr_n;
 #define _free(p) if (p) { XFree(p); p=NULL; }
 
 char *_aret[] = {NULL,NULL,NULL,NULL,NULL};
-static char *natom(int i,Atom a){
+static char *natom(_short i,Atom a){
 	if(_aret[i]) XFree(_aret[i]);
 	return _aret[i] = XGetAtomName(dpy,a);
 }
@@ -1956,7 +1956,7 @@ static void _eXit(int sig){
 		return;
 	}
 	_signals(SIG_DFL);
-	 if (!grabcnt) XGrabServer(dpy);
+	if (!grabcnt) XGrabServer(dpy);
 #ifdef _BACKLIGHT
 	MINF(minf->bl.en && !minf->bl.val && minf->bl.save) {
 		xrSetRangeProp(&minf->bl,minf->bl.save);
@@ -1969,16 +1969,16 @@ static void _eXit(int sig){
 		monFullScreen(0,0,9);
 	}
 #endif
-	if (!showPtr) {
-		XFixesShowCursor(dpy, root);
-		_quit = 1;
-	}
 	if (!_quit) {
 		XUngrabServer(dpy);
 		exit(1);
 	}
 	XFlush(dpy);
 	grabcnt = 0; // grab to exit
+	noXSS1 = noXSS;
+	win1 = win;
+	grp1 = grp;
+	timeHold = 0;
 	oldShowPtr = showPtr = 1;
 }
 
