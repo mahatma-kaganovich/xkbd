@@ -253,11 +253,11 @@ static void _print_bmap(_int x, _short n, TouchTree *m) {
 
 #ifdef USE_EVDEV
 #define DEF_RR -1
-#define DEF_SAFE (7+32+64)
 #else
 #define DEF_RR 0
-#define DEF_SAFE (5+32+64)
 #endif
+
+#define DEF_SAFE (1+32+64)
 
 #define p_device 0
 #define p_minfingers 1
@@ -508,9 +508,9 @@ static void WMState(Atom *states, short nn){
 
 #ifdef XTG
 _short grabcnt = 0;
-_int grabserial = -1;
+//_int grabserial = -1;
 static void _Xgrab(){
-		grabserial=(grabserial+1)&0xffff;
+//		grabserial=(grabserial+1)&0xffff;
 		XGrabServer(dpy);
 }
 static void _Xungrab(){
@@ -1158,7 +1158,7 @@ static void xrMons0(){
     if (!outputs) {
 	outputs = calloc(noutput,sizeof(minf_t));
 	minf_last = &outputs[noutput];
-	oldShowPtr |= 2;
+	oldShowPtr |= 16;
     }
     prim0 = prim = XRRGetOutputPrimary(dpy, root);
     if ((pi[p_safe]&128)) {
@@ -1283,7 +1283,7 @@ static void xrMons0(){
 	}
 next:
 	if (minf->geom_ch) {
-		oldShowPtr |= 2;
+		oldShowPtr |= 16;
 		minf->geom_ch = 0;
 #ifdef _BACKLIGHT
 		if (minf->win) {
@@ -1306,7 +1306,7 @@ next:
     } else if (minf->win) {
 		XDestroyWindow(dpy,minf->win);
 		minf->win = 0;
-		oldShowPtr |= 2;
+		oldShowPtr |= 16;
     }}
 #endif
 ret: {}
@@ -1581,23 +1581,11 @@ ex:
 }
 
 static void _reason(char *s){
-	DBG("input %i == monitor %s: %s",dinf->devid,dinf->mon?natom(0,dinf->mon):"none",s);
+	DBG("input %i == output %s: %s",dinf->devid,dinf->mon?natom(0,dinf->mon):"none",s);
 }
 
 static void touchToMon(){
 	unsigned long xy[2];
-#ifdef USE_EVDEV
-	DINF((dinf->type&o_absolute) && !(dinf->ABS[0]>0) && !(dinf->ABS[1]>0)) {
-		getEvRes();
-	}
-#endif
-	// drivers are unsafe, evdev first
-	DINF((dinf->type&o_absolute) && !(dinf->ABS[0]>0) && !(dinf->ABS[1]>0) && dinf->xABS[0].resolution>=1000) {
-		_short i;
-		for (i=0;i<NdevABS;i++) {
-			if (dinf->xABS[i].resolution>1000) dinf->ABS[i] = (dinf->xABS[0].max - dinf->xABS[0].min)/(dinf->xABS[i].resolution/1000.);
-		}
-	}
 #define _REASON(m,r,txt) dinf->reason=r; if (dinf->mon!=m) {dinf->mon=m;_reason(txt);} continue;
 	DINF((dinf->type&o_absolute) && (dinf->reason || !dinf->mon)) {
 		Atom m = 0;
@@ -1674,10 +1662,8 @@ static void getHierarchy(){
 	ninput1_ = 0;
 	
 	int i,j,ndevs2,nkbd,m=0;
-	short grabbed = 0, ev2=0;
 
-	if ((pi[p_safe]&7)==5) {_grabX();grabbed=1;} // just balance grab count
-	int _grab = grabserial;
+	_grabX();
 	XIDeviceInfo *info2 = XIQueryDevice(dpy, XIAllDevices, &ndevs2);
 	if (pi[p_floating] != 1) {
 	    for (i=0; i<ndevs2; i++) {
@@ -1853,11 +1839,7 @@ busy:
 			}
 			for (j=P; j!=N; j=TOUCH_N(j)) if (touch[j].deviceid == devid) goto busy;
 
-			if (!grabbed) {
-				grabbed = 1;
-				_grabX();
-			}
-
+#if 0
 			if (_grab != grabserial) {
 				// server was relocked (getEvRes...), reread device state
 				d2 = XIQueryDevice(dpy, devid, &j);
@@ -1866,6 +1848,7 @@ busy:
 					d2 = &info2[i];
 				}
 			}
+#endif
 			for (j=0; j<d2->num_classes; j++) {
 				XIAnyClassInfo *cl = d2->classes[j];
 				switch (cl->type) {
@@ -1918,6 +1901,7 @@ busy:
 		XIChangeHierarchy(dpy, (void*)&cm, 1);
 	}
 	XIFreeDeviceInfo(info2);
+	_ungrabX();
 	if (pi[p_safe]&8) XFixesShowCursor(dpy,root);
 	tdevs -= tdevs2;
 
@@ -1927,10 +1911,23 @@ busy:
 	dinf_last = &inputs[ninput];
 
 
+#ifdef USE_EVDEV
+	DINF((dinf->type&o_absolute) && !(dinf->ABS[0]>0) && !(dinf->ABS[1]>0)) {
+		getEvRes();
+	}
+#endif
+	// drivers are unsafe, evdev first
+	DINF((dinf->type&o_absolute) && !(dinf->ABS[0]>0) && !(dinf->ABS[1]>0) && dinf->xABS[0].resolution>=1000) {
+		_short i;
+		for (i=0;i<NdevABS;i++) {
+			if (dinf->xABS[i].resolution>1000) dinf->ABS[i] = (dinf->xABS[0].max - dinf->xABS[0].min)/(dinf->xABS[i].resolution/1000.);
+		}
+	}
+
+
 	touchToMon();
 	devid = 0;
 	fixGeometry();
-	if (grabbed) _ungrabX();
 #ifdef XSS
 	if (__init)
 		monFullScreen(0,0,0);
@@ -1964,16 +1961,27 @@ static void _eXit(int sig){
 
 static void setShowCursor(){
 	switch (oldShowPtr&0xf8) {
-	    case 0: goto x0;
+//	    case 0: goto x0;
+	    case (8|16):
 	    case 8:
+		oldShowPtr ^= 8;
 		xrMons0();
-		break;
+	    case 16:
+		switch (oldShowPtr^showPtr) {
+		    case 16:
+			touchToMon();
+			devid = 0;
+			fixGeometry();
+		    case 0:
+			oldShowPtr = showPtr;
+			return;
+		}
 	}
-	if ((oldShowPtr&7)==showPtr) {
-		oldShowPtr = showPtr;
-		return;
-	}
-x0:
+//	if ((oldShowPtr&7)==showPtr) {
+//		oldShowPtr = showPtr;
+//		return;
+//	}
+//x0:
 	oldShowPtr = showPtr;
 	getHierarchy();
 	if ((oldShowPtr & 2) && !showPtr) return;
@@ -2286,7 +2294,7 @@ static void init(){
 	_signals(_eXit);
 	curShow = 0;
 	showPtr = 1;
-	oldShowPtr |= 8;
+	oldShowPtr |= 8|2;
 	XFixesShowCursor(dpy,root);
 #endif
 	win = root;
