@@ -2413,7 +2413,7 @@ ev2:
 		if (showPtr != oldShowPtr) setShowCursor();
 		forceUngrab();
 #endif
-		if (XNextEvent(dpy, &ev)==Success)
+		XNextEvent(dpy, &ev);
 //		DBG("ev %i",ev.type);
 		switch (ev.type) {
 #ifdef XTG
