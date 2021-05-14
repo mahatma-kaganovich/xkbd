@@ -157,6 +157,7 @@ Atom aFloat,aMatrix,aABS,aDevMon,aNonDesk,aNonDeskSave;
 XRRScreenResources *xrrr = NULL;
 _short showPtr, oldShowPtr = 0, curShow;
 _short _quit = 0;
+_short __init = 1;
 #ifdef _BACKLIGHT
 Atom aBl,aBlSave;
 #endif
@@ -361,9 +362,9 @@ unsigned long pr_b,pr_n;
 
 #define _free(p) if (p) { XFree(p); p=NULL; }
 
-char *_aret[5] = {NULL,NULL,NULL,NULL,NULL};
+char *_aret[] = {NULL,NULL,NULL,NULL,NULL};
 static char *natom(int i,Atom a){
-	_free(_aret[i]);
+	if(_aret[i]) XFree(_aret[i]);
 	return _aret[i] = XGetAtomName(dpy,a);
 }
 
@@ -507,6 +508,18 @@ static void WMState(Atom *states, short nn){
 #endif
 
 #ifdef XTG
+static void xrrSet(){
+	if (!xrrr && xrr) xrrr = XRRGetScreenResources(dpy,root);
+}
+
+static void xrrFree(){
+	if (xrrr) {
+		XRRFreeScreenResources(xrrr);
+		xrrr = NULL;
+	}
+}
+
+
 _short grabcnt = 0;
 //_int grabserial = -1;
 static void _Xgrab(){
@@ -518,12 +531,17 @@ static void _Xungrab(){
 //		grabserial=(grabserial+1)&0xffff;
 }
 static void _grabX(){
-	if (!(grabcnt++)) _Xgrab();
+	if (!(grabcnt++)) {
+		XFlush(dpy);
+		XSync(dpy,False);
+		_Xgrab();
+	}
 }
 static inline void forceUngrab(){
 	if (grabcnt) {
 		XFlush(dpy);
 		_Xungrab();
+		XSync(dpy,False);
 		grabcnt=0;
 	}
 }
@@ -718,17 +736,6 @@ static void *fmt2fmt(void *from,Atom fromT,int fromF,void *to,Atom toT,int toF,u
 	return to;
 }
 #endif
-
-static void xrrSet(){
-	if (!xrrr && xrr) xrrr = XRRGetScreenResources(dpy,root);
-}
-
-static void xrrFree(){
-	if (xrrr) {
-		XRRFreeScreenResources(xrrr);
-		xrrr = NULL;
-	}
-}
 
 // chk return 2=eq +:
 // 1 - read+cmp, 1=ok
@@ -1091,7 +1098,6 @@ static _short fixWin(Window win,unsigned long x,unsigned long y,unsigned long w,
 found:
 	if (minf->x == x && minf->y == y && minf->width == w && minf->height == h) return 2;
 	minf->geom_ch = 1;
-	xrrFree();
 	return 1;
 }
 
@@ -1136,8 +1142,6 @@ static void xrMons0(){
     unsigned long i;
     xrrFree();
     _grabX();
-//    XFlush(dpy);
-//    XSync(dpy,False);
     xrrSet();
     int nout = -1, active = 0, non_desktop = 0, non_desktop0 = 0, non_desktop1 = 0;
     XRRCrtcInfo *cinf = NULL;
@@ -1302,7 +1306,10 @@ next:
 #ifdef _BACKLIGHT
     if ((pi[p_safe]&4096)) {
 	MINF_T2(o_active|o_backlight,o_active|o_backlight) {
-		if (!minf->win) simpleWin(0);
+		if (!minf->win) {
+			simpleWin(0);
+			oldShowPtr |= 16;
+		}
     } else if (minf->win) {
 		XDestroyWindow(dpy,minf->win);
 		minf->win = 0;
@@ -1317,7 +1324,6 @@ unsigned int pan_x,pan_y,pan_cnt;
 static void _pan(minf_t *m) {
 	if (pi[p_safe]&64 || !m || !m->crt) return;
 	xrrSet();
-	if (!xrrr) return;
 	XRRPanning *p = XRRGetPanning(dpy,xrrr,m->crt);
 	if (!p) return;
 	if (p->top != pan_y || p->left || p->width != m->width1 || p->height != m->height1) {
@@ -1389,12 +1395,10 @@ ok:
 }
 
 static void monFullScreen(int x, int y, _short mode) {
-	xrrSet(); // flush
 	MINF_T(o_out) {
 		_monFS(aCType,aCType1,aCTFullScr,x,y,mode,&aCTypeSaved);
 		_monFS(aColorspace,aColorspace1,aCSFullScr,x,y,mode,&aColorspaceSaved);
 	}
-
 }
 
 static int scrWin() {
@@ -1404,12 +1408,11 @@ static int scrWin() {
 #endif
 
 static void fixGeometry(){
-	_int nm = 0;
-	minf2 = minf1 = NULL;
-	if (!xrr) return;
+	minf2 = NULL;
 	if (resDev) {
 		DINF(dinf->devid == resDev) {
 			MINF(dinf->mon == minf->name) {
+				if (minf2 = minf) break;
 				minf2 = minf;
 				goto find1;
 			}
@@ -1424,6 +1427,8 @@ static void fixGeometry(){
 		}
 	}
 find1:
+	minf1 = NULL;
+	_int nm = 0;
 	MINF_T(o_active) {
 		nm++;
 		if (!minf2) DINF(dinf->mon == minf->name){
@@ -1433,12 +1438,8 @@ find1:
 		if ((prim0 == minf->out) || (!prim0 && (!minf1 || minf->mheight > minf1->mheight)))
 		    minf1 = minf;
 	}
+	if (!minf1) return;
 	if (!minf2) minf2 = &minf0;
-	if (!xrrr) {
-		//xrMons0();
-		xrrSet(); 
-	}
-//	fixMMRotation(minf2);
 	if (pf[p_res]<0) {
 		if (!minf2->mwidth && !minf2->mheight) {
 			resX = resY = -pf[p_res];
@@ -1550,7 +1551,6 @@ static Bool filterTouch(Display *dpy1, XEvent *ev1, XPointer arg){
 int xtestPtr, xtestPtr0;
 _int tdevs = 0, tdevs2=0;
 //#define floating (pi[p_floating]==1)
-_short __init = 1;
 
 
 _int ninput1_;
@@ -1833,6 +1833,7 @@ skip_map:
 			if (!(c || ximask[0].mask)) continue;
 			if (busy) {
 busy:
+				forceUngrab();
 				oldShowPtr |= 4;
 				//fprintf(stderr,"busy delay\n");
 				continue;
@@ -1901,7 +1902,8 @@ busy:
 		XIChangeHierarchy(dpy, (void*)&cm, 1);
 	}
 	XIFreeDeviceInfo(info2);
-	_ungrabX();
+	//_ungrabX();
+	if (!__init) forceUngrab();
 	if (pi[p_safe]&8) XFixesShowCursor(dpy,root);
 	tdevs -= tdevs2;
 
@@ -1937,13 +1939,24 @@ busy:
 }
 
 static void _signals(void *f){
-	signal(SIGINT,f);
-	signal(SIGABRT,f);
-	signal(SIGQUIT,f);
+	static int sigs[] = {
+		SIGINT,
+		SIGABRT,
+		SIGQUIT,
+		SIGHUP,
+		0,
+		};
+	int *s;
+	for(s=sigs; *s; s++) signal(*s,f);
 }
 
 static void _eXit(int sig){
+	if (sig == SIGHUP) {
+		oldShowPtr |= 2|8;
+		return;
+	}
 	_signals(SIG_DFL);
+	 if (!grabcnt) XGrabServer(dpy);
 #ifdef _BACKLIGHT
 	MINF(minf->bl.en && !minf->bl.val && minf->bl.save) {
 		xrSetRangeProp(&minf->bl,minf->bl.save);
@@ -1952,16 +1965,25 @@ static void _eXit(int sig){
 #endif
 #ifdef XSS
 	if (noXSS) {
+		noXSS=0;
 		monFullScreen(0,0,9);
 	}
 #endif
-	if (!_quit) exit(1);
+	if (!showPtr) {
+		XFixesShowCursor(dpy, root);
+		_quit = 1;
+	}
+	if (!_quit) {
+		XUngrabServer(dpy);
+		exit(1);
+	}
 	XFlush(dpy);
+	grabcnt = 0; // grab to exit
+	oldShowPtr = showPtr = 1;
 }
 
 static void setShowCursor(){
-	switch (oldShowPtr&0xf8) {
-//	    case 0: goto x0;
+    	switch (oldShowPtr&0xf8) {
 	    case (8|16):
 	    case 8:
 		oldShowPtr ^= 8;
@@ -1973,15 +1995,11 @@ static void setShowCursor(){
 			devid = 0;
 			fixGeometry();
 		    case 0:
+			xrrFree();
 			oldShowPtr = showPtr;
 			return;
 		}
 	}
-//	if ((oldShowPtr&7)==showPtr) {
-//		oldShowPtr = showPtr;
-//		return;
-//	}
-//x0:
 	oldShowPtr = showPtr;
 	getHierarchy();
 	if ((oldShowPtr & 2) && !showPtr) return;
@@ -2380,9 +2398,6 @@ int main(int argc, char **argv){
 			if (win1 != win) getWinGrp();
 			else if (grp1 != grp) setWinGrp();
 		} while (win1 != win); // error handled
-#ifdef _BACKLIGHT
-		if (!xrrr) xrMons0();
-#endif
 ev:
 #ifdef XTG
 		if (timeHold) {
@@ -2398,7 +2413,7 @@ ev2:
 		if (showPtr != oldShowPtr) setShowCursor();
 		forceUngrab();
 #endif
-		XNextEvent(dpy, &ev);
+		if (XNextEvent(dpy, &ev)==Success)
 //		DBG("ev %i",ev.type);
 		switch (ev.type) {
 #ifdef XTG
@@ -2489,7 +2504,8 @@ ev2:
 				if (resDev != devid) {
 					resDev = devid;
 					// force swap monitors if dynamic pan?
-					fixGeometry();
+					if (!(pi[p_safe]&64))
+						fixGeometry();
 				}
 #endif
 				g = ((int)x2 <= minf2->x) ? BUTTON_RIGHT : ((int)x2 >= minf2->x2) ? BUTTON_LEFT : ((int)y2 <= minf2->y) ? BUTTON_UP : ((int)y2 >= minf2->y2) ? BUTTON_DOWN : 0;
@@ -2807,7 +2823,6 @@ evfree:
 				//TIME(T,e->timestamp > e->config_timestamp ? e->timestamp : e->config_timestamp);
 				XRRUpdateConfiguration(&ev);
 				_scr_size();
-				xrrFree();
 				oldShowPtr |= 8;
 				//minf0.rotation = e->rotation;
 				break;
@@ -2829,7 +2844,6 @@ evfree:
 #undef e
 #define e ((XRRNotifyEvent*)&ev)
 				    default:
-					xrrFree();
 					oldShowPtr |= 8;
 					break;
 				}
