@@ -206,7 +206,7 @@ Touch touch[TOUCH_MAX];
 _short P=0,N=0;
 
 double resX, resY;
-int resDev;
+int resDev = 0;
 int xrr, xropcode=0, xrevent=-100, xrevent1=-100;
 Atom aMonName = None;
 
@@ -1425,15 +1425,15 @@ static void fixGeometry(){
 	_int nm = 0;
 	minf2 = minf1 = NULL;
 	if (!xrr) return;
-	if (devid) {
-		DINF(dinf->devid == devid) {
+	if (resDev) {
+		DINF(dinf->devid == resDev) {
 			MINF(dinf->mon == minf->name) {
 				minf2 = minf;
 				goto find1;
 			}
-			return;
+			break;
 		}
-		return;
+		if (devid == resDev) return;
 	}
 	DINF((dinf->type&o_directTouch)) {
 		MINF(minf->type&o_active && dinf->mon == minf->name) {
@@ -1599,7 +1599,7 @@ ex:
 }
 
 static void _reason(char *s){
-	DBG("Device %i == monitor %s: %s",dinf->devid,dinf->mon?natom(0,dinf->mon):"none",s);
+	DBG("input %i == monitor %s: %s",dinf->devid,dinf->mon?natom(0,dinf->mon):"none",s);
 }
 
 static void touchToMon(){
@@ -1616,7 +1616,7 @@ static void touchToMon(){
 			if (dinf->xABS[i].resolution>1000) dinf->ABS[i] = (dinf->xABS[0].max - dinf->xABS[0].min)/(dinf->xABS[i].resolution/1000.);
 		}
 	}
-#define _REASON(m,r,txt) dinf->reason=r; if (dinf->mon!=m) {dinf->mon=m;_reason(txt);}
+#define _REASON(m,r,txt) dinf->reason=r; if (dinf->mon!=m) {dinf->mon=m;_reason(txt);} continue;
 	DINF((dinf->type&o_absolute) && (dinf->reason || !dinf->mon)) {
 		Atom m = 0;
 		if (mon) {
@@ -1628,7 +1628,7 @@ static void touchToMon(){
 				_REASON(m,0,"by xinput property");
 			}
 		}
-		if (m) break;
+		if (m) continue;
 		int n = 0, n0 = 0;
 		Atom m0 = 0;
 		MINF_T(o_size|o_msize) {
@@ -1642,21 +1642,17 @@ static void touchToMon(){
 		}
 		if (!n && n0 == 1) {
 			_REASON(m0,2,"\"zero mm size\" monitor by proportions");
-			break;
 		}
 		if (n == 1) {
 			_REASON(m,1,"by size");
-			break;
 		}
-		if (dinf->mon && dinf->reason<2) break;
+		if (dinf->mon && dinf->reason<2) continue;
 		// unprecise methods now
 		if (m0) {
 			_REASON(m0,3,"\"zero mm size\" monitor by proportions first");
-			break;
 		}
 		if (m) {
 			_REASON(m,3,"by size first");
-			break;
 		}
 	}
 	DINF(dinf->mon) MINF(minf->name == dinf->mon) {
@@ -1731,6 +1727,7 @@ static void getHierarchy(){
 	for (i=0; i<ndevs2; i++) {
 		XIDeviceInfo *d2 = &info2[i];
 		devid = d2->deviceid;
+		dinf1 = NULL;
 		_short t = 0, scroll = 0;
 		_short type = 0;
 		busy = 0;
@@ -1811,12 +1808,6 @@ static void getHierarchy(){
 				goto skip_map;
 			}
 		}
-//		if (abs && !resDev) {
-//			if (mon) map_to();
-#ifdef USE_EVDEV
-//			else if (mon_sz) getRes(0,0,2);
-#endif
-//		}
 skip_map:
 		tdevs+=t;
 		// exclude touchscreen with scrolling
@@ -1947,7 +1938,6 @@ busy:
 	XIFreeDeviceInfo(info2);
 	if (pi[p_safe]&8) XFixesShowCursor(dpy,root);
 	tdevs -= tdevs2;
-	if (!resDev) resDev=1;
 
 	if (inputs) free(inputs);
 	inputs = inputs1;
@@ -2033,8 +2023,6 @@ static void _scr_size(){
 	minf0.mwidth = DisplayWidthMM(dpy,screen);
 	minf0.mheight = DisplayHeightMM(dpy,screen);
 	fixMMRotation(&minf0);
-	resDev = 0;
-
 	oldShowPtr |= 2;
 }
 #endif
@@ -2415,7 +2403,6 @@ ev2:
 						XFreeEventData(dpy, &ev.xcookie);
 						if (r == XISlaveSwitch) goto ev2;
 					}
-					resDev = 0;
 					oldShowPtr |= 2;
 					continue;
 #endif
@@ -2438,7 +2425,6 @@ ev2:
 						}
 					}
 				    case XI_HierarchyChanged:
-					resDev = 0;
 					oldShowPtr |= 2;
 					continue;
 #ifdef _BACKLIGHT
@@ -2487,13 +2473,9 @@ ev2:
 				x2 = e->root_x + pf[p_round], y2 = e->root_y + pf[p_round];
 #if 1
 				if (resDev != devid) {
-					DINF(dinf->devid == devid) {
-						if (!dinf->mon || dinf->mon == minf2->name) break;
-						// force swap monitors if dynamic pan?
-						fixGeometry();
-						break;
-					}
 					resDev = devid;
+					// force swap monitors if dynamic pan?
+					fixGeometry();
 				}
 #endif
 				g = ((int)x2 <= minf2->x) ? BUTTON_RIGHT : ((int)x2 >= minf2->x2) ? BUTTON_LEFT : ((int)y2 <= minf2->y) ? BUTTON_UP : ((int)y2 >= minf2->y2) ? BUTTON_DOWN : 0;
@@ -2833,7 +2815,6 @@ evfree:
 #define e ((XRRNotifyEvent*)&ev)
 				    default:
 					xrrFree();
-					resDev = 0;
 					oldShowPtr |= 8;
 					break;
 				}
