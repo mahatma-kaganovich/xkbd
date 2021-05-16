@@ -513,7 +513,7 @@ static void xrrSet(){
 }
 
 static void xrrFree(){
-	if (xrrr) {
+	if (xrrr && xrr) {
 		XRRFreeScreenResources(xrrr);
 		xrrr = NULL;
 	}
@@ -1100,6 +1100,7 @@ static _short fixWin(Window win,unsigned long x,unsigned long y,unsigned long w,
 found:
 	if (minf->x == x && minf->y == y && minf->width == w && minf->height == h) return 2;
 	minf->geom_ch = 1;
+	oldShowPtr |= 8;
 	return 1;
 }
 
@@ -1141,6 +1142,16 @@ static void setFSWin() {
 RROutput prim0, prim;
 
 static void xrMons0(){
+    if (!xrr) {
+	minf_last = outputs = &minf0;
+	minf_last++;
+	noutput = 1;
+	oldShowPtr |= 16;
+	minf0.type = o_active;
+	if (minf0.width && minf0.height) minf0.type|=o_size;
+	if (minf0.mwidth && minf0.mheight) minf0.type|=o_msize;
+	return;
+    }
     unsigned long i;
     xrrFree();
     _grabX();
@@ -2063,7 +2074,6 @@ static void _scr_size(){
 	minf0.mwidth = DisplayWidthMM(dpy,screen);
 	minf0.mheight = DisplayHeightMM(dpy,screen);
 	fixMMRotation(&minf0);
-	oldShowPtr |= 2;
 }
 #endif
 
@@ -2155,8 +2165,8 @@ static int xerrh(Display *dpy, XErrorEvent *err){
 		else if (err->resourceid == win) return 0;
 		break;
 #ifdef XTG
-	    case BadAccess: // second XI_Touch* root listener
-		oldShowPtr |= 2;
+	    case BadAccess: // second XI_Touch* root listener/etc
+		oldShowPtr |= 2|8;
 		showPtr = 1;
 		break;
 #endif
@@ -2792,8 +2802,12 @@ evfree:
 #undef e
 #define e (ev.xconfigure)
 		    case ConfigureNotify:
-			if (fixWin(e.window,e.x,e.y,e.width,e.height) || !xrr || !XRRUpdateConfiguration(&ev)) goto ev;
-			_scr_size();
+			if (fixWin(e.window,e.x,e.y,e.width,e.height)) break;
+			if (xrr || e.window != root) goto ev2;
+			minf0.width = e.width;
+			minf0.height = e.height;
+			fixMMRotation(&minf0);
+			oldShowPtr |= 8;
 			break;
 #endif
 		    default:
