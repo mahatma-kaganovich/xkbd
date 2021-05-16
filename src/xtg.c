@@ -1421,11 +1421,10 @@ static int scrWin() {
 #endif
 
 static void fixGeometry(){
-	minf2 = NULL;
 	if (resDev) {
 		DINF(dinf->devid == resDev) {
 			MINF(dinf->mon == minf->name) {
-				if (minf2 = minf) break;
+				if (minf2 == minf && devid == resDev) return;
 				minf2 = minf;
 				goto find1;
 			}
@@ -1433,6 +1432,7 @@ static void fixGeometry(){
 		}
 		if (devid == resDev) return;
 	}
+	minf2 = NULL;
 	DINF((dinf->type&o_directTouch)) {
 		MINF(minf->type&o_active && dinf->mon == minf->name) {
 			minf2 = minf;
@@ -1451,7 +1451,6 @@ find1:
 		if ((prim0 == minf->out) || (!prim0 && (!minf1 || minf->mheight > minf1->mheight)))
 		    minf1 = minf;
 	}
-	if (!minf1) return;
 	if (!minf2) minf2 = &minf0;
 	if (pf[p_res]<0) {
 		if (!minf2->mwidth && !minf2->mheight) {
@@ -1463,6 +1462,7 @@ find1:
 			if (!minf2->mwidth) resX = resY;
 		}
 	}
+	if (!minf1 || !xrr) return;
 	if (!(pi[p_safe]&32) && minf1 && minf1->out != prim) {
 		DBG("primary output %lu",minf1->out);
 		XRRSetOutputPrimary(dpy,root,prim = minf1->out);
