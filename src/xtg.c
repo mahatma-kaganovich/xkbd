@@ -569,6 +569,7 @@ typedef struct _dinf {
 	float ABS[NdevABS];
 	abs_t xABS[NdevABS];
 	Atom mon;
+	int attach0,attach;
 	_short reason;
 	unsigned int x,y,width,height;
 } dinf_t;
@@ -1077,7 +1078,8 @@ static void chBL(Window w, _short obscured, _short entered) {
 #if 0
 #define __check_entered
 static void checkEntered(){
-	DINF(o_master_ptr|o_floating) {
+//	DINF(o_master_ptr|o_floating) {
+	DINF(o_master_ptr) {
 		Window rw,rc;
 		XIButtonState b;
 		XIModifierState m;
@@ -1554,11 +1556,12 @@ _int tdevs = 0, tdevs2=0;
 
 
 _int ninput1_;
+XIDeviceInfo *d2;
 // remember only devices on demand
 static void _add_input(_short t){
 	if (dinf1) goto ex;
 	_int i = ninput1_++;
-	if (tdevs2 > ninput1 || !inputs1) {
+	if (ninput1_ > ninput1 || !inputs1) {
 		_int n = i + NINPUT_STEP;
 		dinf_t *p = malloc(n*sizeof(dinf_t));
 		if (inputs1) {
@@ -1573,11 +1576,14 @@ static void _add_input(_short t){
 	DINF(dinf->devid == devid) {
 		*dinf1 = *dinf;
 		dinf1->type = t; // reset
-		return;
+		goto ex1;
 	}
 	dinf1->devid = devid;
+	dinf1->attach0 = d2->attachment;
 ex:
 	dinf1->type |= t;
+ex1:
+	dinf1->attach = d2->attachment;
 }
 
 static void _reason(char *s){
@@ -1652,12 +1658,11 @@ static void touchToMon(){
 	}
 }
 
+XIAttachSlaveInfo ca = {.type=XIAttachSlave};
+XIDetachSlaveInfo cf = {.type=XIDetachSlave};
+XIAddMasterInfo cm = {.type = XIAddMaster, .name = "TouchScreen", .send_core = 0, .enable = 1};
+XIRemoveMasterInfo cr = {.type = XIRemoveMaster, .return_mode = XIFloating};
 static void getHierarchy(){
-	static XIAttachSlaveInfo ca = {.type=XIAttachSlave};
-	static XIDetachSlaveInfo cf = {.type=XIDetachSlave};
-	static XIAddMasterInfo cm = {.type = XIAddMaster, .name = "TouchScreen", .send_core = 0, .enable = 1};
-	static XIRemoveMasterInfo cr = {.type = XIRemoveMaster, .return_mode = XIFloating};
-
 	inputs1 = NULL;
 	ninput1_ = 0;
 	
@@ -1667,7 +1672,7 @@ static void getHierarchy(){
 	XIDeviceInfo *info2 = XIQueryDevice(dpy, XIAllDevices, &ndevs2);
 	if (pi[p_floating] != 1) {
 	    for (i=0; i<ndevs2; i++) {
-		XIDeviceInfo *d2 = &info2[i];
+		d2 = &info2[i];
 		devid = d2->deviceid;
 		switch (d2->use) {
 		    case XIMasterPointer:
@@ -1693,7 +1698,7 @@ static void getHierarchy(){
 	xtestPtr0 = xtestPtr = 0;
 	tdevs2 = tdevs = 0;
 	for (i=0; i<ndevs2; i++) {
-		XIDeviceInfo *d2 = &info2[i];
+		d2 = &info2[i];
 		devid = d2->deviceid;
 		dinf1 = NULL;
 		_short t = 0, scroll = 0;
@@ -1732,7 +1737,6 @@ static void getHierarchy(){
 			    case XITouchClass:
 				if (e->mode != XIDirectTouch) break;
 				t=1;
-				type|=o_directTouch;
 				break;
 #undef e
 #define e ((XIValuatorClassInfo*)cl)
@@ -1767,7 +1771,6 @@ static void getHierarchy(){
 			if (!strcmp(pa[p_device],d2->name) || pi[p_device] == devid) {
 				t = 1;
 				scroll = 0;
-				type|=o_directTouch;
 			} else {
 				scroll = 1;
 				//type|=o_scroll;
@@ -1777,6 +1780,7 @@ static void getHierarchy(){
 			}
 		}
 skip_map:
+		if (t && !scroll) type|=o_directTouch;
 		tdevs+=t;
 		// exclude touchscreen with scrolling
 		void *c = NULL;
@@ -1880,7 +1884,8 @@ busy:
 			}
 		}
 		if (type) _add_input(type);
-		if (c) XIChangeHierarchy(dpy, c, 1);
+		if (c && XIChangeHierarchy(dpy, c, 1) == Success && dinf1) 
+			dinf1->attach = (c==&ca)?ca.new_master:0; // early: before event
 		if (ximask[0].mask) XISelectEvents(dpy, root, ximask, Nximask);
 	}
 	switch (pi[p_floating]) {
@@ -1957,6 +1962,8 @@ static void _eXit(int sig){
 	}
 	_signals(SIG_DFL);
 	if (!grabcnt) XGrabServer(dpy);
+	grabcnt = 0;
+
 #ifdef _BACKLIGHT
 	MINF(minf->bl.en && !minf->bl.val && minf->bl.save) {
 		xrSetRangeProp(&minf->bl,minf->bl.save);
@@ -1964,22 +1971,24 @@ static void _eXit(int sig){
 	}
 #endif
 #ifdef XSS
-	if (noXSS) {
-		noXSS=0;
-		monFullScreen(0,0,9);
-	}
+	if (noXSS) monFullScreen(0,0,9);
 #endif
-	if (!_quit) {
-		XUngrabServer(dpy);
-		exit(1);
+	int m = 0;
+	if (cr.return_pointer && ca.new_master && cr.return_pointer != ca.new_master) {
+		cr.deviceid = ca.new_master;
+		cr.return_mode = XIAttachToMaster;
+		if (XIChangeHierarchy(dpy, &cr, 1) == Success) {
+			m = ca.new_master;
+			_quit = 1;
+		}
 	}
+	DINF(dinf->attach0 != dinf->attach && dinf->attach0 && dinf->attach0 != m) {
+		ca.new_master = dinf->attach0;
+		ca.deviceid = dinf->devid;
+		if (XIChangeHierarchy(dpy, &ca, 1) == Success) _quit = 1;
+	}
+	if (!_quit) exit(0);
 	XFlush(dpy);
-	grabcnt = 0; // grab to exit
-	noXSS1 = noXSS;
-	win1 = win;
-	grp1 = grp;
-	timeHold = 0;
-	oldShowPtr = showPtr = 1;
 }
 
 static void setShowCursor(){
@@ -2393,7 +2402,11 @@ int main(int argc, char **argv){
 	init();
 	printGrp();
 	getPropWin1();
+#ifdef XTG
+	while (!_quit) {
+#else
 	while (1) {
+#endif
 		do {
 			if (win1 != win) getWinGrp();
 			else if (grp1 != grp) setWinGrp();
@@ -2454,6 +2467,7 @@ ev2:
 						}
 					}
 				    case XI_HierarchyChanged:
+					if (_quit) goto exit;
 					oldShowPtr |= 2;
 					continue;
 #ifdef _BACKLIGHT
@@ -2837,7 +2851,6 @@ evfree:
 #undef e
 #define e ((XRROutputPropertyNotifyEvent*)&ev)
 				    case RRNotify_OutputProperty:
-					if (_quit) goto exit;
 					// required reinit XRRGetScreenResources(dpy,root) to flush
 					xrrFree();
 					if (e->property != aNonDesk) break;
@@ -2863,6 +2876,7 @@ evfree:
 	}
 #ifdef XTG
 exit:
+	XFixesShowCursor(dpy,root);
 	XCloseDisplay(dpy);
 #endif
 }
