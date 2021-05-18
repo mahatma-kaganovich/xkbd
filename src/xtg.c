@@ -623,6 +623,9 @@ typedef struct _minf {
 	Window win;
 	_short obscured,entered,geom_ch;
 #endif
+#ifdef XSS
+	Atom aCTypeSaved, aColorspaceSaved;
+#endif
 } minf_t;
 
 #define o_out 1
@@ -1368,7 +1371,6 @@ static void _pan(minf_t *m) {
 }
 
 #ifdef XSS
-Atom aCTypeSaved = 0,aColorspaceSaved = 0;
 static void _monFS(Atom prop,Atom save,Atom val,_short mode,Atom *saved){
 		// optimized X calls, but stricter (?) off/on states
 		if (!val && mode) return;
@@ -1385,9 +1387,10 @@ saved:
 				_short del = !val || !!(pi[p_safe]&2048) || !mode;
 				if (xrSetProp(prop,XA_ATOM,saved,1,4|(del<<4)) && del) {
 					XRRDeleteOutputProperty(dpy,minf->out,save);
+					*saved = 0;
 				}
 			} 
-			*saved = 0;
+			//*saved = 0;
 			return;
 		}
 		if (!val) return;
@@ -1410,6 +1413,7 @@ ok:
 			XFree(pinf);
 		}
 		if (ct != *saved) {
+			*saved = 0;
 			if (!xrSetProp(save,XA_ATOM,&ct,1,0x10)) {
 				if (!pinf) {
 					XRRDeleteOutputProperty(dpy,minf->out,save);
@@ -1425,8 +1429,8 @@ ok:
 
 static void monFullScreen(_short mode) {
 	MINF_T(o_out) {
-		_monFS(aCType,aCType1,aCTFullScr,mode,&aCTypeSaved);
-		_monFS(aColorspace,aColorspace1,aCSFullScr,mode,&aColorspaceSaved);
+		_monFS(aCType,aCType1,aCTFullScr,mode,&minf->aCTypeSaved);
+		_monFS(aColorspace,aColorspace1,aCSFullScr,mode,&minf->aColorspaceSaved);
 	}
 }
 
