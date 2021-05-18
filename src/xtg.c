@@ -580,7 +580,7 @@ typedef struct _dinf {
 	float ABS[NdevABS];
 	abs_t xABS[NdevABS];
 	Atom mon;
-	int attach0,attach;
+	int attach0;
 	_short reason;
 	unsigned int x,y,width,height;
 } dinf_t;
@@ -1603,14 +1603,12 @@ static void _add_input(_short t){
 	DINF(dinf->devid == devid) {
 		*dinf1 = *dinf;
 		dinf1->type = t; // reset
-		goto ex1;
+		return;
 	}
 	dinf1->devid = devid;
 	dinf1->attach0 = d2->attachment;
 ex:
 	dinf1->type |= t;
-ex1:
-	dinf1->attach = d2->attachment;
 }
 
 static void _reason(char *s){
@@ -1911,8 +1909,7 @@ busy:
 			}
 		}
 		if (type) _add_input(type);
-		if (c && XIChangeHierarchy(dpy, c, 1) == Success && dinf1) 
-			dinf1->attach = (c==&ca)?ca.new_master:0; // early: before event
+		if (c) XIChangeHierarchy(dpy, c, 1); 
 		if (ximask[0].mask) XISelectEvents(dpy, root, ximask, Nximask);
 	}
 	switch (pi[p_floating]) {
@@ -2008,7 +2005,7 @@ static void _eXit(int sig){
 			_quit = 1;
 		}
 	}
-	DINF(dinf->attach0 != dinf->attach && dinf->attach0 && dinf->attach0 != m) {
+	DINF(dinf->attach0) {
 		ca.new_master = dinf->attach0;
 		ca.deviceid = dinf->devid;
 		if (XIChangeHierarchy(dpy, &ca, 1) == Success) _quit = 1;
