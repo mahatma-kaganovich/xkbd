@@ -467,12 +467,26 @@ static _short dpms_state(){
 	return en ? (s != DPMSModeOn) : 3;
 }
 #endif
+
 #ifdef XTG
+static void xrrSet(){
+	if (!xrrr && xrr) xrrr = XRRGetScreenResources(dpy,root);
+}
+
+static void xrrFree(){
+	if (xrrr && xrr) {
+		XRRFreeScreenResources(xrrr);
+		xrrr = NULL;
+	}
+}
+
 static _short getGeometry(){
 //	return XGetWindowAttributes(dpy, win, &wa);
 	return XGetGeometry(dpy,win,&wa.root,&wa.x,&wa.y,&wa.width,&wa.height,&wa.border_width,&wa.depth);
 }
-static void monFullScreen(int x, int y, _short mode);
+
+static void monFullScreen(_short mode);
+
 #endif
 static void WMState(Atom *states, short nn){
 	short i;
@@ -501,24 +515,23 @@ static void WMState(Atom *states, short nn){
 #endif
 		;
 #ifdef XTG
-		if ((aCTFullScr||aCSFullScr) && getGeometry()) monFullScreen(wa.x,wa.y,1);
+		if ((aCTFullScr||aCSFullScr)) {
+			if (noXSS) {
+				wa.x = -1;
+				wa.y = -1;
+				getGeometry();
+			}
+			monFullScreen(1);
+			// flush xrSetProp()
+			xrrSet();
+			xrrFree();
+		}
 #endif
 	}
 }
 #endif
 
 #ifdef XTG
-static void xrrSet(){
-	if (!xrrr && xrr) xrrr = XRRGetScreenResources(dpy,root);
-}
-
-static void xrrFree(){
-	if (xrrr && xrr) {
-		XRRFreeScreenResources(xrrr);
-		xrrr = NULL;
-	}
-}
-
 
 _short grabcnt = 0;
 //_int grabserial = -1;
@@ -551,8 +564,6 @@ static inline void _ungrabX(){
 		_Xungrab();
 	}
 }
-
-static void monFullScreen(int x, int y, _short mode);
 
 #define NdevABS 3
 
@@ -1119,8 +1130,12 @@ static void simpleWin(_short mode) {
 		w = 0;
 	}
 	if (!w) {
+#if 0
 		w = XCreateSimpleWindow(dpy, root, minf->x,minf->y,minf->width,minf->height,0,0,BlackPixel(dpy, screen));
 		XChangeWindowAttributes(dpy, w, CWOverrideRedirect|CWEventMask, &winattr);
+#else
+		w = XCreateWindow(dpy, root, minf->x,minf->y,minf->width,minf->height, 0, 0, InputOutput, CopyFromParent, CWBackPixel|CWBorderPixel|CWOverrideRedirect|CWEventMask, &winattr);
+#endif
 		XISelectEvents(dpy, w, ximaskWin, Nximask);
 	} else if (minf->geom_ch) {
 		XMoveResizeWindow(dpy,w,minf->x,minf->y,minf->width,minf->height);
@@ -1354,9 +1369,9 @@ static void _pan(minf_t *m) {
 
 #ifdef XSS
 Atom aCTypeSaved = 0,aColorspaceSaved = 0;
-static void _monFS(Atom prop,Atom save,Atom val,int x, int y, _short mode,Atom *saved){
+static void _monFS(Atom prop,Atom save,Atom val,_short mode,Atom *saved){
 		// optimized X calls, but stricter (?) off/on states
-//		if (!val && mode) return;
+		if (!val && mode) return;
 		if (mode == 9) {
 			if (*saved) {
 				xrSetProp(prop,XA_ATOM,saved,1,0);
@@ -1365,25 +1380,25 @@ static void _monFS(Atom prop,Atom save,Atom val,int x, int y, _short mode,Atom *
 			return;
 		}
 		if (!noXSS) {
-saved:
+saved:	
 			if(*saved || (xrGetProp(save,XA_ATOM,saved,1,0) && *saved)) {
 				_short del = !val || !!(pi[p_safe]&2048) || !mode;
 				if (xrSetProp(prop,XA_ATOM,saved,1,4|(del<<4)) && del) {
 					XRRDeleteOutputProperty(dpy,minf->out,save);
 				}
-				*saved = 0;
 			} 
+			*saved = 0;
 			return;
 		}
 		if (!val) return;
 		// repair disconnected
 		if (!ACTIVE(minf)) goto saved;
 		// repair unordered
-		if (!(x>=minf->x && x<=minf->x2 && y>=minf->y && y<=minf->y2)) goto saved;
+		if (!(wa.x>=minf->x && wa.x<=minf->x2 && wa.y>=minf->y && wa.y<=minf->y2)) goto saved;
 		Atom ct = 0;
 		if (!xrGetProp(prop,XA_ATOM,&ct,1,0) || !ct) return;
 		XRRPropertyInfo *pinf = NULL;
-		if (!xrGetProp(save,XA_ATOM,saved,1,0) || !saved) {
+		if (!*saved && !(xrGetProp(save,XA_ATOM,saved,1,0) && *saved)) {
 reconf:
 			if (!(pinf = XRRQueryOutputProperty(dpy,minf->out,prop))) return;
 			int i;
@@ -1402,15 +1417,16 @@ ok:
 				}
 				return;
 			}
+			*saved = ct;
 		}
 		if (ct != val)
 			xrSetProp(prop,XA_ATOM,&val,1,0);
 }
 
-static void monFullScreen(int x, int y, _short mode) {
+static void monFullScreen(_short mode) {
 	MINF_T(o_out) {
-		_monFS(aCType,aCType1,aCTFullScr,x,y,mode,&aCTypeSaved);
-		_monFS(aColorspace,aColorspace1,aCSFullScr,x,y,mode,&aColorspaceSaved);
+		_monFS(aCType,aCType1,aCTFullScr,mode,&aCTypeSaved);
+		_monFS(aColorspace,aColorspace1,aCSFullScr,mode,&aColorspaceSaved);
 	}
 }
 
@@ -1905,7 +1921,6 @@ busy:
 			if (!m) break;
 //			XIRemoveMasterInfo cr = {.type = XIRemoveMaster, .return_mode = XIFloating, .deviceid = m, .return_pointer = m0, .return_keyboard = k0};
 			XIChangeHierarchy(dpy, (void*)&cr, 1);
-			break;
 		}
 	    case 0:
 		if (m) break;
@@ -1944,12 +1959,12 @@ busy:
 
 
 	touchToMon();
-	devid = 0;
-	fixGeometry();
 #ifdef XSS
 	if (__init)
-		monFullScreen(0,0,0);
+		monFullScreen(0);
 #endif
+	devid = 0;
+	fixGeometry();
 
 	__init = 0;
 }
@@ -1982,7 +1997,7 @@ static void _eXit(int sig){
 	}
 #endif
 #ifdef XSS
-	if (noXSS) monFullScreen(0,0,9);
+	if (noXSS) monFullScreen(9);
 #endif
 	int m = 0;
 	if (cr.return_pointer && ca.new_master && cr.return_pointer != ca.new_master) {
@@ -2476,9 +2491,17 @@ ev2:
 							clearCache();
 						}
 					}
+#undef e
+#define e ((XIHierarchyEvent*)ev.xcookie.data)
 				    case XI_HierarchyChanged:
-					if (_quit) goto exit;
+#if 0
+					if (XGetEventData(dpy, &ev.xcookie)) {
+						if (e->flags&(XISlaveRemoved|XISlaveAdded)) oldShowPtr |= 2;
+						XFreeEventData(dpy, &ev.xcookie);
+					}
+#else
 					oldShowPtr |= 2;
+#endif
 					continue;
 #ifdef _BACKLIGHT
 #undef e
