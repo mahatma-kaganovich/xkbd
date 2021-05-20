@@ -469,14 +469,19 @@ static _short dpms_state(){
 #endif
 
 #ifdef XTG
+int xrSetProp_cnt = 0;
 static void xrrSet(){
-	if (!xrrr && xrr) xrrr = XRRGetScreenResources(dpy,root);
+	if (!xrrr && xrr) {
+		xrrr = XRRGetScreenResources(dpy,root);
+//		xrSetProp_cnt = 0;
+	}
 }
 
 static void xrrFree(){
 	if (xrrr && xrr) {
 		XRRFreeScreenResources(xrrr);
 		xrrr = NULL;
+		xrSetProp_cnt = 0;
 	}
 }
 
@@ -486,6 +491,7 @@ static _short getGeometry(){
 }
 
 static void monFullScreen(_short mode);
+static void xrPropFlush();
 
 #endif
 static void WMState(Atom *states, short nn){
@@ -522,9 +528,7 @@ static void WMState(Atom *states, short nn){
 				getGeometry();
 			}
 			monFullScreen(1);
-			// flush xrSetProp()
-			xrrSet();
-			xrrFree();
+			xrPropFlush();
 		}
 #endif
 	}
@@ -872,12 +876,21 @@ static _short xrGetProp(Atom prop, Atom type, void *data, long cnt, _short chk){
 
 static _short xrSetProp(Atom prop, Atom type, void *data, long cnt, _short chk){
 	target = pr_out;
+	xrSetProp_cnt++;
 	return setProp(prop,type,PropModeReplace,data,cnt,chk);
 }
 
 static _short xiGetProp(Atom prop, Atom type, void *data, long cnt, _short chk){
 	target = pr_input;
 	return getProp(prop,type,data,0,cnt,chk);
+}
+
+static void xrPropFlush(){
+	if (xrSetProp_cnt) {
+		xrrFree();
+		xrrSet();
+		xrrFree();
+	}
 }
 
 static _short xiSetProp(Atom prop, Atom type, void *data, long cnt, _short chk){
@@ -1960,12 +1973,14 @@ busy:
 
 
 	touchToMon();
+	devid = 0;
+	fixGeometry();
+
 #ifdef XSS
 	if (__init)
 		monFullScreen(0);
 #endif
-	devid = 0;
-	fixGeometry();
+	xrPropFlush();
 
 	__init = 0;
 }
@@ -2030,6 +2045,7 @@ static void setShowCursor(){
 			touchToMon();
 			devid = 0;
 			fixGeometry();
+			xrPropFlush();
 		    case 0:
 			xrrFree();
 			oldShowPtr = showPtr;
