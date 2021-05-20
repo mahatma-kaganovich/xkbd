@@ -1403,7 +1403,7 @@ saved:
 					*saved = 0;
 				}
 			} 
-			//*saved = 0;
+			*saved = 0; // test before remove
 			return;
 		}
 		if (!val) return;
