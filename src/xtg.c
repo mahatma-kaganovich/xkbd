@@ -888,6 +888,8 @@ static _short xiGetProp(Atom prop, Atom type, void *data, long cnt, _short chk){
 static void xrPropFlush(){
 	if (xrProp_ch) {
 		xrrFree();
+		XFlush(dpy);
+		XSync(dpy,False);
 		xrrSet();
 		xrrFree();
 	}
@@ -1091,7 +1093,10 @@ static void xrSetRangeProp(pinf_t *d, prop_int val) {
 static void chBL1(_short obscured, _short entered) {
 	if (obscured != 2) minf->obscured = obscured;
 	if (entered != 2) minf->entered = entered;
+	_short ch = xrProp_ch;
 	xrSetRangeProp(&minf->bl,(minf->obscured || minf->entered) ? minf->bl.save : minf->bl.range[0]);
+	XFlush(dpy);
+	xrProp_ch = ch;
 }
 
 static void chBL(Window w, _short obscured, _short entered) {
@@ -1385,9 +1390,17 @@ static void _pan(minf_t *m) {
 
 #ifdef XSS
 static void _monFS(Atom prop,Atom save,Atom val,_short mode,Atom *saved){
-		// optimized X calls, but stricter (?) off/on states
 		if (!val && mode) return;
-		if (mode == 9) {
+		switch (mode) {
+		    case 8:
+#undef e
+#define e ((XRROutputPropertyNotifyEvent*)&ev)
+			if (e->output != minf->out || e->property != prop) return;
+			Atom ct = 0;
+			if (!xrGetProp(prop,XA_ATOM,&ct,1,0) || !ct || ct == val) return;
+			*saved = ct;
+			return;
+		    case 9:
 			if (*saved) {
 				xrSetProp(prop,XA_ATOM,saved,1,0);
 				_quit = 1;
@@ -1403,7 +1416,7 @@ saved:
 					*saved = 0;
 				}
 			} 
-			*saved = 0; // test before remove
+//			*saved = 0; // test before remove
 			return;
 		}
 		if (!val) return;
@@ -1435,6 +1448,7 @@ ok:
 				return;
 			}
 			*saved = ct;
+//			DBG("saved %s",natom(0,*saved));
 		}
 		if (ct != val)
 			xrSetProp(prop,XA_ATOM,&val,1,0);
@@ -2906,7 +2920,22 @@ evfree:
 #define e ((XRROutputPropertyNotifyEvent*)&ev)
 				    case RRNotify_OutputProperty:
 					// required reinit XRRGetScreenResources(dpy,root) to flush
-					xrrFree();
+					if (e->property == aBl) {
+#ifdef _BACKLIGHT
+						MINF(minf->out == e->output) {
+							if (!minf->bl.en) break;
+							prop_int val = minf->bl.save;
+							xrGetProp(aBl,XA_INTEGER,&val,1,0);
+							if (val == minf->bl.save || val == minf->bl.range[0]) break;
+							minf->bl.save = val;
+							break;
+						}
+						break;
+					}
+#endif
+#ifdef XSS
+					monFullScreen(8);
+#endif
 					if (e->property != aNonDesk) break;
 #undef e
 #define e ((XRRNotifyEvent*)&ev)
