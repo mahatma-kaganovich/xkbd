@@ -469,11 +469,11 @@ static _short dpms_state(){
 #endif
 
 #ifdef XTG
-int xrSetProp_cnt = 0;
+_short xrProp_ch = 0;
 static void xrrSet(){
 	if (!xrrr && xrr) {
 		xrrr = XRRGetScreenResources(dpy,root);
-//		xrSetProp_cnt = 0;
+		xrProp_ch = 0;
 	}
 }
 
@@ -481,7 +481,7 @@ static void xrrFree(){
 	if (xrrr && xrr) {
 		XRRFreeScreenResources(xrrr);
 		xrrr = NULL;
-		xrSetProp_cnt = 0;
+//		xrProp_ch = 0;
 	}
 }
 
@@ -852,6 +852,7 @@ static _short setProp(Atom prop, Atom type, int mode, void *data, long cnt, _sho
 		XChangeProperty(dpy,win,prop,type,f,mode,data,cnt);
 		break;
 	    case pr_out:
+		xrProp_ch = 1;
 		XRRChangeOutputProperty(dpy,minf->out,prop,type,f,mode,data,cnt);
 		break;
 	    case pr_input:
@@ -876,7 +877,6 @@ static _short xrGetProp(Atom prop, Atom type, void *data, long cnt, _short chk){
 
 static _short xrSetProp(Atom prop, Atom type, void *data, long cnt, _short chk){
 	target = pr_out;
-	xrSetProp_cnt++;
 	return setProp(prop,type,PropModeReplace,data,cnt,chk);
 }
 
@@ -886,7 +886,7 @@ static _short xiGetProp(Atom prop, Atom type, void *data, long cnt, _short chk){
 }
 
 static void xrPropFlush(){
-	if (xrSetProp_cnt) {
+	if (xrProp_ch) {
 		xrrFree();
 		xrrSet();
 		xrrFree();
