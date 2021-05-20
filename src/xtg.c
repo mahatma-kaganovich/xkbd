@@ -621,7 +621,7 @@ typedef struct _minf {
 	pinf_t non_desktop;
 #ifdef _BACKLIGHT
 	Window win;
-	_short obscured,entered,geom_ch;
+	_short obscured,entered;
 #endif
 #ifdef XSS
 	Atom aCTypeSaved, aColorspaceSaved;
@@ -631,7 +631,7 @@ typedef struct _minf {
 #define o_out 1
 #define o_non_desktop 2
 #define o_active 4
-#define o_crt 8
+#define o_changed 8
 #define o_size 16
 #define o_msize 32
 #define o_backlight 64
@@ -1113,7 +1113,7 @@ static _short fixWin(Window win,unsigned long x,unsigned long y,unsigned long w,
 	return 0;
 found:
 	if (minf->x == x && minf->y == y && minf->width == w && minf->height == h) return 2;
-	minf->geom_ch = 1;
+	minf->type |= o_changed;
 	oldShowPtr |= 8;
 	return 1;
 }
@@ -1140,7 +1140,7 @@ static void simpleWin(_short mode) {
 		w = XCreateWindow(dpy, root, minf->x,minf->y,minf->width,minf->height, 0, 0, InputOutput, CopyFromParent, CWBackPixel|CWBorderPixel|CWOverrideRedirect|CWEventMask, &winattr);
 #endif
 		XISelectEvents(dpy, w, ximaskWin, Nximask);
-	} else if (minf->geom_ch) {
+	} else if (minf->type&o_changed) {
 		XMoveResizeWindow(dpy,w,minf->x,minf->y,minf->width,minf->height);
 	}
 	if (mode&2) XRaiseWindow(dpy,w);
@@ -1238,10 +1238,13 @@ static void xrMons0(){
 			if (!minf->non_desktop.val) non_desktop1++;
 		}
 	}
-	if ((minf->crt = oinf->crtc)) minf->type |= o_crt;
+	minf->crt = oinf->crtc;
 	minf->name = XInternAtom(dpy, oinf->name, False);
-	minf->mwidth = oinf->mm_width;
-	minf->mheight = oinf->mm_height;
+	if (minf->mwidth != oinf->mm_width || minf->mheight != oinf->mm_height) {
+		minf->mwidth = oinf->mm_width;
+		minf->mheight = oinf->mm_height;
+		minf->type |= o_changed;
+	}
 	if (minf->mwidth && minf->mheight) minf->type |= o_msize;
 	xrGetRangeProp(aBl,aBlSave,&minf->bl);
 #ifdef _BACKLIGHT
@@ -1252,15 +1255,15 @@ static void xrMons0(){
 #endif
 	// looks like Xorg want: 1) crtc 2) width & height from crtc 3) not non-desktop. So, prescan all potential.
 	if ((minf->type&(1|4|8))!=(1|4|8) || !(cinf=XRRGetCrtcInfo(dpy, xrrr, minf->crt)))
-		goto next;
+		continue;
 	minf->width = minf->width0 = cinf->width;
 	minf->height = minf->height0 = cinf->height;
-	if (minf->x != cinf->x || minf->y != cinf->y) {
+	if (minf->x != cinf->x || minf->y != cinf->y || minf->rotation != cinf->rotation) {
 		minf->x = cinf->x;
 		minf->y = cinf->y;
-		minf->geom_ch = 1;
+		minf->rotation = cinf->rotation;
+		minf->type |= o_changed;
 	}
-	minf->rotation = cinf->rotation;
 	XRRModeInfo *m,*m0 = NULL,*m1 = NULL, *m0x = NULL;
 	RRMode id = cinf->mode;
 	// find precise current mode
@@ -1311,22 +1314,19 @@ static void xrMons0(){
 	if (x2 != minf->x2 || y2 != minf->y2) {
 		minf->x2 = x2;
 		minf->y2 = y2;
-		minf->geom_ch = 1;
+		minf->type |= o_changed;
 	}
-	if (minf->width && minf->height) {
-		minf->type |= o_size;
-	}
-next:
-	if (minf->geom_ch) {
-		oldShowPtr |= 16;
-		minf->geom_ch = 0;
+	if (minf->width && minf->height) minf->type |= o_size;
+    }
+    MINF_T(o_changed) {
+	oldShowPtr |= 16;
+	break;
+//	minf->type ^= o_changed
 #ifdef _BACKLIGHT
-		if (minf->win) {
-			XDestroyWindow(dpy,minf->win);
-			minf->win = 0;
-		}
+//	if (minf->win) {
+//		XDestroyWindow(dpy,minf->win);
+//		minf->win = 0;
 #endif
-	}
     }
     if (!active && non_desktop)
 	MINF(minf->non_desktop.en && minf->non_desktop.val)
@@ -1382,7 +1382,7 @@ static void _monFS(Atom prop,Atom save,Atom val,_short mode,Atom *saved){
 			return;
 		}
 		if (!noXSS) {
-saved:	
+saved:
 			if(*saved || (xrGetProp(save,XA_ATOM,saved,1,0) && *saved)) {
 				_short del = !val || !!(pi[p_safe]&2048) || !mode;
 				if (xrSetProp(prop,XA_ATOM,saved,1,4|(del<<4)) && del) {
