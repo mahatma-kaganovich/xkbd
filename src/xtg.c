@@ -2294,8 +2294,8 @@ static void init(){
 #ifdef _BACKLIGHT
 	XISetMask(ximaskWin0, XI_Leave);
 	XISetMask(ximaskWin0, XI_Enter);
-	XISetMask(ximaskWin0, XI_ButtonPress);
-	XISetMask(ximaskWin0, XI_ButtonRelease);
+//	XISetMask(ximaskWin0, XI_ButtonPress);
+//	XISetMask(ximaskWin0, XI_ButtonRelease);
 #endif
 #ifdef USE_EVDEV
 	aNode = XInternAtom(dpy, "Device Node", False);
@@ -2546,17 +2546,20 @@ ev2:
 				    case XI_Leave:
 				    case XI_Enter:
 					if (XGetEventData(dpy, &ev.xcookie)) {
-						_short st = ev.xcookie.evtype==XI_Enter;
+						if (e->detail != XINotifyAncestor)
+						    switch (e->mode) {
 #if 0
-						if (e->event_x >= 0 && e->event_y >= 0) {
-							MINF(e->event == minf->win && minf->bl.en
-							    && e->event_x < minf->width && e->event_y < minf->height) {
-								st = 1;
-								break;
-							}
-						}
+						    case XINotifyGrab:
+						    case XINotifyUngrab:
+							break;
+						    default:
+#else
+						    case XINotifyNormal:
+						    case XINotifyWhileGrabbed:
 #endif
-						chBL(e->event,2,st);
+							chBL(e->event,2,ev.xcookie.evtype==XI_Enter);
+							break;
+						}
 						XFreeEventData(dpy, &ev.xcookie);
 					}
 					continue;
