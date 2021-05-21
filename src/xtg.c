@@ -181,12 +181,14 @@ xiMask ximaskButton = {}, ximaskTouch = {}, ximask0 = {};
 xiMask ximaskRoot = {};
 int Nximask = 1;
 XIEventMask ximask[] = {{ .deviceid = XIAllDevices, .mask_len = MASK_LEN, .mask = (void*)&ximask0 },
-			 { .deviceid = XIAllMasterDevices, .mask_len = MASK_LEN, .mask = (void*)&ximaskRoot }};
+//			 { .deviceid = XIAllMasterDevices, .mask_len = MASK_LEN, .mask = (void*)&ximaskRoot }
+			};
 //#define MASK(m) ((void*)ximask[0].mask=m)
 #ifdef _BACKLIGHT
 xiMask ximaskWin0 = {};
-XIEventMask ximaskWin[] = {{ .deviceid = XIAllDevices, .mask_len = MASK_LEN, .mask = (void*)&ximaskWin0 },
-			 { .deviceid = XIAllMasterDevices, .mask_len = MASK_LEN, .mask = (void*)&ximaskWin0 }};
+XIEventMask ximaskWin[] = {{ .deviceid = XIAllMasterDevices, .mask_len = MASK_LEN, .mask = (void*)&ximaskWin0 },
+//			 { .deviceid = XIAllDevices, .mask_len = MASK_LEN, .mask = (void*)&ximaskWin0 }
+			};
 #endif
 
 Time T;
@@ -603,6 +605,7 @@ _int ninput = 0, ninput1 = 0;
 
 typedef struct _pinf {
 	_short en;
+	RROutput out;
 	long range[2];
 	prop_int val,val0;
 	Atom prop,save;
@@ -1071,10 +1074,13 @@ static void xrGetRangeProp(Atom prop, Atom save, pinf_t *d) {
 	d->save = save;
 	d->range[0] = pinf->values[0];
 	d->range[1] = pinf->values[1];
-	d->val0 = d->val;
-	if (!xrGetProp(save,XA_INTEGER,&d->val0,1,0)) {
-		XRRConfigureOutputProperty(dpy,minf->out,save,False,1,2,pinf->values);
-		xrSetProp(save,XA_INTEGER,&d->val0,1,0);
+	if (minf->out != d->out) {
+		d->val0 = d->val;
+		d->out = minf->out;
+		if (!xrGetProp(save,XA_INTEGER,&d->val0,1,0)) {
+			XRRConfigureOutputProperty(dpy,minf->out,save,False,1,2,pinf->values);
+			xrSetProp(save,XA_INTEGER,&d->val0,1,0);
+		}
 	}
 free:
 	XFree(pinf);
@@ -1094,14 +1100,14 @@ static void chBL1(_short obscured, _short entered) {
 	if (obscured != 2) minf->obscured = obscured;
 	if (entered != 2) minf->entered = entered;
 	_short ch = xrProp_ch;
-	xrSetRangeProp(&minf->bl,(minf->obscured || minf->entered) ? minf->bl.save : minf->bl.range[0]);
+	xrSetRangeProp(&minf->bl,(minf->obscured || minf->entered) ? minf->bl.val0 : minf->bl.range[0]);
 	XFlush(dpy);
 	xrProp_ch = ch;
 }
 
 static void chBL(Window w, _short obscured, _short entered) {
-	MINF(minf->win == w && (minf->type&o_backlight)) {
-//	MINF(minf->win == w) {
+//	MINF(minf->win == w && (minf->type&o_backlight)) {
+	MINF(minf->win == w) {
 		chBL1(obscured,entered);
 		break;
 	}
@@ -1391,15 +1397,21 @@ static void _pan(minf_t *m) {
 #ifdef XSS
 static void _monFS(Atom prop,Atom save,Atom val,_short mode,Atom *saved){
 		if (!val && mode) return;
+		Atom ct;
+		XRRPropertyInfo *pinf;
 		switch (mode) {
 		    case 8:
 #undef e
 #define e ((XRROutputPropertyNotifyEvent*)&ev)
 			if (e->output != minf->out || e->property != prop) return;
-			Atom ct = 0;
-			if (!xrGetProp(prop,XA_ATOM,&ct,1,0) || !ct || ct == val) return;
-			*saved = ct;
-			return;
+			ct = 0;
+			if (!xrGetProp(prop,XA_ATOM,&ct,1,0) || !ct || ct == *saved) return;
+			if (ct == val
+			    // && noXSS
+			    ) return;
+			val = ct;
+			*saved = 0;
+			goto save;
 		    case 9:
 			if (*saved) {
 				xrSetProp(prop,XA_ATOM,saved,1,0);
@@ -1424,37 +1436,31 @@ saved:
 		if (!ACTIVE(minf)) goto saved;
 		// repair unordered
 		if (!(wa.x>=minf->x && wa.x<=minf->x2 && wa.y>=minf->y && wa.y<=minf->y2)) goto saved;
-		Atom ct = 0;
-		if (!xrGetProp(prop,XA_ATOM,&ct,1,0) || !ct) return;
-		XRRPropertyInfo *pinf = NULL;
-		if (!*saved && !(xrGetProp(save,XA_ATOM,saved,1,0) && *saved)) {
-reconf:
+		if (!(ct = *saved)) {
+			if (!xrGetProp(prop,XA_ATOM,&ct,1,0) || !ct) return;
+save:
 			if (!(pinf = XRRQueryOutputProperty(dpy,minf->out,prop))) return;
 			int i;
 			for (i=0; i<pinf->num_values; i++) if (pinf->values[i] == val) goto ok;
+ret:
 			XFree(pinf);
 			return;
 ok:
+			for (i=0; i<pinf->num_values; i++) if (pinf->values[i] == ct) goto ok1;
+			goto ret;
+ok1:
+			XRRDeleteOutputProperty(dpy,minf->out,save);
 			XRRConfigureOutputProperty(dpy,minf->out,save,False,pinf->range,pinf->num_values,pinf->values);
+			if (!xrSetProp(save,XA_ATOM,&ct,1,0x10)) goto ret;
 			XFree(pinf);
-		}
-		if (ct != *saved) {
-			*saved = 0;
-			if (!xrSetProp(save,XA_ATOM,&ct,1,0x10)) {
-				if (!pinf) {
-					XRRDeleteOutputProperty(dpy,minf->out,save);
-					goto reconf;
-				}
-				return;
-			}
 			*saved = ct;
-//			DBG("saved %s",natom(0,*saved));
 		}
 		if (ct != val)
 			xrSetProp(prop,XA_ATOM,&val,1,0);
 }
 
 static void monFullScreen(_short mode) {
+	xrrFree();
 	MINF_T(o_out) {
 		_monFS(aCType,aCType1,aCTFullScr,mode,&minf->aCTypeSaved);
 		_monFS(aColorspace,aColorspace1,aCSFullScr,mode,&minf->aColorspaceSaved);
@@ -2021,8 +2027,8 @@ static void _eXit(int sig){
 	grabcnt = 0;
 
 #ifdef _BACKLIGHT
-	MINF(minf->bl.en && !minf->bl.val && minf->bl.save) {
-		xrSetRangeProp(&minf->bl,minf->bl.save);
+	MINF(minf->bl.en && !minf->bl.val && minf->bl.val0) {
+		xrSetRangeProp(&minf->bl,minf->bl.val0);
 		_quit = 1;
 	}
 #endif
@@ -2541,6 +2547,7 @@ ev2:
 				    case XI_Enter:
 					if (XGetEventData(dpy, &ev.xcookie)) {
 						_short st = ev.xcookie.evtype==XI_Enter;
+#if 0
 						if (e->event_x >= 0 && e->event_y >= 0) {
 							MINF(e->event == minf->win && minf->bl.en
 							    && e->event_x < minf->width && e->event_y < minf->height) {
@@ -2548,6 +2555,7 @@ ev2:
 								break;
 							}
 						}
+#endif
 						chBL(e->event,2,st);
 						XFreeEventData(dpy, &ev.xcookie);
 					}
@@ -2924,10 +2932,10 @@ evfree:
 #ifdef _BACKLIGHT
 						MINF(minf->out == e->output) {
 							if (!minf->bl.en) break;
-							prop_int val = minf->bl.save;
+							prop_int val = minf->bl.val0;
 							xrGetProp(aBl,XA_INTEGER,&val,1,0);
-							if (val == minf->bl.save || val == minf->bl.range[0]) break;
-							minf->bl.save = val;
+							if (val == minf->bl.val0 || val == minf->bl.range[0]) break;
+							minf->bl.val0 = val;
 							break;
 						}
 						break;
