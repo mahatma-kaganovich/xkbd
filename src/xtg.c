@@ -2389,6 +2389,19 @@ static void init(){
 	win = root;
 }
 
+#ifdef XTG
+static _short xiGetE(){
+	if (!XGetEventData(dpy, &ev.xcookie)) return 0;
+#undef e
+#define e ((XIEvent*)ev.xcookie.data)
+	TIME(T,e->time);
+	return 1;
+}
+static void xiFreeE(){
+	XFreeEventData(dpy, &ev.xcookie);
+}
+#endif
+
 int main(int argc, char **argv){
 #ifdef XTG
 	_short i;
@@ -2500,11 +2513,10 @@ ev2:
 				    case XI_DeviceChanged:
 #undef e
 #define e ((XIDeviceChangedEvent*)ev.xcookie.data)
-					if (XGetEventData(dpy, &ev.xcookie)) {
-						TIME(T,e->time);
+					if (xiGetE()) {
 						int r = e->reason;
 						fprintf(stderr,"dev changed %i %i (%i)\n",r,e->deviceid,devid);
-						XFreeEventData(dpy, &ev.xcookie);
+						xiFreeE();
 						if (r == XISlaveSwitch) goto ev2;
 					}
 					oldShowPtr |= 2;
@@ -2513,11 +2525,10 @@ ev2:
 #undef e
 #define e ((XIPropertyEvent*)ev.xcookie.data)
 				    case XI_PropertyEvent:
-					if (XGetEventData(dpy, &ev.xcookie)) {
-						TIME(T,e->time);
+					if (xiGetE()) {
 						Atom p = e->property;
 						devid = e->deviceid;
-						XFreeEventData(dpy, &ev.xcookie);
+						xiFreeE();
 						if (
 							//devid!=devid1 ||
 							p==aMatrix
@@ -2532,9 +2543,9 @@ ev2:
 #define e ((XIHierarchyEvent*)ev.xcookie.data)
 				    case XI_HierarchyChanged:
 #if 0
-					if (XGetEventData(dpy, &ev.xcookie)) {
+					if (xiGetE()) {
 						if (e->flags&(XISlaveRemoved|XISlaveAdded)) oldShowPtr |= 2;
-						XFreeEventData(dpy, &ev.xcookie);
+						xiFreeE();
 					}
 #else
 					oldShowPtr |= 2;
@@ -2545,7 +2556,7 @@ ev2:
 #define e ((XIEnterEvent*)ev.xcookie.data)
 				    case XI_Leave:
 				    case XI_Enter:
-					if (XGetEventData(dpy, &ev.xcookie)) {
+					if (xiGetE()) {
 						if (e->detail != XINotifyAncestor)
 						    switch (e->mode) {
 #if 0
@@ -2560,7 +2571,7 @@ ev2:
 							chBL(e->event,2,ev.xcookie.evtype==XI_Enter);
 							break;
 						}
-						XFreeEventData(dpy, &ev.xcookie);
+						xiFreeE();
 					}
 					continue;
 #endif
@@ -2576,7 +2587,7 @@ ev2:
 					timeHold = 0;
 					goto ev2;
 				}
-				if (!tdevs2 || !XGetEventData(dpy, &ev.xcookie)) goto ev;
+				if (!tdevs2 || !xiGetE()) goto ev;
 				showPtr = 0;
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
@@ -2618,7 +2629,7 @@ ev2:
 					if (N==P) P=TOUCH_N(P);
 					to->touchid = e->detail;
 					to->deviceid = devid;
-					XFreeEventData(dpy, &ev.xcookie);
+					xiFreeE();
 					TIME(to->time,T);
 					to->x = x1 = x2;
 					to->y = y1 = y2;
@@ -2671,7 +2682,7 @@ invalidateT:
 					goto ev2;
 //				}
 tfound:
-				XFreeEventData(dpy, &ev.xcookie);
+				xiFreeE();
 				x1 = to->x;
 				y1 = to->y;
 				switch (to->g) {
@@ -2792,7 +2803,7 @@ skip:
 			}
 			goto ev;
 evfree:
-			XFreeEventData(dpy, &ev.xcookie);
+			xiFreeE();
 			goto ev;
 #endif
 #ifdef XSS
