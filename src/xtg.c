@@ -2592,7 +2592,6 @@ ev2:
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
 //				fprintf(stderr,"ev2 %i %i\n",e->deviceid,ev.xcookie.evtype);
-				TIME(T,e->time);
 				res = resX;
 				tt = 0;
 				m = &bmap;
