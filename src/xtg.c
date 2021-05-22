@@ -1240,6 +1240,7 @@ static void xrMons0(){
 		minf->non_desktop.en = 0;
 		minf->bl.en = 0;
 		minf->type = 0;
+		if (minf->connection != oinf->connection) minf->type |= o_changed;
 		if (!(minf->out = xrrr->outputs[nout])) continue;
 		minf->type |= o_out;
 		if (minf->out == prim) minf->type |= o_primary;
@@ -2541,13 +2542,15 @@ ev2:
 					}
 #undef e
 #define e ((XIHierarchyEvent*)ev.xcookie.data)
-				    case XI_HierarchyChanged:
 #if 0
+					oldShowPtr |= 2; continue;
+				    case XI_HierarchyChanged:
 					if (xiGetE()) {
 						if (e->flags&(XISlaveRemoved|XISlaveAdded)) oldShowPtr |= 2;
 						xiFreeE();
 					}
 #else
+				    case XI_HierarchyChanged:
 					oldShowPtr |= 2;
 #endif
 					continue;
