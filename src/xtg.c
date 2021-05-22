@@ -635,7 +635,7 @@ typedef struct _minf {
 #endif
 } minf_t;
 
-#define o_out 1
+//#define o_out 1
 #define o_non_desktop 2
 #define o_active 4
 #define o_changed 8
@@ -1240,11 +1240,16 @@ static void xrMons0(){
 		minf->non_desktop.en = 0;
 		minf->bl.en = 0;
 		minf->type = 0;
-		if (minf->connection != oinf->connection) minf->type |= o_changed;
-		if (!(minf->out = xrrr->outputs[nout])) continue;
-		minf->type |= o_out;
-		if (minf->out == prim) minf->type |= o_primary;
-		if (oinf = XRRGetOutputInfo(dpy, xrrr, minf->out)) break;
+		RROutput o = xrrr->outputs[nout];
+		if (minf->out != o) {
+			if (minf->out || !o) memset(minf,0,sizeof(minf_t));
+			minf->type = o_changed;
+			minf->out = o;
+		}
+		if (!o) continue;
+//		minf->type |= o_out;
+		if (o == prim) minf->type |= o_primary;
+		if (oinf = XRRGetOutputInfo(dpy, xrrr, o)) break;
 	}
 	if (!oinf) break;
 	if ((minf->connection = oinf->connection) == RR_Connected) {
@@ -1462,7 +1467,8 @@ ok1:
 
 static void monFullScreen(_short mode) {
 	xrrFree();
-	MINF_T(o_out) {
+//	MINF_T(o_out) {
+	MINF(minf->out) {
 		_monFS(aCType,aCType1,aCTFullScr,mode,&minf->aCTypeSaved);
 		_monFS(aColorspace,aColorspace1,aCSFullScr,mode,&minf->aColorspaceSaved);
 	}
