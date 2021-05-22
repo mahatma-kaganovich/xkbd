@@ -1268,7 +1268,6 @@ static void xrMons0(){
 			if (!minf->non_desktop.val) non_desktop1++;
 		}
 	}
-	minf->crt = oinf->crtc;
 	minf->name = XInternAtom(dpy, oinf->name, False);
 	if (minf->mwidth != oinf->mm_width || minf->mheight != oinf->mm_height) {
 		minf->mwidth = oinf->mm_width;
@@ -1283,8 +1282,7 @@ static void xrMons0(){
 	// repair
 	if (minf->bl.en && minf->bl.val0 != minf->bl.val) xrSetRangeProp(&minf->bl,minf->bl.val0);
 #endif
-	// looks like Xorg want: 1) crtc 2) width & height from crtc 3) not non-desktop. So, prescan all potential.
-	if ((minf->type&(1|4|8))!=(1|4|8) || !(cinf=XRRGetCrtcInfo(dpy, xrrr, minf->crt)))
+	if (!(minf->crt = oinf->crtc) || !(cinf=XRRGetCrtcInfo(dpy, xrrr, minf->crt)))
 		continue;
 	minf->width = minf->width0 = cinf->width;
 	minf->height = minf->height0 = cinf->height;
