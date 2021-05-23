@@ -855,7 +855,7 @@ static _short setProp(Atom prop, Atom type, int mode, void *data, long cnt, _sho
 		XChangeProperty(dpy,win,prop,type,f,mode,data,cnt);
 		break;
 	    case pr_out:
-		xrProp_ch = 1;
+//		xrProp_ch = 1;
 		XRRChangeOutputProperty(dpy,minf->out,prop,type,f,mode,data,cnt);
 		break;
 	    case pr_input:
@@ -1077,6 +1077,7 @@ static void xrGetRangeProp(Atom prop, Atom save, pinf_t *d) {
 		d->out = minf->out;
 		if (!xrGetProp(save,XA_INTEGER,&d->val0,1,0)) {
 			XRRConfigureOutputProperty(dpy,minf->out,save,False,1,2,pinf->values);
+			xrProp_ch = 1;
 			xrSetProp(save,XA_INTEGER,&d->val0,1,0);
 		}
 	}
@@ -1097,10 +1098,9 @@ static void xrSetRangeProp(pinf_t *d, prop_int val) {
 static void chBL1(_short obscured, _short entered) {
 	if (obscured != 2) minf->obscured = obscured;
 	if (entered != 2) minf->entered = entered;
-	_short ch = xrProp_ch;
+//	_short ch = xrProp_ch;
 	xrSetRangeProp(&minf->bl,(minf->obscured || minf->entered) ? minf->bl.val0 : minf->bl.range[0]);
-	XFlush(dpy);
-	xrProp_ch = ch;
+//	xrProp_ch = ch;
 }
 
 static void chBL(Window w, _short obscured, _short entered) {
@@ -1452,6 +1452,7 @@ ok:
 ok1:
 			XRRDeleteOutputProperty(dpy,minf->out,save);
 			XRRConfigureOutputProperty(dpy,minf->out,save,False,pinf->range,pinf->num_values,pinf->values);
+			xrProp_ch = 1;
 			if (!xrSetProp(save,XA_ATOM,&x,1,0x10)) goto ret;
 			XFree(pinf);
 			*saved = x;
@@ -2953,6 +2954,7 @@ evfree:
 							xrGetProp(aBl,XA_INTEGER,&val,1,0);
 							if (val == minf->bl.val0 || val == minf->bl.range[0]) break;
 							minf->bl.val0 = val;
+							xrSetProp(aBlSave,XA_INTEGER,&val,1,0);
 							break;
 						}
 						break;
