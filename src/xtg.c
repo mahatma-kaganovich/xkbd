@@ -1060,8 +1060,6 @@ static void clearCache(){
 minf_t *outputs = NULL;
 int noutput = 0;
 
-#define ACTIVE(minf) (minf->connection == RR_Connected)
-#define EXISTS(minf) (minf->type&(2|4))
 #define _BUFSIZE 1048576
 
 static void xrGetRangeProp(Atom prop, Atom save, pinf_t *d) {
@@ -1401,19 +1399,19 @@ static void _pan(minf_t *m) {
 #ifdef XSS
 static void _monFS(Atom prop,Atom save,Atom val,_short mode,Atom *saved){
 		if (!val && mode) return;
-		Atom ct;
+		Atom x;
 		XRRPropertyInfo *pinf;
 		switch (mode) {
 		    case 8:
 #undef e
 #define e ((XRROutputPropertyNotifyEvent*)&ev)
 			if (e->output != minf->out || e->property != prop) return;
-			ct = 0;
-			if (!xrGetProp(prop,XA_ATOM,&ct,1,0) || !ct || ct == *saved) return;
-			if (ct == val
+			x = 0;
+			if (!xrGetProp(prop,XA_ATOM,&x,1,0) || !x || x == *saved) return;
+			if (x == val
 			    // && noXSS
 			    ) return;
-			val = ct;
+			val = x;
 			*saved = 0;
 			goto save;
 		    case 9:
@@ -1436,12 +1434,11 @@ saved:
 			return;
 		}
 		if (!val) return;
-		// repair disconnected
-		if (!ACTIVE(minf)) goto saved;
-		// repair unordered
-		if (!(wa.x>=minf->x && wa.x<=minf->x2 && wa.y>=minf->y && wa.y<=minf->y2)) goto saved;
-		if (!(ct = *saved)) {
-			if (!xrGetProp(prop,XA_ATOM,&ct,1,0) || !ct) return;
+		// repair disconnected or unordered
+		if (!((minf->type&o_active) && wa.x>=minf->x && wa.x<=minf->x2 && wa.y>=minf->y && wa.y<=minf->y2))
+			goto saved;
+		if (!(x = *saved)) {
+			if (!xrGetProp(prop,XA_ATOM,&x,1,0) || !x) return;
 save:
 			if (!(pinf = XRRQueryOutputProperty(dpy,minf->out,prop))) return;
 			int i;
@@ -1450,16 +1447,16 @@ ret:
 			XFree(pinf);
 			return;
 ok:
-			for (i=0; i<pinf->num_values; i++) if (pinf->values[i] == ct) goto ok1;
+			for (i=0; i<pinf->num_values; i++) if (pinf->values[i] == x) goto ok1;
 			goto ret;
 ok1:
 			XRRDeleteOutputProperty(dpy,minf->out,save);
 			XRRConfigureOutputProperty(dpy,minf->out,save,False,pinf->range,pinf->num_values,pinf->values);
-			if (!xrSetProp(save,XA_ATOM,&ct,1,0x10)) goto ret;
+			if (!xrSetProp(save,XA_ATOM,&x,1,0x10)) goto ret;
 			XFree(pinf);
-			*saved = ct;
+			*saved = x;
 		}
-		if (ct != val)
+		if (x != val)
 			xrSetProp(prop,XA_ATOM,&val,1,0);
 }
 
