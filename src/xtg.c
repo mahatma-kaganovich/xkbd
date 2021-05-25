@@ -1329,7 +1329,6 @@ rewrite:
 		xrProp_ch = 1;
 		XRRConfigureOutputProperty(dpy,minf->out,save,False,pr->p->range,pr->p->num_values,pr->p->values);
 		if (!xrSetProp(save,pr->type,&pr->v0,1,0x10)) goto err;
-		_pr_inf(save);
 	}
 	pr->en = 1;
 	return;
@@ -2168,6 +2167,8 @@ static void _eXit(int sig){
 	}
 	if (!_quit) exit(0);
 	XFlush(dpy);
+	win = win1 = root;
+	noXSS = noXSS1 = 0;
 }
 
 static void setShowCursor(){
@@ -3061,7 +3062,6 @@ evfree:
 				//XRRTimes(dpy,screen,&T);
 
 				switch (e->subtype) {
-#if 1
 #undef e
 #define e ((XRROutputPropertyNotifyEvent*)&ev)
 				    case RRNotify_OutputProperty:
@@ -3078,10 +3078,12 @@ evfree:
 					}
 					if (!pr) break;
 					if (e->state) break;
+					xrrFree();
+					xrrSet();
+					xrrFree();
 					_pr_get(0);
 					xrPropFlush();
 					break;
-#endif
 				    default:
 					oldShowPtr |= 8;
 				}
