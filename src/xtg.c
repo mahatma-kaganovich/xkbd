@@ -498,8 +498,7 @@ char *an_xrp[xrp_cnt] = {
 #endif
 };
 
-_xrp_t val_xrp[xrp_cnt] = {
-};
+_xrp_t val_xrp[xrp_cnt] = {};
 
 Atom a_xrp[xrp_cnt], a_xrp_save[xrp_cnt];
 
@@ -515,7 +514,6 @@ static void xrrFree(){
 	if (xrrr && xrr) {
 		XRRFreeScreenResources(xrrr);
 		xrrr = NULL;
-//		xrProp_ch = 0;
 	}
 }
 
@@ -630,13 +628,13 @@ _int ninput = 0, ninput1 = 0;
 
 typedef struct _pinf {
 	_short en;
-	xrp_t pr;
 	XRRPropertyInfo *p;
 	Atom type;
 	_xrp_t v,v0;
 } pinf_t;
 
 pinf_t *pr;
+xrp_t prI;
 
 // width/height: real/mode
 // width0/height0: -||- or first preferred (default/max) - safe bit 9(+256)
@@ -881,7 +879,6 @@ static _short setProp(Atom prop, Atom type, int mode, void *data, long cnt, _sho
 		XChangeProperty(dpy,win,prop,type,f,mode,data,cnt);
 		break;
 	    case pr_out:
-//		xrProp_ch = 1;
 		XRRChangeOutputProperty(dpy,minf->out,prop,type,f,mode,data,cnt);
 		break;
 	    case pr_input:
@@ -1095,7 +1092,7 @@ static void _pr_set(_short state);
 static void chBL1(_short obscured, _short entered) {
 	if (obscured != 2) minf->obscured = obscured;
 	if (entered != 2) minf->entered = entered;
-	pr = &minf->prop[xrp_bl];
+	pr = &minf->prop[prI = xrp_bl];
 	if (pr->en)
 	    _pr_set(!(minf->obscured || minf->entered));
 }
@@ -1181,7 +1178,7 @@ RROutput prim0, prim;
 
 static void _pr_free(){
 	if (pr->en) {
-		xrSetProp(a_xrp[pr->pr],pr->type,&pr->v0,1,0);
+		xrSetProp(a_xrp[prI],pr->type,&pr->v0,1,0);
 		pr->en = 0;
 	}
 	if (pr->p) {
@@ -1197,15 +1194,14 @@ static void _minf_free(){
 		minf->win = 0;
 	}
 #endif
-	xrp_t p;
-	for (p=0; p<xrp_cnt; p++) {
-		pr = &minf->prop[p];
+	for (prI=0; prI<xrp_cnt; prI++) {
+		pr = &minf->prop[prI];
 		_pr_free();
 	}
 }
 
 static _short _pr_chk(_xrp_t *v){
-	if (pr->pr == xrp_bl && v->i == 0) return 1;
+	if (prI == xrp_bl && v->i == 0) return 1;
 	XRRPropertyInfo *p = pr->p;
 	int i;
 	if (p->range) {
@@ -1219,7 +1215,7 @@ static _short _pr_chk(_xrp_t *v){
 }
 
 static _short _pr_inf(Atom prop){
-	if ((pi[p_safe]&8192) && pr->p) return 1;
+	if ((pi[p_safe]&8192) && pr->p && pr->en) return 1;
 	_short r = 0;
 	XRRPropertyInfo *pinf = XRRQueryOutputProperty(dpy,minf->out,prop);
 	if (pinf && pr->p
@@ -1229,7 +1225,7 @@ static _short _pr_inf(Atom prop){
 		XFree(pinf);
 		return 1;
 	}
-	if (prop == a_xrp[pr->pr]) {
+	if (prop == a_xrp[prI]) {
 		if (pr->p) XFree(pr->p);
 		pr->p = pinf;
 	} else if (pinf) XFree(pinf);
@@ -1238,7 +1234,7 @@ static _short _pr_inf(Atom prop){
 
 static void _pr_set(_short state){
 	_xrp_t v;
-	if (state) switch (pr->pr) {
+	if (state) switch (prI) {
 	    case xrp_non_desktop:
 		v.i = 1;
 		break;
@@ -1248,7 +1244,7 @@ static void _pr_set(_short state){
 		break;
 #endif
 	    default:
-		v = val_xrp[pr->pr];
+		v = val_xrp[prI];
 		break;
 	} else v = pr->v0;
 	if (pr->type == XA_ATOM && !v.a) return;
@@ -1256,11 +1252,11 @@ static void _pr_set(_short state){
 	    if (XRP_EQ(v,pr->v)) return;
 //	if (pr->type == XA_ATOM) DBG("set %s %s -> %s",natom(0,minf->name),natom(1,pr->v.a),natom(2,v.a));
 	pr->v = v;
-	xrSetProp(a_xrp[pr->pr],pr->type,&v,1,0);
+	xrSetProp(a_xrp[prI],pr->type,&v,1,0);
 }
 
 static void _pr_get(_short r){
-	switch (pr->pr) {
+	switch (prI) {
 	    case xrp_non_desktop: break;
 #ifdef _BACKLIGHT
 	    case xrp_bl:
@@ -1268,15 +1264,16 @@ static void _pr_get(_short r){
 		break;
 #endif
 	    default:
-		if (!val_xrp[pr->pr].a) return;
+		if (!val_xrp[prI].a) return;
 	    	break;
 	}
-	Atom prop = a_xrp[pr->pr];
-	Atom save = a_xrp_save[pr->pr];
-	_short _unsync = (pi[p_safe]&8192) && pr->en;
+	Atom prop = a_xrp[prI];
+	Atom save = a_xrp_save[prI];
 	_short _save = !(pi[p_safe]&2048);
 	_xrp_t v;
-	if (_unsync) {
+	_short inf = _pr_inf(prop); // FIRST - some flush too
+	if (!pr->p) goto err;
+	if (inf && r) {
 		v = pr->v;
 		pr_t = pr->type;
 	} else {
@@ -1285,12 +1282,12 @@ static void _pr_get(_short r){
 		else v.i = *(prop_int*)ret;
 	}
 //	if (pr->type == XA_ATOM) DBG("get %s %s -> %s",natom(0,minf->name),natom(1,pr->v.a),natom(2,v.a));
-	if (_pr_inf(prop) && pr->type == pr_t && pr->en && r != 2) {
+	if (inf && pr->type == pr_t && pr->en && r != 2) {
 		// new default/saved or nothing new
 		if (XRP_EQ(v,pr->v)) return;
 		pr->v = v;
 		if (!_pr_chk(&v)) goto err;
-		switch (pr->pr) {
+		switch (prI) {
 		    case xrp_non_desktop: return;
 #ifdef _BACKLIGHT
 		    case xrp_bl:
@@ -1298,7 +1295,7 @@ static void _pr_get(_short r){
 			break;
 #endif
 		    default:
-			if (XRP_EQ(v,val_xrp[pr->pr])) return;
+			if (XRP_EQ(v,val_xrp[prI])) return;
 			break;
 		}
 		pr->v0 = v;
@@ -1308,12 +1305,13 @@ static void _pr_get(_short r){
 	}
 	pr->type = pr_t;
 	pr->v = v;
-	if (!pr->p || pr->p->num_values < 2 || !_pr_chk(&val_xrp[pr->pr]) || !_pr_chk(&v)) goto err;
+	if (!pr->p || pr->p->num_values < 2 || !_pr_chk(&val_xrp[prI]) || !_pr_chk(&v)) goto err;
 	_short saved = 0;
-	if (_unsync) {
+	inf = (r != 2) ? _pr_inf(save) : 0;
+	if (inf) {
 		v = pr->v0;
 		saved = 1;
-	} else if (r != 2 && xrGetProp(save,pr->type,&v,1,0)) {
+	} else if (xrGetProp(save,pr->type,&v,1,0)) {
 		if (_pr_chk(&v)) saved = 1;
 		else if (pr->en && _pr_chk(&pr->v0)) goto rewrite;
 	}
@@ -1321,7 +1319,7 @@ static void _pr_get(_short r){
 		pr->v0 = saved ? v : pr->v;
 		if (__init && saved) _pr_set(0);
 	}
-	if ((saved && !_pr_inf(save)) || (!_save && __init)) {
+	if ((saved && !inf) || (!_save && __init)) {
 rewrite:
 		if (_save || __init)
 		    XRRDeleteOutputProperty(dpy,minf->out,save);
@@ -1331,6 +1329,7 @@ rewrite:
 		xrProp_ch = 1;
 		XRRConfigureOutputProperty(dpy,minf->out,save,False,pr->p->range,pr->p->num_values,pr->p->values);
 		if (!xrSetProp(save,pr->type,&pr->v0,1,0x10)) goto err;
+		_pr_inf(save);
 	}
 	pr->en = 1;
 	return;
@@ -1339,17 +1338,6 @@ err:
 }
 
 static void xrMons0(){
-    RROutput _out = 0;
-    Atom _prop = 0;
-#ifdef RRNotify_OutputProperty
-#undef e
-#define e ((XRROutputPropertyNotifyEvent*)&ev)
-    if (ev.type == xrevent1 && e->subtype == RRNotify_OutputProperty) {
-	_out = e->output;
-	_prop = e->property;
-    }
-#endif
-
     if (!xrr) {
 	minf_last = outputs = &minf0;
 	minf_last++;
@@ -1424,17 +1412,15 @@ static void xrMons0(){
 	minf->name = XInternAtom(dpy, oinf->name, False);
 	int nprop = 0;
 	Atom *props = XRRListOutputProperties(dpy, minf->out, &nprop);
-	xrp_t p;
-	for (p=0; p<xrp_cnt; p++) {
+	for (prI=0; prI<xrp_cnt; prI++) {
 		_short r = 0;
 		for (i=0; i<nprop; i++) {
-			if (a_xrp[p] == props[i]) r|=2;
-			else if (a_xrp_save[p] == props[i]) r|=1;
+			if (a_xrp[prI] == props[i]) r|=2;
+			else if (a_xrp_save[prI] == props[i]) r|=1;
 		}
 		if (r<2) continue;
-		pr = &minf->prop[p];
-		if (pr->en && !(_out == minf->out && _prop == a_xrp[p])) continue;
-		pr->pr = p;
+		pr = &minf->prop[prI];
+		if (pr->en && !(pi[p_safe]&8192)) continue;
 		_pr_get(r);
 	}
 	XFree(props);
@@ -1529,12 +1515,12 @@ static void xrMons0(){
     }
     if (!active && non_desktop)
 	MINF_T(o_non_desktop) {
-		pr = &minf->prop[xrp_non_desktop];
+		pr = &minf->prop[prI = xrp_non_desktop];
 		_pr_set(1);
 	}
     if (active && non_desktop1)
 	MINF(minf->prop[xrp_non_desktop].en && minf->prop[xrp_non_desktop].v0.i == 1) {
-		pr = &minf->prop[xrp_non_desktop];
+		pr = &minf->prop[prI = xrp_non_desktop];
 		_pr_set(0);
 	}
 #ifdef _BACKLIGHT
@@ -1577,7 +1563,7 @@ static void _pan(minf_t *m) {
 #ifdef XSS
 static void _monFS(xrp_t p, _short st){
 	if (val_xrp[p].a) {
-		pr = &minf->prop[p];
+		pr = &minf->prop[prI = p];
 		_pr_set(st);
 	}
 }
@@ -2125,7 +2111,6 @@ busy:
 	touchToMon();
 	devid = 0;
 	fixGeometry();
-
 	xrPropFlush();
 
 	__init = 0;
@@ -2153,16 +2138,15 @@ static void _eXit(int sig){
 	grabcnt = 0;
 
 	MINF(minf->out) {
-		xrp_t i;
-		for (i=0; i<xrp_cnt; i++) {
-			pr = &minf->prop[i];
+		for (prI=0; prI<xrp_cnt; prI++) {
+			pr = &minf->prop[prI];
 			if (!pr->en) continue;
 			if (!XRP_EQ(pr->v,pr->v0)) {
 				_pr_set(0);
 				_quit = 1;
 			}
 			if (!(pi[p_safe]&2048)) {
-				XRRDeleteOutputProperty(dpy,minf->out,a_xrp_save[i]);
+				XRRDeleteOutputProperty(dpy,minf->out,a_xrp_save[prI]);
 				_quit = 1;
 			}
 		}
@@ -2422,13 +2406,12 @@ static void init(){
 	aMatrix = XInternAtom(dpy, "Coordinate Transformation Matrix", False);
 	aDevMon = XInternAtom(dpy, "xtg output", False);
 
-	xrp_t p;
 	char s[64];
 	strcpy(s,"xtg saved ");
-	for (p=0; p<xrp_cnt; p++) {
-		a_xrp[p] = XInternAtom(dpy, an_xrp[p], False);
-		strcpy(&s[10],an_xrp[p]);
-		a_xrp_save[p] = XInternAtom(dpy, s, False);
+	for (prI=0; prI<xrp_cnt; prI++) {
+		a_xrp[prI] = XInternAtom(dpy, an_xrp[prI], False);
+		strcpy(&s[10],an_xrp[prI]);
+		a_xrp_save[prI] = XInternAtom(dpy, s, False);
 	}
 #ifdef _BACKLIGHT
 	XISetMask(ximaskWin0, XI_Leave);
@@ -3077,11 +3060,31 @@ evfree:
 				// RANDR time(s) is static
 				//XRRTimes(dpy,screen,&T);
 
-				// can track RRNotify_OutputProperty,
-				// xrrSet()/etc to flush/sync property,
-				// _pr_get() him, but oneshot kill all overcoding
-				// and track some in xrMons0()
-				oldShowPtr |= 8;
+				switch (e->subtype) {
+#if 1
+#undef e
+#define e ((XRROutputPropertyNotifyEvent*)&ev)
+				    case RRNotify_OutputProperty:
+					pr = NULL;
+					MINF(minf->out == e->output) {
+						for (prI = 0; prI<xrp_cnt; prI++) {
+							if (e->property == a_xrp_save[prI]) break;
+							if (e->property != a_xrp[prI]) continue;
+							if (prI == xrp_non_desktop) oldShowPtr |= 8;
+							pr = &minf->prop[prI];
+							break;
+						}
+						break;
+					}
+					if (!pr) break;
+					if (e->state) break;
+					_pr_get(0);
+					xrPropFlush();
+					break;
+#endif
+				    default:
+					oldShowPtr |= 8;
+				}
 				break;
 			}
 			
