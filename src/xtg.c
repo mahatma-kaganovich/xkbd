@@ -630,7 +630,7 @@ typedef struct _pinf {
 	_short en;
 	XRRPropertyInfo *p;
 	Atom type;
-	_xrp_t v,v0;
+	_xrp_t v,v0,v1;
 } pinf_t;
 
 pinf_t *pr;
@@ -1251,6 +1251,7 @@ static void _pr_set(_short state){
 	if (!(pi[p_safe]&8192))
 	    if (XRP_EQ(v,pr->v)) return;
 //	if (pr->type == XA_ATOM) DBG("set %s %s -> %s",natom(0,minf->name),natom(1,pr->v.a),natom(2,v.a));
+	pr->v1 = pr->v;
 	pr->v = v;
 	xrSetProp(a_xrp[prI],pr->type,&v,1,0);
 }
@@ -3068,16 +3069,18 @@ evfree:
 					pr = NULL;
 					MINF(minf->out == e->output) {
 						for (prI = 0; prI<xrp_cnt; prI++) {
-							if (e->property == a_xrp_save[prI]) break;
+							if (e->property == a_xrp_save[prI]) goto ev2;
 							if (e->property != a_xrp[prI]) continue;
 							if (prI == xrp_non_desktop) oldShowPtr |= 8;
 							pr = &minf->prop[prI];
-							break;
+							if (XRP_EQ(pr->v,pr->v1)) break;
+							pr->v1 = pr->v;
+							goto ev2;
 						}
 						break;
 					}
-					if (!pr) break;
-					if (e->state) break;
+					if (!pr) goto ev2;
+					if (e->state) goto ev2;
 					xrrFree();
 					xrrSet();
 					xrrFree();
