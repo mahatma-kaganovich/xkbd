@@ -322,11 +322,10 @@ char *ph[MAX_PAR] = {
 	"		9(+256) use mode sizes for panning (errors in xrandr tool!)\n"
 	"		10(+512) keep dpi different x & y (image panned non-aspected)\n"
 	"		11(+1024) don't use cached input ABS\n"
-	"		12(+2048) try delete unused (saved) properity\n"
+	"		12(+2048) try delete or not create unused (saved) properity\n"
 #ifdef _BACKLIGHT
 	"		13(+4096) track backlight-controlled monitors and off when empty (under construction)\n"
 #endif
-	"		14(+8192) complete unsync RandR output properties\n"
 	"		(auto-panning for openbox+tint2: \"xrandr --noprimary\" on early init && \"-s 135\" (7+128))",
 	""
 #ifdef XSS
@@ -911,14 +910,16 @@ static _short xiGetProp(Atom prop, Atom type, void *data, long cnt, _short chk){
 	return getProp(prop,type,data,0,cnt,chk);
 }
 
+static void _xrPropFlush(){
+	xrrFree();
+	XFlush(dpy);
+	XSync(dpy,False);
+	xrrSet();
+	xrrFree();
+}
+
 static void xrPropFlush(){
-	if (xrProp_ch) {
-		xrrFree();
-		XFlush(dpy);
-		XSync(dpy,False);
-		xrrSet();
-		xrrFree();
-	}
+	if (xrProp_ch) _xrPropFlush();
 }
 
 static _short xiSetProp(Atom prop, Atom type, void *data, long cnt, _short chk){
@@ -1086,15 +1087,13 @@ int noutput = 0;
 #define _BUFSIZE 1048576
 
 
-static void _pr_set(_short state);
+static void pr_set(xrp_t prop,_short state);
 
 #ifdef _BACKLIGHT
 static void chBL1(_short obscured, _short entered) {
 	if (obscured != 2) minf->obscured = obscured;
 	if (entered != 2) minf->entered = entered;
-	pr = &minf->prop[prI = xrp_bl];
-	if (pr->en)
-	    _pr_set(!(minf->obscured || minf->entered));
+	pr_set(xrp_bl,!(minf->obscured || minf->entered));
 }
 
 static void chBL(Window w, _short obscured, _short entered) {
@@ -1176,15 +1175,14 @@ static void setFSWin() {
 
 RROutput prim0, prim;
 
-static void _pr_free(){
+static void _pr_free(_short err){
 	if (pr->en) {
-		xrSetProp(a_xrp[prI],pr->type,&pr->v0,1,0);
+		if ((err || (pi[p_safe]&2048))
+		    && !XRP_EQ(pr->v,pr->v0))
+			xrSetProp(a_xrp[prI],pr->type,&pr->v0,1,0);
 		pr->en = 0;
 	}
-	if (pr->p) {
-		XFree(pr->p);
-		pr->p = NULL;
-	}
+	_free(pr->p);
 }
 
 static void _minf_free(){
@@ -1196,7 +1194,7 @@ static void _minf_free(){
 #endif
 	for (prI=0; prI<xrp_cnt; prI++) {
 		pr = &minf->prop[prI];
-		_pr_free();
+		_pr_free(0);
 	}
 }
 
@@ -1215,8 +1213,6 @@ static _short _pr_chk(_xrp_t *v){
 }
 
 static _short _pr_inf(Atom prop){
-	if ((pi[p_safe]&8192) && pr->p && pr->en) return 1;
-	_short r = 0;
 	XRRPropertyInfo *pinf = XRRQueryOutputProperty(dpy,minf->out,prop);
 	if (pinf && pr->p
 	    && pr->p->range == pinf->range
@@ -1232,6 +1228,7 @@ static _short _pr_inf(Atom prop){
 	return 0;
 }
 
+static void _pr_get(_short r);
 static void _pr_set(_short state){
 	_xrp_t v;
 	if (state) switch (prI) {
@@ -1248,12 +1245,21 @@ static void _pr_set(_short state){
 		break;
 	} else v = pr->v0;
 	if (pr->type == XA_ATOM && !v.a) return;
-	if (!(pi[p_safe]&8192))
-	    if (XRP_EQ(v,pr->v)) return;
+	if (xrevent1 < 0) {
+		_xrPropFlush();
+		_pr_get(0);
+	}
+	if (!pr->en || XRP_EQ(v,pr->v)) return;
 //	if (pr->type == XA_ATOM) DBG("set %s %s -> %s",natom(0,minf->name),natom(1,pr->v.a),natom(2,v.a));
 	pr->v1 = pr->v;
 	pr->v = v;
 	xrSetProp(a_xrp[prI],pr->type,&v,1,0);
+}
+
+static void pr_set(xrp_t prop,_short state){
+	pr = &minf->prop[prI = prop];
+	if (pr->en)
+	    _pr_set(state);
 }
 
 static void _pr_get(_short r){
@@ -1272,20 +1278,14 @@ static void _pr_get(_short r){
 	Atom save = a_xrp_save[prI];
 	_short _save = !(pi[p_safe]&2048);
 	_xrp_t v;
-	_short inf = _pr_inf(prop); // FIRST - some flush too
-	if (!pr->p) goto err;
-	if (inf && r) {
-		v = pr->v;
-		pr_t = pr->type;
-	} else {
-		if (!xrGetProp(prop,0,NULL,1,0)) goto err;
-		if (sizeof(prop_int) == sizeof(Atom) || pr_t == XA_ATOM) v.a = *(Atom*)ret;
-		else v.i = *(prop_int*)ret;
-	}
+	if (!xrGetProp(prop,0,NULL,1,0)) goto err;
+	if (sizeof(prop_int) == sizeof(Atom) || pr_t == XA_ATOM) v.a = *(Atom*)ret;
+	else v.i = *(prop_int*)ret;
 //	if (pr->type == XA_ATOM) DBG("get %s %s -> %s",natom(0,minf->name),natom(1,pr->v.a),natom(2,v.a));
-	if (inf && pr->type == pr_t && pr->en && r != 2) {
+	if (_pr_inf(prop) && pr->type == pr_t && pr->en && r != 2) {
 		// new default/saved or nothing new
 		if (XRP_EQ(v,pr->v)) return;
+		if (XRP_EQ(v,pr->v1)) return;
 		pr->v = v;
 		if (!_pr_chk(&v)) goto err;
 		switch (prI) {
@@ -1306,21 +1306,21 @@ static void _pr_get(_short r){
 	}
 	pr->type = pr_t;
 	pr->v = v;
+	if (!pr->en) pr->v1 = v;
 	if (!pr->p || pr->p->num_values < 2 || !_pr_chk(&val_xrp[prI]) || !_pr_chk(&v)) goto err;
 	_short saved = 0;
-	inf = (r != 2) ? _pr_inf(save) : 0;
-	if (inf) {
-		v = pr->v0;
-		saved = 1;
-	} else if (xrGetProp(save,pr->type,&v,1,0)) {
+	if (xrGetProp(save,pr->type,&v,1,0)) {
 		if (_pr_chk(&v)) saved = 1;
 		else if (pr->en && _pr_chk(&pr->v0)) goto rewrite;
 	}
 	if (!pr->en) {
 		pr->v0 = saved ? v : pr->v;
-		if (__init && saved) _pr_set(0);
+		if (__init && saved && !XRP_EQ(v,pr->v)) {
+			xrSetProp(a_xrp[prI],pr->type,&v,1,0);
+			pr->v1 = v;
+		}
 	}
-	if ((saved && !inf) || (!_save && __init)) {
+	if ((saved && !_pr_inf(save)) || (!_save && __init)) {
 rewrite:
 		if (_save || __init)
 		    XRRDeleteOutputProperty(dpy,minf->out,save);
@@ -1334,7 +1334,7 @@ rewrite:
 	pr->en = 1;
 	return;
 err:
-	_pr_free();
+	_pr_free(1);
 }
 
 static void xrMons0(){
@@ -1420,7 +1420,7 @@ static void xrMons0(){
 		}
 		if (r<2) continue;
 		pr = &minf->prop[prI];
-		if (pr->en && !(pi[p_safe]&8192)) continue;
+		if (pr->en) continue;
 		_pr_get(r);
 	}
 	XFree(props);
@@ -1514,15 +1514,10 @@ static void xrMons0(){
 	break;
     }
     if (!active && non_desktop)
-	MINF_T(o_non_desktop) {
-		pr = &minf->prop[prI = xrp_non_desktop];
-		_pr_set(1);
-	}
+	MINF_T(o_non_desktop) pr_set(xrp_non_desktop,1);
     if (active && non_desktop1)
-	MINF(minf->prop[xrp_non_desktop].en && minf->prop[xrp_non_desktop].v0.i == 1) {
-		pr = &minf->prop[prI = xrp_non_desktop];
-		_pr_set(0);
-	}
+	MINF(minf->prop[xrp_non_desktop].en && minf->prop[xrp_non_desktop].v0.i == 1)
+	    pr_set(xrp_non_desktop,0);
 #ifdef _BACKLIGHT
     if ((pi[p_safe]&4096)) {
 	MINF_T2(o_active|o_backlight,o_active|o_backlight) {
@@ -1562,10 +1557,7 @@ static void _pan(minf_t *m) {
 
 #ifdef XSS
 static void _monFS(xrp_t p, _short st){
-	if (val_xrp[p].a) {
-		pr = &minf->prop[prI = p];
-		_pr_set(st);
-	}
+	if (val_xrp[p].a) pr_set(p,st);
 }
 
 static void monFullScreen(){
@@ -2464,11 +2456,9 @@ static void init(){
 			XRRQueryVersion(dpy,&v1,&v2);
 			if (v1 > 1 || (v1 == 1 && v2 > 1)) {
 				xrevent1 = xrevent + RRNotify;
-				m |= RRCrtcChangeNotifyMask|RROutputChangeNotifyMask;
-				if (!(pi[p_safe]&8192)) m |= RROutputPropertyNotifyMask;
-			} else
+				m |= RRCrtcChangeNotifyMask|RROutputChangeNotifyMask|RROutputPropertyNotifyMask;
+			}
 #endif
-			    pi[p_safe] |= 8192;
 
 			xrevent += RRScreenChangeNotify;
 			XRRSelectInput(dpy, root, m);
@@ -3081,9 +3071,7 @@ evfree:
 					}
 					if (!pr) goto ev2;
 					if (e->state) goto ev2;
-					xrrFree();
-					xrrSet();
-					xrrFree();
+					_xrPropFlush();
 					_pr_get(0);
 					xrPropFlush();
 					break;
