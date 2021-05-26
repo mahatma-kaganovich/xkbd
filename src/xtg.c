@@ -1309,7 +1309,10 @@ static void _pr_get(_short r){
 	if (!pr->en) pr->v1 = v;
 	if (!pr->p || pr->p->num_values < 2 || !_pr_chk(&val_xrp[prI]) || !_pr_chk(&v)) goto err;
 	_short saved = 0;
-	if (xrGetProp(save,pr->type,&v,1,0)) {
+	if (!_save && pr->en) {
+		v = pr->v0;
+		saved = 1;
+	} else if (xrGetProp(save,pr->type,&v,1,0)) {
 		if (_pr_chk(&v)) saved = 1;
 		else if (pr->en && _pr_chk(&pr->v0)) goto rewrite;
 	}
