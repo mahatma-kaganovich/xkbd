@@ -1277,6 +1277,7 @@ static void _pr_get(_short r){
 	Atom prop = a_xrp[prI];
 	Atom save = a_xrp_save[prI];
 	_short _save = !(pi[p_safe]&2048);
+	_short _init = __init && !pr->en;
 	_xrp_t v;
 	if (!xrGetProp(prop,0,NULL,1,0)) goto err;
 	if (sizeof(prop_int) == sizeof(Atom) || pr_t == XA_ATOM) v.a = *(Atom*)ret;
@@ -1306,34 +1307,29 @@ static void _pr_get(_short r){
 	}
 	pr->type = pr_t;
 	pr->v = v;
-	if (!pr->en) pr->v1 = v;
+	if (!pr->en) pr->v0 = pr->v1 = v;
 	if (!pr->p || pr->p->num_values < 2 || !_pr_chk(&val_xrp[prI]) || !_pr_chk(&v)) goto err;
 	_short saved = 0;
-	if (!_save && pr->en) {
-		v = pr->v0;
+	if (r != 2 && (_save || _init) && xrGetProp(save,pr->type,&v,1,0)) {
+		pr->v0 = v;
 		saved = 1;
-	} else if (xrGetProp(save,pr->type,&v,1,0)) {
-		if (_pr_chk(&v)) saved = 1;
-		else if (pr->en && _pr_chk(&pr->v0)) goto rewrite;
 	}
-	if (!pr->en) {
-		pr->v0 = saved ? v : pr->v;
-		if (__init && saved && !XRP_EQ(v,pr->v)) {
-			xrSetProp(a_xrp[prI],pr->type,&v,1,0);
-			pr->v1 = v;
-		}
+	if (!_pr_chk(&pr->v0)) pr->v0 = pr->v;
+	if (_init && saved && !XRP_EQ(pr->v0,pr->v)) {
+		xrSetProp(a_xrp[prI],pr->type,&pr->v0,1,0);
+		pr->v1 = pr->v0;
 	}
-	if ((saved && !_pr_inf(save)) || (!_save && __init)) {
-rewrite:
-		if (_save || __init)
-		    XRRDeleteOutputProperty(dpy,minf->out,save);
-		saved = 0;
+	if (r != 2 && ((!_save && _init) || !_pr_inf(save))) {
+		 XRRDeleteOutputProperty(dpy,minf->out,save);
+		 saved = 0;
 	}
-	if (!saved && _save) {
+	if (!_save || (saved && XRP_EQ(v,pr->v0))) goto ok;
+	if (!saved) {
 		xrProp_ch = 1;
 		XRRConfigureOutputProperty(dpy,minf->out,save,False,pr->p->range,pr->p->num_values,pr->p->values);
-		if (!xrSetProp(save,pr->type,&pr->v0,1,0x10)) goto err;
 	}
+	if (!xrSetProp(save,pr->type,&pr->v0,1,0x10)) goto err;
+ok:
 	pr->en = 1;
 	return;
 err:
