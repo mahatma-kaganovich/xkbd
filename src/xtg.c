@@ -36,7 +36,7 @@
 #define XTG
 //#define TOUCH_ORDER
 //#define USE_EVDEV
-#undef USE_EVDEV
+//#undef USE_EVDEV
 // todo
 #define _BACKLIGHT
 //#undef _BACKLIGHT
@@ -3009,7 +3009,7 @@ evfree:
 			e.window = root;
 			XSendEvent(dpy, root, False, ButtonPressMask, &ev);
 #endif //0
-#endif
+#endif //_BACKLIGHT
 #undef e
 #define e (ev.xconfigure)
 		    case ConfigureNotify:
