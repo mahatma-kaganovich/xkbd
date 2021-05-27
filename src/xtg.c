@@ -119,6 +119,8 @@ Window root;
 Atom aActWin, aKbdGrp, aXkbRules;
 unsigned char _error;
 
+#undef _WIN_STATE
+
 #ifdef XSS
 int xssevent=-100;
 Atom aWMState, aFullScreen;
@@ -147,7 +149,6 @@ unsigned char *ret;
 // min/max: X11/Xlibint.h
 static inline long _min(long x,long y){ return x<y?x:y; }
 static inline long _max(long x,long y){ return x>y?x:y; }
-
 
 #ifdef XTG
 //#define DEV_CHANGED
@@ -184,6 +185,10 @@ xiMask ximaskWin0 = {};
 XIEventMask ximaskWin[] = {{ .deviceid = XIAllMasterDevices, .mask_len = MASK_LEN, .mask = (void*)&ximaskWin0 },
 //			 { .deviceid = XIAllDevices, .mask_len = MASK_LEN, .mask = (void*)&ximaskWin0 }
 			};
+#if 0
+#define _WIN_STATE
+Atom aAbove, aBelow;
+#endif
 #endif
 
 Time T;
@@ -325,6 +330,9 @@ char *ph[MAX_PAR] = {
 	"		12(+2048) try delete or not create unused (saved) properity\n"
 #ifdef _BACKLIGHT
 	"		13(+4096) track backlight-controlled monitors and off when empty (under construction)\n"
+#endif
+#ifdef XSS
+	"		14(+8192) skip fullscreen windows without ClientMessage (XTerm)\n"
 #endif
 	"		(auto-panning for openbox+tint2: \"xrandr --noprimary\" on early init && \"-s 135\" (7+128))",
 	""
@@ -565,6 +573,11 @@ static void WMState(Atom *states, short nn){
 		monFullScreen();
 #endif
 	}
+}
+
+static void winWMState(){
+	getWProp(win,aWMState,XA_ATOM,sizeof(Atom));
+	WMState(((Atom*)ret),n);
 }
 #endif
 
@@ -1131,22 +1144,22 @@ static void checkEntered(){
 
 
 static _short fixWin(Window win,unsigned long x,unsigned long y,unsigned long w,unsigned long h){
-	if (win == root) return 0;
-	if (minf && (win ? (minf->win == win) : (win = minf->win))) goto found;
 	MINF(minf->win == win) goto found;
 	return 0;
 found:
 	if (minf->x == x && minf->y == y && minf->width == w && minf->height == h) return 2;
+	DBG("BG MoveResizeWindow");
 	minf->type |= o_changed;
 	oldShowPtr |= 8;
 	return 1;
 }
 
+#define WIN_EVMASK VisibilityChangeMask
+//		|EnterWindowMask|LeaveWindowMask|ButtonPressMask|ButtonReleaseMask
 XSetWindowAttributes winattr = {
 	.override_redirect = True,
-	.do_not_propagate_mask = ~(long)VisibilityChangeMask,
-	.event_mask = VisibilityChangeMask
-//		|EnterWindowMask|LeaveWindowMask|ButtonPressMask|ButtonReleaseMask
+	.do_not_propagate_mask = ~(long)(WIN_EVMASK),
+	.event_mask = (WIN_EVMASK),
 };
 
 // bits: 1 - free if exists, 2 - low/high
@@ -1167,16 +1180,20 @@ static void simpleWin(_short mode) {
 	} else if (minf->type&o_changed) {
 		XMoveResizeWindow(dpy,w,minf->x,minf->y,minf->width,minf->height);
 	}
-	if (mode&2) XRaiseWindow(dpy,w);
-	else XLowerWindow(dpy, w);
+	if (mode&2) {
+		XRaiseWindow(dpy,w);
+	} else {
+		XLowerWindow(dpy, w);
+	}
+#ifdef _WIN_STATE
+	win = w;
+	wSetProp(aWMState,XA_ATOM,(mode&2)?&aAbove:&aBelow,1,0);
+	win = win1;
+#endif
 //	if (!minf->win)
 	    XMapWindow(dpy, w);
-//	DBG("window %lx",w);
+//	DBG("window 0x%lx",w);
 	minf->win = w;
-}
-
-// what: 0 - BL check, 1 - bl recreate, 2 - all UP
-static void setFSWin() {
 }
 
 #endif
@@ -1423,7 +1440,9 @@ static void xrMons0(){
 		}
 		if (r<2) continue;
 		pr = &minf->prop[prI];
+#ifndef MINIMAL
 		if (pr->en) continue;
+#endif
 		_pr_get(r);
 	}
 	XFree(props);
@@ -2252,8 +2271,7 @@ static void getWinGrp(){
 		grp1 = 0;
 	}
 #ifdef XSS
-	getWProp(win,aWMState,XA_ATOM,sizeof(Atom));
-	WMState(((Atom*)ret),n);
+	winWMState();
 #endif
 }
 
@@ -2378,6 +2396,11 @@ static void init(){
 #ifdef USE_DPMS
 	dpms_enabled = DPMSQueryExtension(dpy, &dpmsevent, &ierr) && DPMSCapable(dpy);
 #endif
+#endif
+
+#if _WIN_STATE
+	aAbove = XInternAtom(dpy, "_NET_WM_STATE_ABOVE", False);
+	aBelow = XInternAtom(dpy, "_NET_WM_STATE_BELOW", False);
 #endif
 
 #ifdef XSS
@@ -2990,14 +3013,37 @@ evfree:
 #undef e
 #define e (ev.xconfigure)
 		    case ConfigureNotify:
-#ifdef _BACKLIGHT
-			if (fixWin(e.window,e.x,e.y,e.width,e.height)) break;
+			if (e.window == root) {
+#ifndef MINIMAL
+				if (!xrr) {
+					minf0.width = e.width;
+					minf0.height = e.height;
+					fixMMRotation(&minf0);
+					oldShowPtr |= 8;
+				}
 #endif
-			if (xrr || e.window != root) goto ev2;
-			minf0.width = e.width;
-			minf0.height = e.height;
-			fixMMRotation(&minf0);
-			oldShowPtr |= 8;
+				break;
+			}
+#ifdef _BACKLIGHT
+			if (e.override_redirect) {
+			    if (fixWin(e.window,e.x,e.y,e.width,e.height)) break;
+			}
+#endif
+#ifdef XSS
+			if (!(pi[p_safe]&8192)) {
+#ifndef MINIMAL
+				// MINIMAL will check window property every move/resize step and twice on win init
+				// but e.window != win (OB3), reduce approximated
+				_short x = 0;
+				MINF(minf->height == e.height && minf->y == e.y && minf->width == e.width && minf->x == e.x && (minf->type&o_active)) {
+					x = 1;
+					break;
+				}
+				if (noXSS != x)
+#endif
+				    winWMState();
+			}
+#endif
 			break;
 #endif
 		    default:
@@ -3053,6 +3099,7 @@ evfree:
 				//XRRTimes(dpy,screen,&T);
 
 				switch (e->subtype) {
+#ifndef MINIMAL
 #undef e
 #define e ((XRROutputPropertyNotifyEvent*)&ev)
 				    case RRNotify_OutputProperty:
@@ -3075,6 +3122,7 @@ evfree:
 					_pr_get(0);
 					xrPropFlush();
 					break;
+#endif
 				    default:
 					oldShowPtr |= 8;
 				}
