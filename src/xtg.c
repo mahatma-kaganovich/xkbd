@@ -39,7 +39,7 @@
 #undef USE_EVDEV
 // todo
 #define _BACKLIGHT
-#undef _BACKLIGHT
+//#undef _BACKLIGHT
 #define PROP_FMT
 #undef PROP_FMT
 #endif
