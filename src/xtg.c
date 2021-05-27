@@ -36,10 +36,10 @@
 #define XTG
 //#define TOUCH_ORDER
 //#define USE_EVDEV
-//#undef USE_EVDEV
+#undef USE_EVDEV
 // todo
 #define _BACKLIGHT
-//#undef _BACKLIGHT
+#undef _BACKLIGHT
 #define PROP_FMT
 #undef PROP_FMT
 #endif
@@ -1207,7 +1207,9 @@ static void _minf_free(){
 }
 
 static _short _pr_chk(_xrp_t *v){
+#ifdef _BACKLIGHT
 	if (prI == xrp_bl && v->i == 0) return 1;
+#endif
 	XRRPropertyInfo *p = pr->p;
 	int i;
 	if (p->range) {
@@ -1246,7 +1248,7 @@ static void _pr_set(_short state){
 		_pr_get(0);
 	}
 	if (!pr->en || XRP_EQ(v,pr->v)) return;
-	if (type_xrp[prI] == XA_ATOM) DBG("set %s %s -> %s",natom(0,minf->name),natom(1,pr->v.a),natom(2,v.a));
+//	if (type_xrp[prI] == XA_ATOM) DBG("set %s %s -> %s",natom(0,minf->name),natom(1,pr->v.a),natom(2,v.a));
 	pr->v1 = pr->v;
 	pr->v = v;
 	xrSetProp(a_xrp[prI],type_xrp[prI],&v,1,0);
@@ -1574,11 +1576,6 @@ static void monFullScreen(){
 		_monFS(xrp_cs,st);
 	}
 	xrPropFlush();
-}
-
-static int scrWin() {
-	minf = &minf0;
-	simpleWin(3);
 }
 #endif
 
@@ -2993,7 +2990,9 @@ evfree:
 #undef e
 #define e (ev.xconfigure)
 		    case ConfigureNotify:
+#ifdef _BACKLIGHT
 			if (fixWin(e.window,e.x,e.y,e.width,e.height)) break;
+#endif
 			if (xrr || e.window != root) goto ev2;
 			minf0.width = e.width;
 			minf0.height = e.height;
