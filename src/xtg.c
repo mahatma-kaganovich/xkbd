@@ -1,5 +1,5 @@
 /*
-	xtg v1.37 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.38 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -142,7 +142,7 @@ int dpmsopcode=0, dpmsevent=-100;
 CARD32 grp, grp1;
 unsigned char *rul, *rul2;
 unsigned long rulLen, n;
-int xkbEventType=-100, xkbError, n1, revert;
+int xkbEventType=-100, xkbError, n1;
 XEvent ev;
 unsigned char *ret;
 
@@ -162,6 +162,7 @@ _short __init = 1;
 int floatFmt = sizeof(float) << 3;
 int atomFmt = sizeof(Atom) << 3;
 int winFmt = sizeof(Window) << 3;
+_short useRaw = 0;
 #define prop_int int32_t
 int intFmt = sizeof(prop_int) << 3;
 #ifdef USE_EVDEV
@@ -173,9 +174,9 @@ XWindowAttributes wa;
 
 #define MASK_LEN XIMaskLen(XI_LASTEVENT)
 typedef unsigned char xiMask[MASK_LEN];
-xiMask ximaskButton = {}, ximaskTouch = {}, ximask0 = {};
+xiMask ximaskButton = {}, ximaskTouch = {}, ximask0 = {}, ximaskTouchRaw = {};
 xiMask ximaskRoot = {};
-int Nximask = 1;
+_short Nximask = 1;
 XIEventMask ximask[] = {{ .deviceid = XIAllDevices, .mask_len = MASK_LEN, .mask = (void*)&ximask0 },
 //			 { .deviceid = XIAllMasterDevices, .mask_len = MASK_LEN, .mask = (void*)&ximaskRoot }
 			};
@@ -203,12 +204,18 @@ Time T;
 typedef struct _Touch {
 	int touchid,deviceid;
 	Time time;
-	_short n, g, g1;
+	_short n, g, g1, z;
 	double x,y;
 	double tail;
 } Touch;
 Touch touch[TOUCH_MAX];
 _short P=0,N=0;
+
+XIAttachSlaveInfo ca = {.type=XIAttachSlave};
+XIDetachSlaveInfo cf = {.type=XIDetachSlave};
+XIAddMasterInfo cm = {.type = XIAddMaster, .name = "TouchScreen", .send_core = 0, .enable = 1};
+XIRemoveMasterInfo cr = {.type = XIRemoveMaster, .return_mode = XIFloating};
+int kbdDev = 0;
 
 double resX, resY;
 int resDev = 0;
@@ -298,6 +305,8 @@ char *ph[MAX_PAR] = {
 	"	1=floating devices\n"
 	"		0=master (visual artefacts, but enable native masters touch clients)\n"
 	"		2=dynamic master/floating (firefox segfaults)",
+	"		3=simple hook all touch events (useful +4=7 - raw)",
+	"		+4=use XI_RawTouch* events if possible",
 	"RandR monitor name\n"
 	"		or number 1+\n"
 	"		'-' strict (only xinput prop 'xtg output' name)"
@@ -639,10 +648,12 @@ typedef struct _dinf {
 #define o_floating 2
 #define o_absolute 4
 #define o_directTouch 8
-///#define o_scroll 16
+#define o_raw 16
+#define o_z 32
+///#define o_scroll 64
 
 #define NINPUT_STEP 4
-dinf_t *inputs = NULL, *inputs1, *dinf, *dinf1, *dinf_last = NULL;
+dinf_t *inputs = NULL, *inputs1, *dinf, *dinf1, *dinf2, *dinf_last = NULL;
 _int ninput = 0, ninput1 = 0;
 #define DINF(x) for(dinf=inputs; (dinf!=dinf_last); dinf++) if (x)
 #define DINF_A(x) for(dinf=inputs; (dinf!=dinf_last); dinf++) if ((dinf->type&O_absolute) && )
@@ -961,12 +972,6 @@ static _short wSetProp(Atom prop, Atom type, void *data, long cnt, _short chk){
 
 
 #ifdef USE_EVDEV
-static double _evsize(struct libevdev *dev, int c) {
-	double r = 0;
-	const struct input_absinfo *x = libevdev_get_abs_info(dev, c);
-	if (x && x->resolution) r = (r + x->maximum - x->minimum)/x->resolution;
-	return r;
-}
 static void getEvRes(){
 	devid = dinf->devid;
 	if (!(pi[p_safe]&1024) && xiGetProp(aABS,aFloat,&dinf->ABS,NdevABS,0)) return;
@@ -977,11 +982,16 @@ static void getEvRes(){
 	if (fd < 0) goto ret;
 	struct libevdev *device;
 	if (!libevdev_new_from_fd(fd, &device)){
-		dinf->ABS[0] = _evsize(device,ABS_X);
-		dinf->ABS[1] = _evsize(device,ABS_Y);
-#ifdef ABS_Z
-		dinf->ABS[2] = _evsize(device,ABS_Z);
+		_short i;
+		for (i=0; i<NdevABS; i++) {
+			const struct input_absinfo *x = libevdev_get_abs_info(device,
+#if ABS_X == 0 && ABS_Y == 1
+			    i);
+#else
+			    (i==0)?ABS_X:(i==1)?ABS_Y:ABS_Z);
 #endif
+			if (x && x->resolution) dinf->ABS[i] = (x->maximum - x->minimum + 0.)/x->resolution;
+		}
 		libevdev_free(device);
 		xiSetProp(aABS,aFloat,&dinf->ABS,NdevABS,0);
 	}
@@ -991,7 +1001,6 @@ ret:
 }
 #endif
 
-float matrix[9] = {0,0,0,0,0,0,0,0,0};
 static void map_to(){
 	devid = dinf->devid;
 	float x=minf->x,y=minf->y,w=minf->width,h=minf->height,dx=pf[p_touch_add],dy=pf[p_touch_add];
@@ -1043,11 +1052,7 @@ static void map_to(){
 		x+=w; y+=h; w=-w; h=-h;
 		break;
 	}
-//	float matrix[9] = {0,0,x,0,0,y,0,0,1};
-	matrix[0] = matrix[1] = matrix[3] = matrix[4] = matrix[6] = matrix[7] = 0;
-	matrix[2]=x;
-	matrix[5]=y;
-	matrix[8]=1;
+	float matrix[9] = {0,0,x,0,0,y,0,0,1};
 	matrix[1-m]=w;
 	matrix[3+m]=h;
 	xiSetProp(aMatrix,aFloat,&matrix,9,4);
@@ -1598,19 +1603,24 @@ static void monFullScreen(){
 }
 #endif
 
-static void fixGeometry(){
-	if (resDev) {
-		DINF(dinf->devid == resDev) {
-			MINF(dinf->mon == minf->name) {
-				if (minf2 == minf && devid == resDev) return;
-				minf2 = minf;
-				goto find1;
-			}
-			break;
+static _short findResDev(){
+	if (resDev) DINF(dinf->devid == resDev) {
+		dinf2 = dinf;
+		MINF(minf->name == dinf->mon) {
+			if (minf2 == minf) break;
+			minf2 = minf;
+			return 0;
 		}
-		if (devid == resDev) return;
+		return 1;
 	}
 	minf2 = NULL;
+	dinf2 = NULL;
+	return 0;
+}
+
+static void fixGeometry(){
+	if (findResDev() && resDev == devid) return;
+	if (minf2) goto find1;
 	DINF((dinf->type&o_directTouch)) {
 		MINF(minf->type&o_active && dinf->mon == minf->name) {
 			minf2 = minf;
@@ -1777,21 +1787,24 @@ static void _reason(char *s){
 	DBG("input %i == output %s: %s",dinf->devid,dinf->mon?natom(0,dinf->mon):"none",s);
 }
 
+static _short _REASON(Atom m,_short r,char *txt){
+	if (!m) return 0;
+	dinf->reason=r;
+	if (dinf->mon!=m) {
+		dinf->mon=m;
+		_reason(txt);
+	}
+	return 1;
+}
+
 static void touchToMon(){
 	unsigned long xy[2];
-#define _REASON(m,r,txt) dinf->reason=r; if (dinf->mon!=m) {dinf->mon=m;_reason(txt);} continue;
+	minf = minf_last;
 	DINF((dinf->type&o_absolute) && (dinf->reason || !dinf->mon)) {
 		Atom m = 0;
-		if (mon) {
-			m = mon;
-			_REASON(m,0,"by command line");
-		} else {
-			xiGetProp(aDevMon,XA_ATOM,&m,1,0);
-			if (m) {
-				_REASON(m,0,"by xinput property");
-			}
-		}
-		if (m) continue;
+		if (_REASON(mon,0,"by command line")) continue;
+		xiGetProp(aDevMon,XA_ATOM,&m,1,0);
+		if (_REASON(m,0,"by xinput property")) continue;
 		int n = 0, n0 = 0;
 		Atom m0 = 0;
 		MINF_T(o_size|o_msize) {
@@ -1806,17 +1819,12 @@ static void touchToMon(){
 		if (!n && n0 == 1) {
 			_REASON(m0,2,"\"zero mm size\" monitor by proportions");
 		}
-		if (n == 1) {
-			_REASON(m,1,"by size");
-		}
-		if (dinf->mon && dinf->reason<2) continue;
+		if (n == 1 && _REASON(m,1,"by size")) continue;
+		if (dinf->reason<2 && _REASON(dinf->mon,dinf->reason,"")) continue;
 		// unprecise methods now
-		if (m0) {
-			_REASON(m0,3,"\"zero mm size\" monitor by proportions first");
-		}
-		if (m) {
-			_REASON(m,3,"by size first");
-		}
+		if (_REASON(m0,3,"\"zero mm size\" monitor by proportions first")) continue;
+		if (_REASON(m,3,"by size first")) continue;
+		_REASON(dinf->mon,dinf->reason,"");
 	}
 	DINF(dinf->mon) MINF(minf->name == dinf->mon) {
 		xy[0]=dinf->ABS[0];
@@ -1845,15 +1853,12 @@ static void touchToMon(){
 	}
 }
 
-XIAttachSlaveInfo ca = {.type=XIAttachSlave};
-XIDetachSlaveInfo cf = {.type=XIDetachSlave};
-XIAddMasterInfo cm = {.type = XIAddMaster, .name = "TouchScreen", .send_core = 0, .enable = 1};
-XIRemoveMasterInfo cr = {.type = XIRemoveMaster, .return_mode = XIFloating};
 static void getHierarchy(){
 	inputs1 = NULL;
 	ninput1_ = 0;
 	
 	int i,j,ndevs2,nkbd,m=0;
+	void *mTouch = useRaw ? &ximaskTouchRaw : &ximaskTouch;
 
 	_grabX();
 	XIDeviceInfo *info2 = XIQueryDevice(dpy, XIAllDevices, &ndevs2);
@@ -1867,7 +1872,7 @@ static void getHierarchy(){
 			else if (cr.return_pointer != devid && !strncmp(d2->name,cm.name,11)) {
 				m = devid;
 				if (ca.new_master != m) {
-					ximask[0].mask=(void*)&ximaskTouch;
+					ximask[0].mask=mTouch;
 					ximask[0].deviceid=m;
 					XISelectEvents(dpy, root, ximask, Nximask);
 //					XIUndefineCursor(dpy,m,root);
@@ -1888,7 +1893,7 @@ static void getHierarchy(){
 		d2 = &info2[i];
 		devid = d2->deviceid;
 		dinf1 = NULL;
-		_short t = 0, scroll = 0;
+		_short t = 0, scroll = 0, raw = 0;
 		_short type = 0;
 		busy = 0;
 		if (__init) {
@@ -1913,6 +1918,17 @@ static void getHierarchy(){
 //		    case XISlaveKeyboard:
 //			if (strstr(d2->name," XTEST ")) continue;
 //			break;
+		    case XIMasterKeyboard:
+			if (!kbdDev) {
+				kbdDev = devid;
+				if (wGetProp(aActWin,0,NULL,-10,0)) break;
+				XISetMask(ximask0,XI_FocusIn);
+				ximask[0].mask = &ximask0;
+				ximask[0].deviceid = kbdDev;
+				XISelectEvents(dpy, root, ximask, Nximask);
+				XIClearMask(ximask0,XI_FocusIn);
+			}
+			break;
 		    default:
 			continue;
 		}
@@ -1938,10 +1954,11 @@ static void getHierarchy(){
 					if (d2->use==XIMasterPointer) break; // simpler later
 					type|=o_absolute;
 					_add_input(type);
-					if (e->number >= 0 && e->number <= NdevABS) {
+					if (e->number >= 0 && e->number <= NdevABS && e->max > e->min) {
 						dinf1->xABS[e->number].min = e->min;
 						dinf1->xABS[e->number].max = e->max;
 						dinf1->xABS[e->number].resolution = e->resolution;
+						raw |= 1 << e->number;
 					}
 					break;
 				}
@@ -1967,6 +1984,11 @@ static void getHierarchy(){
 			}
 		}
 skip_map:
+		if ((raw&3) != 3) {
+			mTouch = &ximaskTouch;
+			type |= o_raw;
+		}
+		if (raw&4) type |= o_z;
 		if (t && !scroll) type|=o_directTouch;
 		tdevs+=t;
 		// exclude touchscreen with scrolling
@@ -1990,19 +2012,19 @@ skip_map:
 					c = &ca;
 					ximask[0].mask=(void*)&ximask0;
 				} else {
-					ximask[0].mask=(void*)&ximaskTouch;
+					ximask[0].mask=mTouch;
 				}
 				break;
 			}
 			break;
 		    case XISlavePointer:
 			if (!t) ximask[0].mask = (void*)(showPtr ? &ximask0 : &ximaskButton);
-			else if (scroll) ximask[0].mask = (void*)(showPtr ? &ximaskTouch : &ximask0);
+			else if (scroll) ximask[0].mask = (void*)(showPtr ? mTouch : &ximask0);
 			else {
 				tdevs2++;
 				switch (pi[p_floating]) {
 				    case 1:
-					ximask[0].mask=(void*)&ximaskTouch;
+					ximask[0].mask=mTouch;
 					XIGrabDevice(dpy,devid,root,0,None,XIGrabModeSync,XIGrabModeTouch,False,ximask);
 					ximask[0].mask=NULL;
 					break;
@@ -2257,10 +2279,21 @@ static void _scr_size(){
 }
 #endif
 
+static void getPropWin1(){
+	if (getWProp(root,aActWin,XA_WINDOW,sizeof(Window)))
+		win1 = *(Window*)ret;
+}
+
 static void getWinGrp(){
 	if (win1==None) {
-		XGetInputFocus(dpy, &win1, &revert);
+		int revert;
+#ifdef XTG
+		if (kbdDev) XIGetFocus(dpy,kbdDev,&win1);
+		if (win1==None)
+#endif
+		    XGetInputFocus(dpy, &win1, &revert);
 		if (win1==None) win1 = root;
+		if (win1 == win) return;
 	}
 	win = win1;
 	grp1 = 0;
@@ -2282,10 +2315,6 @@ static void setWinGrp(){
 	grp = grp1;
 }
 
-static void getPropWin1(){
-	if (getWProp(root,aActWin,XA_WINDOW,sizeof(Window)))
-		win1 = *(Window*)ret;
-}
 
 int (*oldxerrh) (Display *, XErrorEvent *);
 static int xerrh(Display *dpy, XErrorEvent *err){
@@ -2453,6 +2482,22 @@ static void init(){
 	XISetMask(ximaskTouch, XI_TouchUpdate);
 	XISetMask(ximaskTouch, XI_TouchEnd);
 
+	XISetMask(ximaskTouchRaw, XI_RawTouchBegin);
+	XISetMask(ximaskTouchRaw, XI_RawTouchUpdate);
+	XISetMask(ximaskTouchRaw, XI_RawTouchEnd);
+
+	if (pi[p_floating]==3) {
+		if (useRaw) {
+			XISetMask(ximask0, XI_RawTouchBegin);
+			XISetMask(ximask0, XI_RawTouchUpdate);
+			XISetMask(ximask0, XI_RawTouchEnd);
+		} else {
+			XISetMask(ximask0, XI_TouchBegin);
+			XISetMask(ximask0, XI_TouchUpdate);
+			XISetMask(ximask0, XI_TouchEnd);
+		}
+	}
+
 	XISetMask(ximaskTouch, XI_PropertyEvent);
 	XISetMask(ximask0, XI_PropertyEvent);
 
@@ -2521,6 +2566,7 @@ static void init(){
 	XFixesShowCursor(dpy,root);
 #endif
 	win = root;
+
 }
 
 #ifdef XTG
@@ -2534,6 +2580,19 @@ static _short xiGetE(){
 static void xiFreeE(){
 	XFreeEventData(dpy, &ev.xcookie);
 }
+
+static _short chResDev(){
+	resDev = devid;
+	// force swap monitors if dynamic pan?
+#if 1
+	if (!(pi[p_safe]&64)) fixGeometry();
+	else
+#endif
+	    findResDev();
+	if (dinf2) return 1;
+	resDev = 0;
+	return 0;
+}
 #endif
 
 int main(int argc, char **argv){
@@ -2542,9 +2601,12 @@ int main(int argc, char **argv){
 	int opt;
 	Touch *to;
 	double x1,y1,x2,y2,xx,yy,res;
+	_short z1,z2;
 	_short end,tt,g,bx,by;
 	_int k;
 	TouchTree *m;
+	_int vl;
+	int detail;
 
 	while((opt=getopt(argc, argv, pc))>=0){
 		for (i=0; i<MAX_PAR && pc[i<<1] != opt; i++);
@@ -2606,6 +2668,10 @@ int main(int argc, char **argv){
 	if (!strict && !mon_sz && pa[p_mon] && *pa[p_mon])
 		mon = XInternAtom(dpy, pa[p_mon], False);
 	resXY = !mon && pf[p_res]<0;
+	if (pi[p_floating]&4) {
+		useRaw = 1;
+		pi[p_floating] ^= 4;
+	}
 #endif
 	if (!dpy) return 1;
 	init();
@@ -2642,14 +2708,60 @@ ev2:
 		    case GenericEvent:
 			if (ev.xcookie.extension == xiopcode) {
 //				DBG("ev %i",ev.xcookie.evtype);
-				if (ev.xcookie.evtype < XI_TouchBegin) switch (ev.xcookie.evtype) {
+#undef e
+#define e ((XIDeviceEvent*)ev.xcookie.data)
+				switch (ev.xcookie.evtype) {
+				    case XI_TouchBegin:
+				    case XI_TouchUpdate:
+				    case XI_TouchEnd:
+					if (!tdevs2 || !xiGetE()) goto ev;
+					devid = e->deviceid;
+					if (resDev != devid && !chResDev()) goto evfree;
+					detail = e->detail;
+					end = (ev.xcookie.evtype == XI_TouchEnd
+					    || (e->flags & XITouchPendingEnd));
+					x2 = e->root_x;
+					y2 = e->root_y;
+					if ((dinf->type&o_z) && e->valuators.mask_len && (e->valuators.mask[0]&7)==7) {
+						abs_t *a = &dinf2->xABS[2];
+						z2 = (e->valuators.values[2] - a->min)*99/(a->max - a->min) + 1;
+					} else z2 = 0;
+					xiFreeE();
+					break;
+#undef e
+#define e ((XIRawEvent*)ev.xcookie.data)
+				    case XI_RawTouchBegin:
+				    case XI_RawTouchUpdate:
+				    case XI_RawTouchEnd:
+					if (!tdevs2 || !xiGetE()) goto ev;
+					devid = e->deviceid;
+					if ((resDev != devid && !(chResDev() && minf2 && (dinf->type&o_raw)))
+					    || !e->valuators.mask_len
+					    || (e->valuators.mask[0]&3)!=3)
+						goto evfree;
+					detail = e->detail;
+					end = (ev.xcookie.evtype == XI_RawTouchEnd
+					    || (e->flags & XITouchPendingEnd));
+#define _raw(i) e->raw_values[i]
+//#define _raw(i) e->valuators.values[i]
+					abs_t *a = &dinf2->xABS[minf2->r90];
+					x2 = minf2->x + (_raw(0) - a->min)*minf2->width/(a->max - a->min);
+					a = &dinf2->xABS[!minf2->r90];
+					y2 = minf2->y + (_raw(1) - a->min)*minf2->height/(a->max - a->min);
+					if ((dinf->type&o_z) && (e->valuators.mask[0]&4)) {
+						a = &dinf2->xABS[2];
+						z2 = (_raw(2) - a->min)*99/(a->max - a->min) + 1;
+					} else z2 = 0;
+					xiFreeE();
+					break;
+
 #ifdef DEV_CHANGED
 				    case XI_DeviceChanged:
 #undef e
 #define e ((XIDeviceChangedEvent*)ev.xcookie.data)
 					if (xiGetE()) {
 						int r = e->reason;
-						fprintf(stderr,"dev changed %i %i (%i)\n",r,e->deviceid,devid);
+						DBG("dev changed %i %i (%i)",r,e->deviceid,devid);
 						xiFreeE();
 						if (r == XISlaveSwitch) goto ev2;
 					}
@@ -2690,6 +2802,9 @@ ev2:
 #ifdef _BACKLIGHT
 #undef e
 #define e ((XIEnterEvent*)ev.xcookie.data)
+				    case XI_FocusIn:
+					win1 = None;
+					continue;
 				    case XI_Leave:
 				    case XI_Enter:
 					if (xiGetE()) {
@@ -2701,6 +2816,7 @@ ev2:
 							break;
 						    default:
 #else
+						    case XINotifyUngrab:
 						    case XINotifyNormal:
 						    case XINotifyWhileGrabbed:
 #endif
@@ -2723,31 +2839,18 @@ ev2:
 					timeHold = 0;
 					goto ev2;
 				}
-				if (!tdevs2 || !xiGetE()) goto ev;
+				x2 += pf[p_round];
+				y2 += pf[p_round];
 				showPtr = 0;
-#undef e
-#define e ((XIDeviceEvent*)ev.xcookie.data)
 //				fprintf(stderr,"ev2 %i %i\n",e->deviceid,ev.xcookie.evtype);
 				res = resX;
 				tt = 0;
 				m = &bmap;
-				devid = e->deviceid;
-				end = (ev.xcookie.evtype == XI_TouchEnd
-						|| (e->flags & XITouchPendingEnd));
-				x2 = e->root_x + pf[p_round], y2 = e->root_y + pf[p_round];
-#if 1
-				if (resDev != devid) {
-					resDev = devid;
-					// force swap monitors if dynamic pan?
-					if (!(pi[p_safe]&64))
-						fixGeometry();
-				}
-#endif
-				g = ((int)x2 <= minf2->x) ? BUTTON_RIGHT : ((int)x2 >= minf2->x2) ? BUTTON_LEFT : ((int)y2 <= minf2->y) ? BUTTON_UP : ((int)y2 >= minf2->y2) ? BUTTON_DOWN : 0;
+				g = minf2 ? ((int)x2 <= minf2->x) ? BUTTON_RIGHT : ((int)x2 >= minf2->x2) ? BUTTON_LEFT : ((int)y2 <= minf2->y) ? BUTTON_UP : ((int)y2 >= minf2->y2) ? BUTTON_DOWN : 0 : 0;
 				if (g) tt |= PH_BORDER;
 				for(i=P; i!=N; i=TOUCH_N(i)){
 					Touch *t1 = &touch[i];
-					if (t1->touchid != e->detail || t1->deviceid != devid) continue;
+					if (t1->touchid != detail || t1->deviceid != devid) continue;
 					to = t1;
 					goto tfound;
 				}
@@ -2758,14 +2861,14 @@ ev2:
 //				{
 					// new touch
 					timeHold = 0;
-					if (end) goto evfree;
+					if (end) goto ev2;
 					to = &touch[N];
 					N=TOUCH_N(N);
 					if (N==P) P=TOUCH_N(P);
-					to->touchid = e->detail;
+					to->touchid = detail;
 					to->deviceid = devid;
-					xiFreeE();
 					TIME(to->time,T);
+					to->z = z1 = z2;
 					to->x = x1 = x2;
 					to->y = y1 = y2;
 					to->tail = 0;
@@ -2817,7 +2920,7 @@ invalidateT:
 					goto ev2;
 //				}
 tfound:
-				xiFreeE();
+				z1 = to->z;
 				x1 = to->x;
 				y1 = to->y;
 				switch (to->g) {
@@ -2918,6 +3021,7 @@ next_dnd:
 //				XFlush(dpy);
 				to->tail = xx;
 				TIME(to->time,T);
+				to->z = z2;
 				to->x = x2;
 				to->y = y2;
 skip:
