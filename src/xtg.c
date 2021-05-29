@@ -2693,7 +2693,7 @@ ev2:
 				    case XI_Leave:
 				    case XI_Enter:
 					if (xiGetE()) {
-						if (e->detail != XINotifyAncestor)
+						//if (e->detail != XINotifyAncestor)
 						    switch (e->mode) {
 #if 0
 						    case XINotifyGrab:
