@@ -336,21 +336,21 @@ char *ph[MAX_PAR] = {
 	"		9(+256) use mode sizes for panning (errors in xrandr tool!)\n"
 	"		10(+512) keep dpi different x & y (image panned non-aspected)\n"
 	"		11(+1024) don't use cached input ABS\n"
-	"		12(+2048) try delete or not create unused (saved) properity\n"
+	"		12(+2048) try delete or not create unused (saved) property\n"
 #ifdef _BACKLIGHT
 	"		13(+4096) track backlight-controlled monitors and off when empty (under construction)\n"
 #endif
 #ifdef XSS
 	"		14(+8192) skip fullscreen windows without ClientMessage (XTerm)\n"
 #endif
-	"		(auto-panning for openbox+tint2: \"xrandr --noprimary\" on early init && \"-s 135\" (7+128))",
-	""
+	"		(auto-panning for openbox+tint2: \"xrandr --noprimary\" on early init && \"-s 135\" (7+128))\n"
+	"\n"
 #ifdef XSS
-	"fullscreen \"content type\" prop.: see \"xrandr --props\" (I want \"Cinema\")"
+	"fullscreen \"content type\" prop.: see \"xrandr --props\" (I want \"Cinema\")\n"
 #endif
-	""
+	"\n"
 #ifdef XSS
-	"fullscreen \"Colorspace\" prop.: see \"xrandr --props\"  (I want \"DCI-P3_RGB_Theater\")"
+	"fullscreen \"Colorspace\" prop.: see \"xrandr --props\"  (I want \"DCI-P3_RGB_Theater\")\n"
 #endif
 };
 #else
@@ -969,7 +969,16 @@ static _short wSetProp(Atom prop, Atom type, void *data, long cnt, _short chk){
 	return setProp(prop,type,PropModeReplace,data,cnt,chk);
 }
 
-
+static void xiSetMask(xiMask mask,int event) {
+	static xiMask msk = {};
+	if (!mask) mask = msk;
+	if (event) XISetMask(mask,event);
+	ximask[0].mask = (void*)mask;
+	ximask[0].deviceid = devid;
+	XISelectEvents(dpy, root, ximask, 1);
+	if (event) XIClearMask(mask,event);
+	ximask[0].mask = NULL;
+}
 
 #ifdef USE_EVDEV
 static void getEvRes(){
@@ -1872,9 +1881,7 @@ static void getHierarchy(){
 			else if (cr.return_pointer != devid && !strncmp(d2->name,cm.name,11)) {
 				m = devid;
 				if (ca.new_master != m) {
-					ximask[0].mask=mTouch;
-					ximask[0].deviceid=m;
-					XISelectEvents(dpy, root, ximask, Nximask);
+					xiSetMask(mTouch,0);
 //					XIUndefineCursor(dpy,m,root);
 //					XIDefineCursor(dpy,m,root,None);
 				}
@@ -1921,12 +1928,8 @@ static void getHierarchy(){
 		    case XIMasterKeyboard:
 			if (!kbdDev) {
 				kbdDev = devid;
-				if (wGetProp(aActWin,0,NULL,-10,0)) break;
-				XISetMask(ximask0,XI_FocusIn);
-				ximask[0].mask = &ximask0;
-				ximask[0].deviceid = kbdDev;
-				XISelectEvents(dpy, root, ximask, Nximask);
-				XIClearMask(ximask0,XI_FocusIn);
+				if (!getWProp(root,aActWin,XA_WINDOW,sizeof(Window)))
+					xiSetMask(ximask0,XI_FocusIn);
 			}
 			break;
 		    default:
@@ -1984,12 +1987,13 @@ static void getHierarchy(){
 			}
 		}
 skip_map:
-		if ((raw&3) != 3) {
-			mTouch = &ximaskTouch;
-			type |= o_raw;
-		}
-		if (raw&4) type |= o_z;
 		if (t && !scroll) type|=o_directTouch;
+		if (raw == 7) type |= o_raw|o_z;
+		else if (raw == 3) type |= o_raw;
+		else if ((type&(o_absolute|o_directTouch)) && mTouch != &ximaskTouch) {
+			mTouch = &ximaskTouch;
+			ERR("xi device %i '%s' raw transformation unknown. broken drivers?",devid,d2->name);
+		}
 		tdevs+=t;
 		// exclude touchscreen with scrolling
 		void *c = NULL;
@@ -1997,8 +2001,7 @@ skip_map:
 		ximask[0].mask = NULL;
 		switch (d2->use) {
 		    case XIFloatingSlave:
-//			if (!t && !scroll) continue;
-			if (!t || scroll) break;
+			if (!(type&o_directTouch)) break;
 			switch (pi[p_floating]) {
 			    case 1:
 				tdevs2++;
@@ -2010,7 +2013,7 @@ skip_map:
 				tdevs2++;
 				if (m) {
 					c = &ca;
-					ximask[0].mask=(void*)&ximask0;
+					ximask[0].mask=(void*)ximask0;
 				} else {
 					ximask[0].mask=mTouch;
 				}
@@ -2018,14 +2021,15 @@ skip_map:
 			}
 			break;
 		    case XISlavePointer:
-			if (!t) ximask[0].mask = (void*)(showPtr ? &ximask0 : &ximaskButton);
-			else if (scroll) ximask[0].mask = (void*)(showPtr ? mTouch : &ximask0);
+			if (!t) ximask[0].mask = (void*)(showPtr ? ximask0 : ximaskButton);
+			else if (scroll) ximask[0].mask = (void*)(showPtr ? mTouch : ximask0);
 			else {
 				tdevs2++;
 				switch (pi[p_floating]) {
 				    case 1:
 					ximask[0].mask=mTouch;
 					XIGrabDevice(dpy,devid,root,0,None,XIGrabModeSync,XIGrabModeTouch,False,ximask);
+//					XIGrabTouchBegin(dpy,devid,root,0,ximask,0,NULL);
 					ximask[0].mask=NULL;
 					break;
 				    case 0:
@@ -2093,7 +2097,7 @@ busy:
 			}
 		}
 		if (type) _add_input(type);
-		if (c) XIChangeHierarchy(dpy, c, 1); 
+		if (c) XIChangeHierarchy(dpy, c, 1);
 		if (ximask[0].mask) XISelectEvents(dpy, root, ximask, Nximask);
 	}
 	switch (pi[p_floating]) {
