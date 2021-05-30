@@ -632,10 +632,9 @@ static inline void _ungrabX(){
 
 #define NdevABS 3
 
-//float devABS[NdevABS] = {0,0,};
-
 typedef struct _abs {
-	double min,max;
+	// "max" used only as "max - min"
+	double min,max_min;
 	int resolution;
 } abs_t;
 
@@ -647,8 +646,6 @@ typedef struct _dinf {
 	Atom mon;
 	int attach0;
 	_short reason;
-//	unsigned int x,y,width,height;
-//	Rotation rotation;
 } dinf_t;
 
 #define o_master 1
@@ -714,16 +711,6 @@ minf_t minf0, *minf = NULL, *minf_last = NULL, *minf1 = NULL, *minf2 = NULL;
 #define MINF_T(x) MINF((minf->type & (x)))
 #define MINF_T2(and,eq) MINF((minf->type & (and)) == (eq))
 #define MINF_PR(x) for(minf=outputs; (minf!=minf_last); minf++) if ((pr=&minf->prop[x])->en)
-
-
-static void fixMMRotation(minf_t *minf) {
-	unsigned long i;
-	if (minf && minf->mwidth > minf->mheight && minf->width < minf->height && minf->mheight) {
-		i = minf->mwidth;
-		minf->mwidth = minf->mheight;
-		minf->mheight = i;
-	}
-}
 
 // usual dpi calculated from height only"
 _short resXY,mon_sz,strict;
@@ -868,25 +855,32 @@ pr_target_t target;
 
 static _short getProp(Atom prop, Atom type, void *data, int pos, long cnt, _short chk){
 	_free(ret);
-	int N = abs(cnt);
+	int N = abs(cnt), r;
+	long detail;
 	_error = 0;
 	switch (target) {
 	    case pr_win:
 		_pr_name = "XGetWindowProperty";
-		XGetWindowProperty(dpy,win,prop,pos,N,False,type,&pr_t,&pr_f,&pr_n,&pr_b,(void*)&ret);
+		detail = win;
+		r = XGetWindowProperty(dpy,win,prop,pos,N,False,type,&pr_t,&pr_f,&pr_n,&pr_b,(void*)&ret);
 		break;
 	    case pr_out:
 		_pr_name = "XRRGetOutputProperty";
+		detail = minf->out;
 		Bool pending = False;
-		XRRGetOutputProperty(dpy,minf->out,prop,pos,N,False,pending,type,&pr_t,&pr_f,&pr_n,&pr_b,(void*)&ret);
+		r = XRRGetOutputProperty(dpy,minf->out,prop,pos,N,False,pending,type,&pr_t,&pr_f,&pr_n,&pr_b,(void*)&ret);
 		break;
 	    case pr_input:
 		_pr_name = "XIGetOutputProperty";
-		XIGetProperty(dpy,devid,prop,0,N,False,type,&pr_t,&pr_f,&pr_n,&pr_b,(void*)&ret);
+		detail = devid;
+		r = XIGetProperty(dpy,devid,prop,0,N,False,type,&pr_t,&pr_f,&pr_n,&pr_b,(void*)&ret);
 		break;
 	    default:
 		ERR("BUG!");
 		return 0;
+	}
+	if (r != Success) {
+		ERR("%i %s %s %li",r,_pr_name,natom(0,prop),detail);
 	}
 	if ((chk&0x10) && !_error) {
 //		XFlush(dpy);
@@ -1039,15 +1033,15 @@ static void map_to(){
 	}
 
 	if (minf->r90) {
-		x/=minf0.width;
-		y/=minf0.height;
-		h/=minf0.width;
-		w/=minf0.height;
+		x/=minf0.width1;
+		y/=minf0.height1;
+		h/=minf0.width1;
+		w/=minf0.height1;
 	} else {
-		x/=minf0.width;
-		y/=minf0.height;
-		w/=minf0.width;
-		h/=minf0.height;
+		x/=minf0.width1;
+		y/=minf0.height1;
+		w/=minf0.width1;
+		h/=minf0.height1;
 	}
 
 	switch (minf->rotation) {
@@ -1589,18 +1583,7 @@ ret: {}
 //    _ungrabX(); // forceUngrab() instead
 }
 
-static void maps_to_all(_short all){
-	DINF(dinf->mon) MINF(minf->name == dinf->mon) {
-//		if (!(minf->type&o_active)) break
-		if (!all && !((dinf->type|minf->type)&o_changed)) break;
-		if ((dinf->type&o_changed)) dinf->type ^= o_changed;
-		if ((minf->type&o_changed)) minf->type ^= o_changed;
-		map_to();
-		break;
-	}
-}
-
-static _short  setScrSize(int dpi100x,int dpi100y){
+static _short setScrSize(int dpi100x,int dpi100y){
 	unsigned long px=0, py=0, py1=0, mpx = 0, mpy = 0;
 	MINF_T(o_active) {
 		px = _max(minf->x + minf->width, px);
@@ -1610,22 +1593,30 @@ static _short  setScrSize(int dpi100x,int dpi100y){
 		mpy += minf->mheight;
 	}
 	py = _max(py,py1);
+#ifndef MINIMAL
+	int minW,minH,maxW,maxH;
+	if (XRRGetScreenSizeRange(dpy,root,&minW,&minH,&maxW,&maxH)) {
+		if (px < minW) px = minW;
+		else if (px > maxW) px = maxW;
+		if (py < minH) py = minH;
+		else if (py > maxH) py = maxH;
+	}
+#endif
 	if (dpi100x) mpx = 25.4*100*px/dpi100x;
 	if (dpi100y) mpy = 25.4*100*py/dpi100y;
-	if (minf0.width != px || minf0.height != py || minf0.mwidth != mpx || minf0.mheight != mpy) {
+	if (minf0.width != px || minf0.height != py || minf0.mwidth != mpx || minf0.mheight != mpy || xrevent1 < 0) {
 		DBG("set screen size %lux%lu / %lux%lumm - %.1f %.1fdpi",px,py,mpx,mpy,25.4*px/mpx,25.4*py/mpy);
+#ifndef MINIMAL
 		XFlush(dpy);
 		XSync(dpy,False);
+		_error = 0;
+#endif
 		XRRSetScreenSize(dpy,root,px,_max(py,py1),mpx,mpy);
+#ifndef MINIMAL
 		XFlush(dpy);
 		XSync(dpy,False);
 		if (_error) return 0;
-		minf0.width = px;
-		minf0.height = py;
-		minf0.mwidth = mpx;
-		minf0.mheight = mpy;
-		//xrPropFlush();
-		maps_to_all(1);
+#endif
 	}
 	return 1;
 }
@@ -1771,7 +1762,7 @@ find1:
 	}
 ex:
 	xrrFree();
-	if (pan_cnt) maps_to_all(0);
+	if (pan_cnt) oldShowPtr |= 8|16;
 }
 
 _short busy;
@@ -1820,11 +1811,13 @@ static void _add_input(_short t){
 	dinf1 = &inputs1[i];
 	DINF(dinf->devid == devid) {
 		*dinf1 = *dinf;
+		if (dinf1->type&o_changed) t |= o_changed;
 		dinf1->type = t; // reset
 		return;
 	}
 	dinf1->devid = devid;
 	dinf1->attach0 = d2->attachment;
+	t |= o_changed;
 ex:
 	dinf1->type |= t;
 }
@@ -1849,6 +1842,7 @@ static void touchToMon(){
 	DINF((dinf->type&o_absolute) && (dinf->reason || !dinf->mon)) {
 		Atom m = 0;
 		if (_REASON(mon,0,"by command line")) continue;
+		devid = dinf->devid;
 		xiGetProp(aDevMon,XA_ATOM,&m,1,0);
 		if (_REASON(m,0,"by xinput property")) continue;
 		int n = 0, n0 = 0;
@@ -1882,15 +1876,19 @@ static void touchToMon(){
 			} //else break;
 		} else if (!(minf->type&o_msize)) {
 			_reason("monitor size from device (broken video driver or monitor)");
-			minf->mwidth = dinf->ABS[!minf->r90];
-			minf->mheight = dinf->ABS[minf->r90];
-			minf->mwidth1 = dinf->ABS[0];
-			minf->mheight1 = dinf->ABS[1];
-			minf->type |= o_changed;
+			minf->mwidth = dinf->ABS[!minf->r90] + .5;
+			minf->mheight = dinf->ABS[minf->r90] + .5;
+			minf->mwidth1 = dinf->ABS[0] + .5;
+			minf->mheight1 = dinf->ABS[1] + .5;
+			//minf->type |= o_changed;
 			dinf->type |= o_changed;
 		}
+		if (!((dinf->type|minf->type)&o_changed)) break;
+		if ((dinf->type&o_changed)) dinf->type ^= o_changed;
+		if ((minf->type&o_changed)) minf->type ^= o_changed;
+		map_to();
+		break;
 	}
-	maps_to_all(0);
 }
 
 static void getHierarchy(){
@@ -1994,7 +1992,7 @@ static void getHierarchy(){
 					_add_input(type);
 					if (e->number >= 0 && e->number <= NdevABS && e->max > e->min) {
 						dinf1->xABS[e->number].min = e->min;
-						dinf1->xABS[e->number].max = e->max;
+						dinf1->xABS[e->number].max_min = e->max - e->min;;
 						dinf1->xABS[e->number].resolution = e->resolution;
 						raw |= 1 << e->number;
 					}
@@ -2176,7 +2174,7 @@ busy:
 	DINF((dinf->type&o_absolute) && !(dinf->ABS[0]>0) && !(dinf->ABS[1]>0) && dinf->xABS[0].resolution>=1000) {
 		_short i;
 		for (i=0;i<NdevABS;i++) {
-			if (dinf->xABS[i].resolution>1000) dinf->ABS[i] = (dinf->xABS[0].max - dinf->xABS[0].min)/(dinf->xABS[i].resolution/1000.);
+			if (dinf->xABS[i].resolution>1000) dinf->ABS[i] = (dinf->xABS[0].max_min)/(dinf->xABS[i].resolution/1000.);
 		}
 	}
 
@@ -2203,7 +2201,7 @@ static void _signals(void *f){
 
 static void _eXit(int sig){
 	if (sig == SIGHUP) {
-		oldShowPtr |= 2|8;
+		oldShowPtr |= 2|8|16;
 		return;
 	}
 	_signals(SIG_DFL);
@@ -2246,7 +2244,7 @@ static void _eXit(int sig){
 }
 
 static void setShowCursor(){
-    	switch (oldShowPtr&0xf8) {
+	switch (oldShowPtr&0xf8) {
 	    case (8|16):
 	    case 8:
 		oldShowPtr ^= 8;
@@ -2314,14 +2312,25 @@ static void initmap(){
 
 static void _scr_size(){
 	minf_t m = minf0;
-	minf0.width = DisplayWidth(dpy,screen);
-	minf0.height = DisplayHeight(dpy,screen);
-	minf0.mwidth = DisplayWidthMM(dpy,screen);
-	minf0.mheight = DisplayHeightMM(dpy,screen);
-	fixMMRotation(&minf0);
-	if (minf != minf_last && memcmp(&minf0,&m,sizeof(m))) {
-		maps_to_all(1);
-		oldShowPtr |= 8;
+	minf0.width1 = minf0.width = DisplayWidth(dpy,screen);
+	minf0.height1 = minf0.height = DisplayHeight(dpy,screen);
+	minf0.mwidth1 = minf0.mwidth = DisplayWidthMM(dpy,screen);
+	minf0.mheight1 = minf0.mheight = DisplayHeightMM(dpy,screen);
+	if (!xrr && minf0.mwidth > minf0.mheight && minf0.width < minf0.height && minf0.mheight) {
+		minf0.rotation = RR_Rotate_90;
+		minf0.mwidth = minf0.mheight1;
+		minf0.mheight = minf0.mwidth1;
+	}
+	if (minf0.rotation&(RR_Rotate_90|RR_Rotate_270)) {
+		minf0.r90 = 1;
+		minf0.mwidth1 = minf0.mheight;
+		minf0.mheight1 = minf0.mwidth;
+		minf0.width1 = minf0.height;
+		minf0.height1 = minf0.width;
+	}
+	if (xrevent1 < 0 || memcmp(&minf0,&m,sizeof(m))) {
+		DINF(1) dinf->type |= o_changed;
+		oldShowPtr |= 8|16;
 	}
 }
 #endif
@@ -2422,7 +2431,7 @@ static int xerrh(Display *dpy, XErrorEvent *err){
 		break;
 #ifdef XTG
 	    case BadAccess: // second XI_Touch* root listener/etc
-		oldShowPtr |= 2|8;
+		oldShowPtr |= 2|8|16;
 		showPtr = 1;
 		break;
 #endif
@@ -2771,7 +2780,7 @@ ev2:
 					y2 = e->root_y;
 					if ((dinf->type&o_z) && e->valuators.mask_len && (e->valuators.mask[0]&7)==7) {
 						abs_t *a = &dinf2->xABS[2];
-						z2 = (e->valuators.values[2] - a->min)*99/(a->max - a->min) + 1;
+						z2 = (e->valuators.values[2] - a->min)*99/(a->max_min) + 1;
 					} else z2 = 0;
 					xiFreeE();
 					break;
@@ -2789,33 +2798,60 @@ ev2:
 					detail = e->detail;
 					end = (ev.xcookie.evtype == XI_RawTouchEnd
 					    || (e->flags & XITouchPendingEnd));
+					if (end
+					    // && x2 == 0. && y2 == 0.
+						) {
+						xiFreeE();
+						for(i=P; i!=N; i=TOUCH_N(i)){
+							Touch *t1 = &touch[i];
+							if (t1->touchid != detail || t1->deviceid != devid) continue;
+							to = t1;
+							x2 = to->x;
+							y2 = to->y;
+							z2 = to->z;
+
+							showPtr = 0;
+							res = resX;
+							tt = 0;
+							m = &bmap;
+							g = ((int)x2 <= minf2->x) ? BUTTON_RIGHT : ((int)x2 >= minf2->x2) ? BUTTON_LEFT : ((int)y2 <= minf2->y) ? BUTTON_UP : ((int)y2 >= minf2->y2) ? BUTTON_DOWN : 0;
+							if (g) tt |= PH_BORDER;
+
+							goto tfound;
+						}
+						goto ev2;
+					}
 #define _raw(i) e->raw_values[i]
 //#define _raw(i) e->valuators.values[i]
 					abs_t *a = &dinf2->xABS[0];
-					x2 = (_raw(0) - a->min)*minf2->width1/(a->max - a->min);
+					x2 = (_raw(0) - a->min)*minf2->width1/(a->max_min);
 					a = &dinf2->xABS[1];
-					y2 = (_raw(1) - a->min)*minf2->height1/(a->max - a->min);
-					double xx = x2;
+					y2 = (_raw(1) - a->min)*minf2->height1/(a->max_min);
 					switch (minf2->rotation) {
 					    case RR_Rotate_0:
 						x2 += minf2->x;
 						y2 += minf2->y;
 					    case RR_Rotate_90:
-						x2 = minf2->width1 - y2 + minf2->y;
-						y2 = xx + minf2->x;
+						xx = x2;
+						x2 = minf2->x + minf2->height1 - y2;
+						y2 = minf2->y + xx;
 						break;
 					    case RR_Rotate_180:
-						x2 = minf2->width1 - x2 + minf2->x;
-						y2 = minf2->height1 - y2 + minf2->y;
+						x2 = minf2->x + minf2->width1 - x2;
+						y2 = minf2->y + minf2->height1 - y2;
 						break;
 					    case RR_Rotate_270:
-						x2 = y2 + minf2->y;
-						y2 = minf2->height1 - xx +  + minf2->x;
+						xx = x2;
+						x2 = minf2->x + y2;
+						y2 = minf2->y + minf2->width1 - xx;
 						break;
+					    default:
+						ERR("not implemented rotation type");
+						goto evfree;
 					}
 					if ((dinf->type&o_z) && (e->valuators.mask[0]&4)) {
 						a = &dinf2->xABS[2];
-						z2 = (_raw(2) - a->min)*99/(a->max - a->min) + 1;
+						z2 = (_raw(2) - a->min)*99/(a->max_min) + 1;
 					} else z2 = 0;
 					xiFreeE();
 					break;
@@ -2907,7 +2943,6 @@ ev2:
 				x2 += pf[p_round];
 				y2 += pf[p_round];
 				showPtr = 0;
-//				fprintf(stderr,"ev2 %i %i\n",e->deviceid,ev.xcookie.evtype);
 				res = resX;
 				tt = 0;
 				m = &bmap;
@@ -3185,10 +3220,14 @@ evfree:
 			if (e.window == root) {
 #ifndef MINIMAL
 				if (!xrr) {
+					oldShowPtr |= 8|16;
 					minf0.width = e.width;
 					minf0.height = e.height;
-					fixMMRotation(&minf0);
-					oldShowPtr |= 8;
+#if 1
+					dpy->screens[screen].width = e.width;
+					dpy->screens[screen].height  = e.height;
+					_scr_size();
+#endif
 				}
 #endif
 				break;
@@ -3254,10 +3293,11 @@ evfree:
 			if (ev.type == xrevent) {
 				// RANDR time(s) is static
 				//TIME(T,e->timestamp > e->config_timestamp ? e->timestamp : e->config_timestamp);
-				XRRUpdateConfiguration(&ev);
-				_scr_size();
-				oldShowPtr |= 8;
-				//minf0.rotation = e->rotation;
+				if (xrevent1 < 0 || minf0.rotation != e->rotation) {
+					minf0.rotation = e->rotation;
+					oldShowPtr |= 8|16;
+				}
+				if (XRRUpdateConfiguration(&ev)) _scr_size();
 				break;
 			}
 #ifdef RROutputPropertyNotifyMask
