@@ -295,25 +295,33 @@ int pi[] = PAR_DEFS;
 double pf[] = PAR_DEFS;
 char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:s:c:C:h";
 char *ph[MAX_PAR] = {
-	"touch device 0=auto",
-	"min fingers",
-	"max fingers",
-	"button 2|3 hold time, ms",
-	"min swipe x/y or y/x",
-	"swipe size (>0 - dots, <0 - -mm)",
-	"add to coordinates (to round to integer)",
+	"touch device 0=auto", //d
+
+	"min fingers", //m
+
+	"max fingers", //M
+
+	"button 2|3 hold time, ms", //t
+
+	"min swipe x/y or y/x", //x
+
+	"swipe size (>0 - dots, <0 - -mm)", //r
+
+	"add to coordinates (to round to integer)", //e
+
 	"	1=floating devices\n"
 	"		0=master (visual artefacts, but enable native masters touch clients)\n"
-	"		2=dynamic master/floating (firefox segfaults)",
-	"		3=simple hook all touch events (useful +4=7 - raw)",
-	"		+4=use XI_RawTouch* events if possible",
+	"		2=dynamic master/floating (firefox segfaults)\n"
+	"		3=simple hook all touch events (useful +4=7 - raw)\n"
+	"		+4=use XI_RawTouch* events if possible\n", //f
+
 	"RandR monitor name\n"
 	"		or number 1+\n"
 	"		'-' strict (only xinput prop 'xtg output' name)"
 #ifdef USE_EVDEV
 	"\n		or negative -<x> to find monitor, using evdev touch input size, grow +x\n"
 #endif
-	"			for (all|-d) absolute pointers (=xinput map-to-output)",
+	"			for (all|-d) absolute pointers (=xinput map-to-output)", //R
 	"map-to-output add field around screen, mm (if -R)"
 #ifdef USE_EVDEV
 	"\n		or \"+\" to use input-output size diff (may be just float-int truncation)",
@@ -339,18 +347,16 @@ char *ph[MAX_PAR] = {
 	"		12(+2048) try delete or not create unused (saved) property\n"
 #ifdef _BACKLIGHT
 	"		13(+4096) track backlight-controlled monitors and off when empty (under construction)\n"
-#endif
+#endif	
 #ifdef XSS
 	"		14(+8192) skip fullscreen windows without ClientMessage (XTerm)\n"
 #endif
-	"		(auto-panning for openbox+tint2: \"xrandr --noprimary\" on early init && \"-s 135\" (7+128))\n"
-	"\n"
+	"		(auto-panning for openbox+tint2: \"xrandr --noprimary\" on early init && \"-s 135\" (7+128))\n",
 #ifdef XSS
-	"fullscreen \"content type\" prop.: see \"xrandr --props\" (I want \"Cinema\")\n"
+	"fullscreen \"content type\" prop.: see \"xrandr --props\" (I want \"Cinema\")",
 #endif
-	"\n"
 #ifdef XSS
-	"fullscreen \"Colorspace\" prop.: see \"xrandr --props\"  (I want \"DCI-P3_RGB_Theater\")\n"
+	"fullscreen \"Colorspace\" prop.: see \"xrandr --props\"  (I want \"DCI-P3_RGB_Theater\")\n",
 #endif
 };
 #else
@@ -641,16 +647,18 @@ typedef struct _dinf {
 	Atom mon;
 	int attach0;
 	_short reason;
-	unsigned int x,y,width,height;
+//	unsigned int x,y,width,height;
+//	Rotation rotation;
 } dinf_t;
 
-#define o_master_ptr 1
+#define o_master 1
 #define o_floating 2
 #define o_absolute 4
-#define o_directTouch 8
+//#define o_changed 8
 #define o_raw 16
 #define o_z 32
-///#define o_scroll 64
+#define o_directTouch 64
+#define o_kbd 128
 
 #define NINPUT_STEP 4
 dinf_t *inputs = NULL, *inputs1, *dinf, *dinf1, *dinf2, *dinf_last = NULL;
@@ -673,7 +681,7 @@ xrp_t prI;
 typedef struct _minf {
 	_short type;
 	unsigned int x,y,x2,y2,width,height,width0,height0,width1,height1;
-	unsigned long mwidth,mheight;
+	unsigned long mwidth,mheight,mwidth1,mheight1;
 	RROutput out;
 	RRCrtc crt;
 	Rotation rotation;
@@ -1012,26 +1020,36 @@ ret:
 
 static void map_to(){
 	devid = dinf->devid;
-	float x=minf->x,y=minf->y,w=minf->width,h=minf->height,dx=pf[p_touch_add],dy=pf[p_touch_add];
+	double x=minf->x,y=minf->y,w=minf->width1,h=minf->height1,dx=pf[p_touch_add],dy=pf[p_touch_add];
 	_short m = 1;
+
 	if (pa[p_touch_add] && pa[p_touch_add][0] == '+' && pa[p_touch_add][1] == 0) {
-		if (minf->mwidth && dinf->ABS[0]!=0.) dx = (dinf->ABS[0] - minf->mwidth)/2;
-		if (minf->mheight && dinf->ABS[1]!=0.) dy = (dinf->ABS[1] - minf->mheight)/2;
+		if (minf->mwidth1 && dinf->ABS[0]!=0.) dx = (dinf->ABS[0] - minf->mwidth1)/2;
+		if (minf->mheight1 && dinf->ABS[1]!=0.) dy = (dinf->ABS[1] - minf->mheight1)/2;
 	}
-	if (dx!=0 && minf->mwidth) {
-		float b = (w/minf->mwidth)*dx;
-		x-=b;
-		w+=b*2;
+	if (dx!=0. && minf->mwidth1) {
+		dx *= w/minf->mwidth1;
+		x-=dx;
+		w+=dx*2;
 	}
-	if (dy!=0 && minf->mheight) {
-		float b = (h/minf->mheight)*dy;
-		y-=b;
-		h+=b*2;
+	if (dy!=0. && minf->mheight1) {
+		dy *= h/minf->mheight1;
+		y-=dy;
+		h+=dy*2;
 	}
-	x/=minf0.width;
-	y/=minf0.height;
-	w/=minf0.width;
-	h/=minf0.height;
+
+	if (minf->r90) {
+		x/=minf0.width;
+		y/=minf0.height;
+		h/=minf0.width;
+		w/=minf0.height;
+	} else {
+		x/=minf0.width;
+		y/=minf0.height;
+		w/=minf0.width;
+		h/=minf0.height;
+	}
+
 	switch (minf->rotation) {
 	    case RR_Reflect_X|RR_Rotate_0:
 	    case RR_Reflect_Y|RR_Rotate_180:
@@ -1069,7 +1087,7 @@ static void map_to(){
 
 static void fixMonSize(minf_t *minf, double *dpmw, double *dpmh) {
 	if (!minf->mheight) return;
-	double _min, _max, m,  mh = minf->height / *dpmh;
+	double _min, _max, m,  mh = minf->height1 / (minf->r90?*dpmw:*dpmh);
 
 	// diagonal -> 4:3 height
 	if (
@@ -1143,7 +1161,7 @@ static void chBL(Window w, _short obscured, _short entered) {
 #define __check_entered
 static void checkEntered(){
 //	DINF(o_master_ptr|o_floating) {
-	DINF(o_master_ptr) {
+	DINF((dinf->type&(o_master|o_floating)) && !((dinf->type&o_kbd)) {
 		Window rw,rc;
 		XIButtonState b;
 		XIModifierState m;
@@ -1472,8 +1490,8 @@ static void xrMons0(){
 		}
 	}
 	if (minf->mwidth != oinf->mm_width || minf->mheight != oinf->mm_height) {
-		minf->mwidth = oinf->mm_width;
-		minf->mheight = oinf->mm_height;
+		minf->mwidth1 = minf->mwidth = oinf->mm_width;
+		minf->mheight1 = minf->mheight = oinf->mm_height;
 		minf->type |= o_changed;
 	}
 	if (minf->mwidth && minf->mheight) minf->type |= o_msize;
@@ -1525,7 +1543,7 @@ static void xrMons0(){
 	}
 	minf->width1 = minf->width0;
 	minf->height1 = minf->height0;
-	if ((minf->r90 = !!(minf->rotation & (RR_Rotate_90|RR_Rotate_180)))) {
+	if ((minf->r90 = !!(minf->rotation & (RR_Rotate_90|RR_Rotate_270)))) {
 		i = minf->width;
 		minf->width = minf->height;
 		minf->height = i;
@@ -1547,7 +1565,7 @@ static void xrMons0(){
     }
     MINF_T(o_changed) {
 	oldShowPtr |= 16;
-	break;
+	DINF(dinf->mon && dinf->mon == minf->name) dinf->type |= o_changed;
     }
     if (!active && non_desktop)
 	MINF_T(o_non_desktop) pr_set(xrp_non_desktop,1);
@@ -1571,23 +1589,71 @@ ret: {}
 //    _ungrabX(); // forceUngrab() instead
 }
 
+static void maps_to_all(_short all){
+	DINF(dinf->mon) MINF(minf->name == dinf->mon) {
+//		if (!(minf->type&o_active)) break
+		if (!all && !((dinf->type|minf->type)&o_changed)) break;
+		if ((dinf->type&o_changed)) dinf->type ^= o_changed;
+		if ((minf->type&o_changed)) minf->type ^= o_changed;
+		map_to();
+		break;
+	}
+}
+
+static _short  setScrSize(int dpi100x,int dpi100y){
+	unsigned long px=0, py=0, py1=0, mpx = 0, mpy = 0;
+	MINF_T(o_active) {
+		px = _max(minf->x + minf->width, px);
+		py += minf->height;
+		py1 = _max(minf->y + minf->height, py1);
+		mpx = _max(minf->mwidth,mpx);
+		mpy += minf->mheight;
+	}
+	py = _max(py,py1);
+	if (dpi100x) mpx = 25.4*100*px/dpi100x;
+	if (dpi100y) mpy = 25.4*100*py/dpi100y;
+	if (minf0.width != px || minf0.height != py || minf0.mwidth != mpx || minf0.mheight != mpy) {
+		DBG("set screen size %lux%lu / %lux%lumm - %.1f %.1fdpi",px,py,mpx,mpy,25.4*px/mpx,25.4*py/mpy);
+		XFlush(dpy);
+		XSync(dpy,False);
+		XRRSetScreenSize(dpy,root,px,_max(py,py1),mpx,mpy);
+		XFlush(dpy);
+		XSync(dpy,False);
+		if (_error) return 0;
+		minf0.width = px;
+		minf0.height = py;
+		minf0.mwidth = mpx;
+		minf0.mheight = mpy;
+		//xrPropFlush();
+		maps_to_all(1);
+	}
+	return 1;
+}
+
 unsigned int pan_x,pan_y,pan_cnt;
 static void _pan(minf_t *m) {
 	if (pi[p_safe]&64 || !m || !m->crt) return;
-	xrrSet();
-	XRRPanning *p = XRRGetPanning(dpy,xrrr,m->crt);
+	XRRPanning *p = XRRGetPanning(dpy,xrrr,m->crt), p1;
 	if (!p) return;
-	if (p->top != pan_y || p->left || p->width != m->width1 || p->height != m->height1) {
-		p->top = pan_y;
-		p->left = 0;
-		p->width = m->width1;
-		p->height = m->height1;
-		DBG("crtc %lu panning %ix%i+%i+%i/track:%ix%i+%i+%i/border:%i/%i/%i/%i",m->crt,p->width,p->height,p->left,p->top,  p->track_width,p->track_height,p->track_left,p->track_top,  p->border_left,p->border_top,p->border_right,p->border_bottom);
-		if (XRRSetPanning(dpy,xrrr,m->crt,p)==Success) pan_cnt++;
+	memset(&p1,0,sizeof(p1));
+	p1.top = pan_y;
+	p1.width = m->width1;
+	p1.height = m->height1;
+	if (p1.width != p->width || p1.height != p->height || p1.top != p->top ||
+		(p->left|p->track_width|p->track_height|p->track_left|p->track_top|p->border_left|p->border_top|p->border_right|p->border_bottom)) {
+		DBG("crtc %lu panning %ix%i+%i+%i/track:%ix%i+%i+%i/border:%i/%i/%i/%i -> %ix%i+%i+%i/{0}",
+			m->crt,p->width,p->height,p->left,p->top,  p->track_width,p->track_height,p->track_left,p->track_top,  p->border_left,p->border_top,p->border_right,p->border_bottom,
+			p1.width,p1.height,p1.left,p1.top);
+		if (XRRSetPanning(dpy,xrrr,m->crt,&p1)==Success) {
+			pan_cnt++;
+			m->type |= o_changed;
+//			XFlush(dpy);
+//			XSync(dpy,False);
+		}
 	}
-	pan_y = _max(pan_y,p->top + m->height0 + p->border_top + p->border_bottom);
-	pan_x = _max(pan_x,p->left + m->width0 + p->border_left + p->border_right);
 	XRRFreePanning(p);
+	pan_x = _max(pan_x, m->width);
+	pan_y += m->height;
 }
 
 
@@ -1631,7 +1697,7 @@ static void fixGeometry(){
 	if (findResDev() && resDev == devid) return;
 	if (minf2) goto find1;
 	DINF((dinf->type&o_directTouch)) {
-		MINF(minf->type&o_active && dinf->mon == minf->name) {
+		MINF((minf->type&o_active) && dinf->mon == minf->name) {
 			minf2 = minf;
 			goto find1;
 		}
@@ -1688,53 +1754,24 @@ find1:
 		}
 		_pan(minf2);
 
-		if (!pan_x)
-			pan_x = minf0.width;
-		if (!pan_y)
-			pan_y = minf0.height;
-		if (pan_cnt && (pan_x != minf0.width || pan_y != minf0.height)) {
-			XFlush(dpy);
-			XSync(dpy,False);
-		} //else if (!do_dpi) goto noxrr1;
+//		xrPropFlush();
+
+		if (!pan_x) pan_x = minf0.width;
+		if (!pan_y) pan_y = minf0.height;
 
 		if (do_dpi) {
 			if (minf2->crt && minf1->crt != minf2->crt && minf2->crt) fixMonSize(minf2, &dpmw, &dpmh);
 			fixMonSize(minf1, &dpmw, &dpmh);
-		}
-
-		unsigned int mh, mw;
-rep_size:
-		if (do_dpi) {
 			if (!(pi[p_safe]&512))
 				if (dpmh > dpmw) dpmw = dpmh;
 				else dpmh = dpmw;
-			mh = pan_y / dpmh + .5;
-			mw = pan_x / dpmw + .5;
-		} else {
-			// keep dpi after panning
-			mh = (pan_y * minf0.mheight + .0) / minf0.height + .5;
-			mw = (pan_x * minf0.mwidth + .0) / minf0.width + .5;
-		}
-
-		if (
-		    pan_cnt ||	// force RRScreenChangeNotify event after panning for pre-RandR 1.2 clients
-		    mw != minf0.mwidth || mh != minf0.mheight || pan_y != minf0.height || pan_x != minf0.width) {
-			DBG("dpi %.1fx%.1f -> %.1fx%.1f dots/mm %ux%u/%lux%lu -> %ux%u/%ux%u",25.4*minf0.width/minf0.mwidth,25.4*minf0.height/minf0.mheight,25.4*pan_x/mw,25.4*pan_y/mh,minf0.width,minf0.height,minf0.mwidth,minf0.mheight,pan_x,pan_y,mw,mh);
-			_error = 0;
-			XRRSetScreenSize(dpy, root, pan_x, pan_y, mw, mh);
-			if (pan_x != minf0.width || pan_y != minf0.height) {
-				XFlush(dpy);
-				XSync(dpy,False);
-				if (_error) {
-					pan_x = minf0.width;
-					pan_y = minf0.height;
-					goto rep_size;
-				}
-			}
-		}
+				if (setScrSize(dpmw*25.4*100,dpmh*25.4*100)) goto ex;
+		} else if (!pan_cnt) goto ex;
+		setScrSize(0,0);
 	}
 ex:
 	xrrFree();
+	if (pan_cnt) maps_to_all(0);
 }
 
 _short busy;
@@ -1801,13 +1838,13 @@ static _short _REASON(Atom m,_short r,char *txt){
 	dinf->reason=r;
 	if (dinf->mon!=m) {
 		dinf->mon=m;
+		dinf->type |= o_changed;
 		_reason(txt);
 	}
 	return 1;
 }
 
 static void touchToMon(){
-	unsigned long xy[2];
 	minf = minf_last;
 	DINF((dinf->type&o_absolute) && (dinf->reason || !dinf->mon)) {
 		Atom m = 0;
@@ -1836,30 +1873,24 @@ static void touchToMon(){
 		_REASON(dinf->mon,dinf->reason,"");
 	}
 	DINF(dinf->mon) MINF(minf->name == dinf->mon) {
-		xy[0]=dinf->ABS[0];
-		xy[1]=dinf->ABS[1];
-		if (!xy[0] || !xy[1]) {
+		if (!(dinf->ABS[0]>.0 && dinf->ABS[1]>.0)) {
 			if (minf->type&o_msize) {
 				_reason("input size from monitor");
-				xy[minf->r90] = minf->mwidth;
-				xy[!minf->r90] = minf->mheight;
-			} else break;
+				dinf->ABS[0] = minf->mwidth1;
+				dinf->ABS[1] = minf->mheight1;
+				dinf->type |= o_changed;
+			} //else break;
 		} else if (!(minf->type&o_msize)) {
 			_reason("monitor size from device (broken video driver or monitor)");
-			minf->mwidth = xy[minf->r90];
-			minf->mheight = xy[minf->r90];
+			minf->mwidth = dinf->ABS[!minf->r90];
+			minf->mheight = dinf->ABS[minf->r90];
+			minf->mwidth1 = dinf->ABS[0];
+			minf->mheight1 = dinf->ABS[1];
+			minf->type |= o_changed;
+			dinf->type |= o_changed;
 		}
-//		if (!(minf->type&o_active)) break
-		if (dinf->x != minf->x || dinf->y != minf->y ||
-			    dinf->width != minf->width || dinf->height != minf->height) {
-				dinf->x = minf->x;
-				dinf->y = minf->y;
-				dinf->width = minf->width;
-				dinf->height = minf->height;
-				map_to();
-		}
-		break;
 	}
+	maps_to_all(0);
 }
 
 static void getHierarchy(){
@@ -1909,9 +1940,11 @@ static void getHierarchy(){
 		switch (d2->use) {
 		    case XIMasterPointer:
 #ifdef __check_entered
-			type|=o_master_ptr;
-#endif
+			type|=o_master;
 			break;
+#else
+			continue;
+#endif
 		    case XIFloatingSlave:
 #ifdef __check_entered
 			type|=o_floating;
@@ -1924,14 +1957,16 @@ static void getHierarchy(){
 			continue;
 //		    case XISlaveKeyboard:
 //			if (strstr(d2->name," XTEST ")) continue;
+//			type |= o_kbd;
 //			break;
 		    case XIMasterKeyboard:
+			// type |= o_kbd|o_master;
 			if (!kbdDev) {
 				kbdDev = devid;
 				if (!getWProp(root,aActWin,XA_WINDOW,sizeof(Window)))
 					xiSetMask(ximask0,XI_FocusIn);
 			}
-			break;
+			continue;
 		    default:
 			continue;
 		}
@@ -1974,6 +2009,7 @@ static void getHierarchy(){
 				break;
 			}
 		}
+		if (devid ==2 ) ERR("NO xi device %i '%s' raw transformation unknown. broken drivers? %i",devid,d2->name,type);
 		if (pa[p_device] && *pa[p_device]) {
 			if (!strcmp(pa[p_device],d2->name) || pi[p_device] == devid) {
 				t = 1;
@@ -1987,8 +2023,10 @@ static void getHierarchy(){
 			}
 		}
 skip_map:
+
 		if (t && !scroll) type|=o_directTouch;
-		if (raw == 7) type |= o_raw|o_z;
+		if (type&(o_master|o_kbd)) continue;
+		else if (raw == 7) type |= o_raw|o_z;
 		else if (raw == 3) type |= o_raw;
 		else if ((type&(o_absolute|o_directTouch)) && mTouch != &ximaskTouch) {
 			mTouch = &ximaskTouch;
@@ -2275,11 +2313,16 @@ static void initmap(){
 }
 
 static void _scr_size(){
+	minf_t m = minf0;
 	minf0.width = DisplayWidth(dpy,screen);
 	minf0.height = DisplayHeight(dpy,screen);
 	minf0.mwidth = DisplayWidthMM(dpy,screen);
 	minf0.mheight = DisplayHeightMM(dpy,screen);
 	fixMMRotation(&minf0);
+	if (minf != minf_last && memcmp(&minf0,&m,sizeof(m))) {
+		maps_to_all(1);
+		oldShowPtr |= 8;
+	}
 }
 #endif
 
@@ -2748,10 +2791,28 @@ ev2:
 					    || (e->flags & XITouchPendingEnd));
 #define _raw(i) e->raw_values[i]
 //#define _raw(i) e->valuators.values[i]
-					abs_t *a = &dinf2->xABS[minf2->r90];
-					x2 = minf2->x + (_raw(0) - a->min)*minf2->width/(a->max - a->min);
-					a = &dinf2->xABS[!minf2->r90];
-					y2 = minf2->y + (_raw(1) - a->min)*minf2->height/(a->max - a->min);
+					abs_t *a = &dinf2->xABS[0];
+					x2 = (_raw(0) - a->min)*minf2->width1/(a->max - a->min);
+					a = &dinf2->xABS[1];
+					y2 = (_raw(1) - a->min)*minf2->height1/(a->max - a->min);
+					double xx = x2;
+					switch (minf2->rotation) {
+					    case RR_Rotate_0:
+						x2 += minf2->x;
+						y2 += minf2->y;
+					    case RR_Rotate_90:
+						x2 = minf2->width1 - y2 + minf2->y;
+						y2 = xx + minf2->x;
+						break;
+					    case RR_Rotate_180:
+						x2 = minf2->width1 - x2 + minf2->x;
+						y2 = minf2->height1 - y2 + minf2->y;
+						break;
+					    case RR_Rotate_270:
+						x2 = y2 + minf2->y;
+						y2 = minf2->height1 - xx +  + minf2->x;
+						break;
+					}
 					if ((dinf->type&o_z) && (e->valuators.mask[0]&4)) {
 						a = &dinf2->xABS[2];
 						z2 = (_raw(2) - a->min)*99/(a->max - a->min) + 1;
@@ -3205,7 +3266,6 @@ evfree:
 			if (ev.type == xrevent1) {
 				// RANDR time(s) is static
 				//XRRTimes(dpy,screen,&T);
-
 				switch (e->subtype) {
 #ifndef MINIMAL
 #undef e
