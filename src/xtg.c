@@ -635,6 +635,7 @@ static inline void _ungrabX(){
 
 typedef struct _abs {
 	// "max" used only as "max - min"
+	_short en;
 	double min,max_min;
 	int resolution;
 } abs_t;
@@ -657,12 +658,14 @@ static inline double _valuate(double val, abs_t *a, unsigned long width) {
 #define o_floating 2
 #define o_absolute 4
 //#define o_changed 8
-#define o_raw 16
-#define o_z 32
+#define o_scroll 16
+#define o_touch 32
 #define o_directTouch 64
 #define o_kbd 128
 
-#define DEV_CMP_MASK (o_absolute|o_raw|o_z)
+#define DEV_CMP_MASK (o_absolute|o_scroll|o_touch|o_directTouch)
+#define TDIRECT(dinf) ((dinf->type&(o_directTouch|o_scroll)==o_directTouch))
+
 
 #define NINPUT_STEP 4
 dinf_t *inputs = NULL, *inputs1, *dinf, *dinf1, *dinf2, *dinf_last = NULL;
@@ -1708,7 +1711,7 @@ static _short findResDev(){
 static void fixGeometry(){
 	if (findResDev() && resDev == devid) return;
 	if (minf2) goto find1;
-	DINF((dinf->type&o_directTouch)) {
+	DINF(TDIRECT(dinf)) {
 		MINF((minf->type&o_active) && dinf->mon == minf->name) {
 			minf2 = minf;
 			goto find1;
@@ -1913,6 +1916,60 @@ static void touchToMon(){
 	}
 }
 
+abs_t xABS[NdevABS];
+static _short xiClasses(XIAnyClassInfo **classes, int num_classes){
+	_short type;
+	int devid, j;
+	memset(&xABS,0,sizeof(xABS));
+	for (j=0; j<num_classes; j++) {
+		XIAnyClassInfo *cl = classes[j];
+		XIValuatorClassInfo *v = NULL;
+		devid = cl->sourceid;
+		switch (cl->type) {
+#undef e
+#define e ((XITouchClassInfo*)cl)
+		    case XITouchClass:
+			type |= o_touch;
+			if (e->mode == XIDirectTouch) type |= o_directTouch;
+			break;
+#undef e
+#define e ((XIValuatorClassInfo*)cl)
+		    case XIValuatorClass:
+			switch (e->mode) {
+			    case Absolute:
+				type|=o_absolute;
+				if (e->number >= NdevABS) continue;
+				break;
+			    case Relative:
+				if (e->number > 1) continue;
+				break;
+			    default:
+				continue;
+			}
+			if (e->number < 0) break;
+			if (e->number && !xABS[e->number-1].en) break;
+			if (e->max > e->min) {
+			    if (e->mode == Relative) DBG("xi device %i class %i Relative, but max > min",devid,e->number);
+			} else if (e->max == e->min) {
+				if (e->mode == Absolute) DBG("xi device %i class %i Absolute, but max == min",devid,e->number);
+				if (e->max != -1.0) DBG("xi device %i class %i Absolute, but max == min == %f (wanted -1.)",devid,e->number,e->max);
+			} else break; 
+			if (!e->number) memset(&xABS,0,sizeof(xABS));
+			xABS[e->number].min = e->min;
+			xABS[e->number].max_min = e->max - e->min;
+			xABS[e->number].resolution = e->resolution;
+//			if (e->resolution && e->resolution < 1000) DBG("resolution<1000 of fixme: device %i  valuator %i '%s' min %f max %f resolution %i",devid,e->number,natom(n,e->label),e->min,e->max,e->resolution);
+			xABS[e->number].en = 1;
+			break;
+#undef e
+#define e ((XIScrollClassInfo*)cl)
+		    case XIScrollClass:
+			type|=o_scroll;
+			break;
+		}
+	}
+}
+
 static void getHierarchy(){
 	inputs1 = NULL;
 	ninput1_ = 0;
@@ -1951,9 +2008,7 @@ static void getHierarchy(){
 		d2 = &info2[i];
 		devid = d2->deviceid;
 		dinf1 = NULL;
-		_short t = 0, scroll = 0, raw = 0, t1 = 0;
 		_short type = 0, type1 = 0;
-		abs_t xABS[NdevABS];
 		busy = 0;
 		if (__init) {
 			XIDeleteProperty(dpy,devid,aABS);
@@ -1962,7 +2017,6 @@ static void getHierarchy(){
 		    case XIMasterPointer:
 #ifdef __check_entered
 			type|=o_master;
-#define _MASTER_CACHED
 			break;
 #else
 			continue;
@@ -1990,79 +2044,32 @@ static void getHierarchy(){
 		    default:
 			continue;
 		}
-		for (j=0; j<d2->num_classes; j++) {
-			XIAnyClassInfo *cl = d2->classes[j];
-			XIValuatorClassInfo *v = NULL;
-			switch (cl->type) {
-#undef e
-#define e ((XITouchClassInfo*)cl)
-			    case XITouchClass:
-				t1=1;
-				if (e->mode != XIDirectTouch) break;
-				t=1;
-				break;
-#undef e
-#define e ((XIValuatorClassInfo*)cl)
-			    case XIValuatorClass:
-				switch (e->mode) {
-				    case Absolute:
-					type|=o_absolute;
-					if (e->number >= NdevABS) continue;
-					break;
-				    case Relative:
-					if (e->number > 1) continue;
-					break;
-				    default:
-					continue;
-				}
-				if (e->number < 0) continue;
-				if (e->max > e->min) {
-					if (e->mode == Relative) DBG("xi device %i class %i Relative, but max > min",devid,e->number);
-				} else if (e->max == e->min) {
-					if (e->mode == Absolute) DBG("xi device %i class %i Absolute, but max == min",devid,e->number);
-					if (e->max != -1.0) DBG("xi device %i class %i Absolute, but max == min == %f (wanted -1.)",devid,e->number,e->max);
-				} else continue; 
-				if (!raw) memset(&xABS,0,sizeof(xABS));
-				xABS[e->number].min = e->min;
-				xABS[e->number].max_min = e->max - e->min;
-				xABS[e->number].resolution = e->resolution;
-//				if (e->resolution && e->resolution < 1000) DBG("resolution<1000 of fixme: device %i  valuator %i '%s' min %f max %f resolution %i",devid,e->number,natom(n,e->label),e->min,e->max,e->resolution);
-				raw |= 1 << e->number;
-				continue;
-#undef e
-#define e ((XIScrollClassInfo*)cl)
-			    case XIScrollClass:
-				scroll=1;
-				//type|=o_scroll;
-				break;
-			}
-		}
+		type1 |= xiClasses(d2->classes,d2->num_classes);
+		_short t = type1&o_directTouch;
+		_short scroll = type1&o_scroll;
 		if (pa[p_device] && *pa[p_device]) {
 			if (!strcmp(pa[p_device],d2->name) || pi[p_device] == devid) {
 				t = 1;
 				scroll = 0;
 			} else {
 				scroll = 1;
-				//type|=o_scroll;
-				type &= ~(_short)o_directTouch;
 				//t = 0;
 			}
 		}
 
 		// exclude touchscreen with scrolling
-		if (t && !scroll) type|=o_directTouch;
-		if (raw == 7) type1 |= o_raw|o_z;
-		else if (raw == 3) type1 |= o_raw;
+		if (t && !scroll) t = 0;
 
-		t1 = t1 || (type&o_absolute); // everything possible hidden RawTouch events
+		_short t1 = type1&(o_absolute|o_touch); // everything possible hidden RawTouch events
 		if (mTouch == &ximaskTouchRaw && t1) {
-			if (!(type1&o_raw)) {
+			if (!(xABS[1].en)) {
 				mTouch = &ximaskTouch;
 				ERR("xi device %i '%s' raw transformation unknown. broken drivers?",devid,d2->name);
 			} else type |= type1;
 		}
+		
 		// remember z! info if can use pressure (todo)
-		if ((type1&o_z) && t1) type |= type1;
+		if (t || (type1&o_absolute) || xABS[2].en) type |= type1;
 		
 		tdevs+=t;
 		void *c = NULL;
@@ -2070,7 +2077,7 @@ static void getHierarchy(){
 		ximask[0].mask = NULL;
 		switch (d2->use) {
 		    case XIFloatingSlave:
-			if (!(type&o_directTouch)) break;
+			if (!t) break;
 			switch (pi[p_floating]) {
 			    case 1:
 				tdevs2++;
@@ -2118,8 +2125,7 @@ static void getHierarchy(){
 
 		if (type) {
 			_add_input(type|=type1);
-			if (raw)
-			    memcpy(&dinf1->xABS,&xABS,sizeof(xABS));
+			memcpy(&dinf1->xABS,&xABS,sizeof(xABS));
 		}
 		if (pi[p_safe]&1) {
 			if (!(c || ximask[0].mask)) continue;
@@ -2209,10 +2215,10 @@ busy:
 	}
 #endif
 	// drivers are unsafe, evdev first
-	DINF((dinf->type&o_absolute) && !(dinf->ABS[0]>0) && !(dinf->ABS[1]>0) && dinf->xABS[0].resolution>=1000) {
+	DINF((dinf->type&o_absolute) && !(dinf->ABS[0]>0) && !(dinf->ABS[1]>0) && dinf->xABS[1].en && dinf->xABS[1].resolution>=1000) {
 		_short i;
 		for (i=0;i<NdevABS;i++) {
-			if (dinf->xABS[i].resolution > 1000 && dinf->xABS[0].max_min > 0) dinf->ABS[i] = (dinf->xABS[0].max_min)/(dinf->xABS[i].resolution/1000.);
+			if (dinf->xABS[i].en && dinf->xABS[i].resolution > 1000 && dinf->xABS[0].max_min > 0) dinf->ABS[i] = (dinf->xABS[0].max_min)/(dinf->xABS[i].resolution/1000.);
 		}
 	}
 
@@ -2820,7 +2826,7 @@ ev2:
 					    || (e->flags & XITouchPendingEnd));
 					x2 = e->root_x;
 					y2 = e->root_y;
-					if ((dinf->type&o_z) && e->valuators.mask_len && (e->valuators.mask[0]&7)==7) {
+					if ((dinf->xABS[2].en) && e->valuators.mask_len && (e->valuators.mask[0]&7)==7) {
 						z2 = _valuate(e->valuators.values[2],&dinf2->xABS[2],99) + 1;
 					} else z2 = 0;
 					xiFreeE();
@@ -2832,7 +2838,7 @@ ev2:
 				    case XI_RawTouchEnd:
 					if (!tdevs2 || !xiGetE()) goto ev;
 					devid = e->deviceid;
-					if ((resDev != devid && !(chResDev() && minf2 && (dinf->type&o_raw)))
+					if ((resDev != devid && !(chResDev() && minf2 && dinf->xABS[1].en))
 					    || !e->valuators.mask_len
 					    || (e->valuators.mask[0]&3)!=3)
 						goto evfree;
@@ -2923,7 +2929,7 @@ ev2:
 					}
 #endif
 //					DBG("==x/y %f %f",x2-xx2,y2-yy2);
-					if ((dinf->type&o_z) && (e->valuators.mask[0]&4)) {
+					if ((dinf->xABS[2].en) && (e->valuators.mask[0]&4)) {
 						z2 = _valuate(_raw(2),&dinf2->xABS[2],99) + 1;
 					} else z2 = 0;
 					xiFreeE();
@@ -2933,28 +2939,19 @@ ev2:
 				    case XI_DeviceChanged:
 #ifndef MINIMAL
 					if (xiGetE()) {
-						// dont care masters if not saved class info
-						if (e->reason != XISlaveSwitch || !e->deviceid || !e->sourceid) {
-							oldShowPtr |= 2;
+						DINF(dinf->devid == e->deviceid) {
+							_short type1 = xiClasses(e->classes,e->num_classes);
+							if (!(dinf->type&o_master) && (DEV_CMP_MASK&(dinf->type,type1)))
+								oldShowPtr |= 2;
+							else memcpy(&dinf->xABS,&xABS,sizeof(xABS));
 							goto evfree;
 						}
-#ifdef _MASTER_CACHED
-						dinf_t *d1 = NULL, *d2 = NULL;
-						DINF(dinf->devid == e->deviceid) d1 = dinf;
-						else if (dinf->devid == e->sourceid) d2 = dinf;
-						if (!d1) goto evfree;
-						d1->type |= o_changed;
-						if (d2) {
-							// need to sync o_absolute + ABS?
-							d1->type &= !DEV_CMP_MASK;
-							d1->type |= d2->type&DEV_CMP_MASK;
-							memcpy(&d1->xABS,&d2->xABS,sizeof(d1->xABS));
-						} else oldShowPtr |= 2;
-#endif
+						// dont care masters if not saved class info
+						if (e->reason == XISlaveSwitch) goto evfree;
 						xiFreeE();
-					} else
+					}
 #endif
-					    oldShowPtr |= 2;
+					oldShowPtr |= 2;
 					continue;
 #undef e
 #define e ((XIPropertyEvent*)ev.xcookie.data)
