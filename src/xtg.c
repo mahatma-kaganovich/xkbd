@@ -1918,26 +1918,25 @@ static void touchToMon(){
 
 abs_t xABS[NdevABS];
 static _short xiClasses(XIAnyClassInfo **classes, int num_classes){
-	_short type;
+	_short type1 = 0;
 	int devid, j;
 	memset(&xABS,0,sizeof(xABS));
 	for (j=0; j<num_classes; j++) {
 		XIAnyClassInfo *cl = classes[j];
-		XIValuatorClassInfo *v = NULL;
 		devid = cl->sourceid;
 		switch (cl->type) {
 #undef e
 #define e ((XITouchClassInfo*)cl)
 		    case XITouchClass:
-			type |= o_touch;
-			if (e->mode == XIDirectTouch) type |= o_directTouch;
+			type1 |= o_touch;
+			if (e->mode == XIDirectTouch) type1 |= o_directTouch;
 			break;
 #undef e
 #define e ((XIValuatorClassInfo*)cl)
 		    case XIValuatorClass:
 			switch (e->mode) {
 			    case Absolute:
-				type|=o_absolute;
+				type1|=o_absolute;
 				if (e->number >= NdevABS) continue;
 				break;
 			    case Relative:
@@ -1964,11 +1963,11 @@ static _short xiClasses(XIAnyClassInfo **classes, int num_classes){
 #undef e
 #define e ((XIScrollClassInfo*)cl)
 		    case XIScrollClass:
-			type|=o_scroll;
+			type1|=o_scroll;
 			break;
 		}
 	}
-	return type;
+	return type1;
 }
 
 static void getHierarchy(){
@@ -2046,22 +2045,21 @@ static void getHierarchy(){
 			continue;
 		}
 		type1 |= xiClasses(d2->classes,d2->num_classes);
-		_short t = type1&o_directTouch;
-		_short scroll = type1&o_scroll;
+		_short t = (type1&(o_directTouch|o_scroll)) == o_directTouch;
+		_short scroll = type1&(o_directTouch|o_scroll) == (o_directTouch|o_scroll);
 		if (pa[p_device] && *pa[p_device]) {
 			if (!strcmp(pa[p_device],d2->name) || pi[p_device] == devid) {
 				t = 1;
 				scroll = 0;
-			} else {
+			} else if (t) {
 				scroll = 1;
-				//t = 0;
+				t = 0;
 			}
 		}
 
 		// exclude touchscreen with scrolling
-		if (t && !scroll) t = 0;
 
-		_short t1 = type1&(o_absolute|o_touch); // everything possible hidden RawTouch events
+		_short t1 = !!(type1&(o_absolute|o_touch)); // everything possible hidden RawTouch events
 		if (mTouch == &ximaskTouchRaw && t1) {
 			if (!(xABS[1].en)) {
 				mTouch = &ximaskTouch;
@@ -2072,14 +2070,13 @@ static void getHierarchy(){
 		// remember z! info if can use pressure (todo)
 		if (t || (type1&o_absolute) || xABS[2].en) type |= type1;
 		
-		tdevs+=t;
 		void *c = NULL;
 		cf.deviceid = ca.deviceid = ximask[0].deviceid = devid;
 		ximask[0].mask = NULL;
 		switch (d2->use) {
 		    case XIFloatingSlave:
-			if (!t) break;
-			switch (pi[p_floating]) {
+			if (t) switch (pi[p_floating]) {
+			    case 3:
 			    case 1:
 				tdevs2++;
 				break;
@@ -2098,8 +2095,8 @@ static void getHierarchy(){
 			}
 			break;
 		    case XISlavePointer:
-			if (!t) ximask[0].mask = (void*)(showPtr ? ximask0 : ximaskButton);
-			else if (scroll) ximask[0].mask = (void*)(showPtr ? mTouch : ximask0);
+			if (scroll) ximask[0].mask = (void*)(showPtr ? mTouch : ximask0);
+			else if (!t) ximask[0].mask = (void*)(showPtr ? ximask0 : ximaskButton);
 			else {
 				tdevs2++;
 				switch (pi[p_floating]) {
@@ -2115,6 +2112,7 @@ static void getHierarchy(){
 				    case 2:
 					if (d2->attachment == cr.return_pointer) c = &cf;
 					break;
+				    case 3:
 				}
 			}
 			break;
