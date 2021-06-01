@@ -2126,8 +2126,7 @@ static void getHierarchy(){
 			if (busy) {
 busy:
 				forceUngrab();
-//				oldShowPtr |= 4;
-				oldShowPtr |= 2;
+				oldShowPtr |= 4;
 				//fprintf(stderr,"busy delay\n");
 				continue;
 			}
@@ -2306,6 +2305,11 @@ repeat:
 		if ((curShow=showPtr)) XFixesShowCursor(dpy, root);
 		else XFixesHideCursor(dpy, root);
 	} 
+	if ((oldShowPtr^showPtr)&4) {
+		oldShowPtr ^= 4;
+		oldShowPtr |= 2;
+		return;
+	}
 	// oldShowPtr &= (1|2|4|8|16); // sanitize
 	if (oldShowPtr == showPtr || !--cnt) return;
 	forceUngrab();
