@@ -1968,6 +1968,7 @@ static _short xiClasses(XIAnyClassInfo **classes, int num_classes){
 			break;
 		}
 	}
+	return type;
 }
 
 static void getHierarchy(){
