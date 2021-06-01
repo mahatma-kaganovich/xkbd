@@ -1946,7 +1946,6 @@ static _short xiClasses(XIAnyClassInfo **classes, int num_classes){
 				continue;
 			}
 			if (e->number < 0) break;
-			if (e->number && !xABS[e->number-1].en) break;
 			if (e->max > e->min) {
 			    if (e->mode == Relative) DBG("xi device %i class %i Relative, but max > min",devid,e->number);
 			} else if (e->max == e->min) {
@@ -1967,6 +1966,13 @@ static _short xiClasses(XIAnyClassInfo **classes, int num_classes){
 			break;
 		}
 	}
+	if (xABS[0].en != !xABS[1].en
+//		|| (xABS[0].max_min > 0.) != (xABS[1].max_min > 0.)
+		)
+		xABS[0].en = xABS[1].en = xABS[2].en = 0;
+	if (xABS[2].en != !xABS[0].en) xABS[2].en = 0;
+//	if ((type1&o_absolute) && xABS[0].en && !(xABS[0].max_min > 0.) && !(xABS[1].max_min > 0.))
+//		xABS[0].en = xABS[1].en = xABS[2].en = 0;
 	return type1;
 }
 
