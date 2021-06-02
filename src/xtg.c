@@ -2304,9 +2304,9 @@ repeat:
 		oldShowPtr ^= 8;
 		xrMons0();
 	}
-#ifndef MINIMAL
+//#ifndef MINIMAL
 	if ((oldShowPtr^showPtr)&1) oldShowPtr |= 2;
-#endif
+//#endif
 	if (oldShowPtr&2) {
 		oldShowPtr ^= 2;
 		getHierarchy();
@@ -2955,26 +2955,20 @@ ev2:
 #ifndef MINIMAL
 					if (xiGetE()) {
 						devid = 0;
-						if (e->reason == XIDeviceChange) oldShowPtr |= 2;
-						else if (e->reason != XISlaveSwitch) {
+						if (e->reason != XISlaveSwitch) {
 							oldShowPtr |= 2;
-							goto evfree;
+							if (e->reason != XIDeviceChange) goto evfree;
 						}
-						dinf1 = NULL;
 						if (e->sourceid && e->sourceid != e->deviceid) {
 							DINF(dinf->devid == e->sourceid) {
-								if (TDIRECT(dinf->type)) showPtr &= 0xfe;
-								else showPtr |= 1;
+								showPtr = !TDIRECT(dinf->type);
 								if (oldShowPtr&2) goto evfree;
-								dinf1 = dinf;
 								break;
 							}
 						} //else if (e->reason == XIDeviceChange) devid = e->deviceid;
 						_short type1 = xiClasses(e->classes,e->num_classes);
-						if (!dinf1) {
-							if (TDIRECT(type1)) showPtr &= 0xfe;
-							//else showPtr |= 1; // vs. XTEST
-						}
+						if (TDIRECT(type1)) showPtr = 0;
+						//else showPtr = 1; // vs. XTEST
 						//if (devid) { oldShowPtr ^= 2; xiDevice(type1)}; goto evfree;}
 						if (oldShowPtr&2) goto evfree;
 						devid = e->deviceid;
