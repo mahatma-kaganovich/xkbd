@@ -664,7 +664,7 @@ static inline double _valuate(double val, abs_t *a, unsigned long width) {
 #define o_kbd 128
 
 #define DEV_CMP_MASK (o_absolute|o_scroll|o_touch|o_directTouch)
-#define TDIRECT(dinf) ((dinf->type&(o_directTouch|o_scroll)==o_directTouch))
+#define TDIRECT(type) ((type&(o_directTouch|o_scroll)==o_directTouch))
 
 
 #define NINPUT_STEP 4
@@ -1711,7 +1711,7 @@ static _short findResDev(){
 static void fixGeometry(){
 	if (findResDev() && resDev == devid) return;
 	if (minf2) goto find1;
-	DINF(TDIRECT(dinf)) {
+	DINF(TDIRECT(dinf->type)) {
 		MINF((minf->type&o_active) && dinf->mon == minf->name) {
 			minf2 = minf;
 			goto find1;
@@ -2083,7 +2083,7 @@ static void getHierarchy(){
 		
 		// remember z! info if can use pressure (todo)
 		if (t || (type1&o_absolute) || xABS[2].en) type |= type1;
-		
+
 		void *c = NULL;
 		cf.deviceid = ca.deviceid = ximask[0].deviceid = devid;
 		ximask[0].mask = NULL;
@@ -2304,7 +2304,9 @@ repeat:
 		oldShowPtr ^= 8;
 		xrMons0();
 	}
+#ifndef MINIMAL
 	if ((oldShowPtr^showPtr)&1) oldShowPtr |= 2;
+#endif
 	if (oldShowPtr&2) {
 		oldShowPtr ^= 2;
 		getHierarchy();
@@ -2952,19 +2954,41 @@ ev2:
 				    case XI_DeviceChanged:
 #ifndef MINIMAL
 					if (xiGetE()) {
+						devid = 0;
+						if (e->reason == XIDeviceChange) oldShowPtr |= 2;
+						else if (e->reason != XISlaveSwitch) {
+							oldShowPtr |= 2;
+							goto evfree;
+						}
+						dinf1 = NULL;
+						if (e->sourceid && e->sourceid != e->deviceid) {
+							DINF(dinf->devid == e->sourceid) {
+								if (TDIRECT(dinf->type)) showPtr &= 0xfe;
+								else showPtr |= 1;
+								if (oldShowPtr&2) goto evfree;
+								dinf1 = dinf;
+								break;
+							}
+						} //else if (e->reason == XIDeviceChange) devid = e->deviceid;
+						_short type1 = xiClasses(e->classes,e->num_classes);
+						if (!dinf1) {
+							if (TDIRECT(type1)) showPtr &= 0xfe;
+							//else showPtr |= 1; // vs. XTEST
+						}
+						//if (devid) { oldShowPtr ^= 2; xiDevice(type1)}; goto evfree;}
+						if (oldShowPtr&2) goto evfree;
+						devid = e->deviceid;
 						DINF(dinf->devid == e->deviceid) {
-							_short type1 = xiClasses(e->classes,e->num_classes);
 							if (!(dinf->type&o_master) && (DEV_CMP_MASK&(dinf->type,type1)))
 								oldShowPtr |= 2;
 							else memcpy(&dinf->xABS,&xABS,sizeof(xABS));
-							goto evfree;
+							dinf1 = dinf;
+							break;
 						}
-						// dont care masters if not saved class info
-						if (e->reason == XISlaveSwitch) goto evfree;
 						xiFreeE();
-					}
+					} else
 #endif
-					oldShowPtr |= 2;
+					    oldShowPtr |= 2;
 					continue;
 #undef e
 #define e ((XIPropertyEvent*)ev.xcookie.data)
@@ -2989,9 +3013,11 @@ ev2:
 					oldShowPtr |= 2; continue;
 				    case XI_HierarchyChanged:
 					if (xiGetE()) {
-						if (e->flags&(XISlaveRemoved|XISlaveAdded)) oldShowPtr |= 2;
+						//DBG("HierCh %i rm=%i add=%i",devid,e->flags&XISlaveRemoved,e->flags&XISlaveAdded);
+//						if (e->flags&(XISlaveRemoved|XISlaveAdded)) oldShowPtr |= 2;
 						xiFreeE();
 					}
+					oldShowPtr |= 2;
 #else
 				    case XI_HierarchyChanged:
 					oldShowPtr |= 2;
