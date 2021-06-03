@@ -2841,7 +2841,7 @@ ev2:
 					    || (e->flags & XITouchPendingEnd));
 					x2 = e->root_x;
 					y2 = e->root_y;
-					if ((dinf->xABS[2].en) && e->valuators.mask_len && (e->valuators.mask[0]&7)==7) {
+					if ((dinf2->xABS[2].en) && e->valuators.mask_len && (e->valuators.mask[0]&7)==7) {
 						z2 = _valuate(e->valuators.values[2],&dinf2->xABS[2],99) + 1;
 					} else z2 = 0;
 					xiFreeE();
@@ -2944,7 +2944,7 @@ ev2:
 					}
 #endif
 //					DBG("==x/y %f %f",x2-xx2,y2-yy2);
-					if ((dinf->xABS[2].en) && (e->valuators.mask[0]&4)) {
+					if ((dinf2->xABS[2].en) && (e->valuators.mask[0]&4)) {
 						z2 = _valuate(_raw(2),&dinf2->xABS[2],99) + 1;
 					} else z2 = 0;
 					xiFreeE();
