@@ -163,7 +163,7 @@ _short __init = 1;
 int floatFmt = sizeof(float) << 3;
 int atomFmt = sizeof(Atom) << 3;
 int winFmt = sizeof(Window) << 3;
-_short useRaw = 0;
+_short useRawTouch = 0, useRawButton = 0;
 #define prop_int int32_t
 int intFmt = sizeof(prop_int) << 3;
 #ifdef USE_EVDEV
@@ -175,7 +175,7 @@ XWindowAttributes wa;
 
 #define MASK_LEN XIMaskLen(XI_LASTEVENT)
 typedef unsigned char xiMask[MASK_LEN];
-xiMask ximaskButton = {}, ximaskTouch = {}, ximask0 = {}, ximaskTouchRaw = {};
+xiMask ximaskButton = {}, ximaskTouch = {}, ximask0 = {}, ximaskRaw = {};
 xiMask ximaskRoot = {};
 _short Nximask = 1;
 XIEventMask ximask[] = {{ .deviceid = XIAllDevices, .mask_len = MASK_LEN, .mask = (void*)&ximask0 },
@@ -917,7 +917,7 @@ static _short setProp(Atom prop, Atom type, int mode, void *data, long cnt, _sho
 	int f = fmtOf(type,32);
 	if (chk&0xf) {
 		_short r;
-		if ((r=getProp(prop,type,data,0,cnt,chk))) return (r&2);
+		if ((r=getProp(prop,type,data,0,cnt,chk))) return (r==2)<<1;
 #ifdef PROP_FMT
 		data = fmt2fmt(data,type,f,NULL,pr_t,pr_f,cnt);
 		type = pr_t;
@@ -938,7 +938,6 @@ static _short setProp(Atom prop, Atom type, int mode, void *data, long cnt, _sho
 		XRRChangeOutputProperty(dpy,minf->out,prop,type,f,mode,data,cnt);
 		break;
 	    case pr_input:
-		if (prop == aMatrix) DBG("matrix2 chk=%i",chk);
 		XIChangeProperty(dpy,devid,prop,type,f,mode,data,cnt);
 		break;
 	    default:
@@ -1850,8 +1849,7 @@ static void _add_input(_short t){
 	dinf1 = &inputs1[i];
 	DINF(dinf->devid == devid) {
 		*dinf1 = *dinf;
-		if (dinf1->type&o_changed) t |= o_changed;
-		dinf1->type = t; // reset
+		dinf1->type = t|(dinf1->type&o_changed); // reset
 		return;
 	}
 	dinf1->devid = devid;
@@ -1936,19 +1934,18 @@ static void touchToMon(){
 		dinf->fast = 0;
 		for (i = 0; i < 3; i++) {
 			dinf->fastABS[i] = 1;
+			if (!dinf->xABS[i].en) continue;
 			if ((dinf->type&o_absolute)) {
-				if (dinf->xABS[i].en
-				    && dinf->xABS[i].max_min > 0.
+				if (dinf->xABS[i].max_min > 0.
 				    && dinf->xABS[i].min == 0.
 				    //&& !dinf->xABS[i].resolution
 				    ) {
 					dinf->fastABS[i] = dinf->xABS[2].max_min / ((i==0)?minf0.width:(i==0)?minf0.height:99);
 					dinf->fast |= (1 << i);
 				}
-			} else if (dinf->xABS[i].en
-			    && dinf->xABS[i].max_min == 0.) {
+			} else if (dinf->xABS[i].max_min == 0.) {
 				dinf->fast |= (1 << i);
-			}
+			} else dinf->fast |= (1 << (i+4));
 		}
 	}
 #endif
@@ -2025,7 +2022,8 @@ static void getHierarchy(){
 	ninput1_ = 0;
 	
 	int i,j,ndevs2,nkbd,m=0;
-	void *mTouch = useRaw ? &ximaskTouchRaw : &ximaskTouch;
+	void *mTouch = useRawTouch ? &ximaskRaw : &ximaskTouch;
+	void *mButton = useRawButton ? &ximaskRaw : &ximaskButton;
 
 	_grabX();
 	XIDeviceInfo *info2 = XIQueryDevice(dpy, XIAllDevices, &ndevs2);
@@ -2110,7 +2108,7 @@ static void getHierarchy(){
 		// exclude touchscreen with scrolling
 
 		_short t1 = !!(type1&(o_absolute|o_touch)); // everything possible hidden RawTouch events
-		if (mTouch == &ximaskTouchRaw && t1) {
+		if (mTouch == &ximaskRaw && t1) {
 			if (!xABS[0].en) {
 				mTouch = &ximaskTouch;
 				ERR("xi device %i '%s' raw transformation unknown. broken drivers?",devid,d2->name);
@@ -2125,7 +2123,7 @@ static void getHierarchy(){
 		ximask[0].mask = NULL;
 		switch (d2->use) {
 		    case XIFloatingSlave:
-			if (t) switch (pi[p_floating]) {
+			if (t) switch (pi[p_floating]&3) {
 			    case 1:
 				tdevs2++;
 				break;
@@ -2145,10 +2143,10 @@ static void getHierarchy(){
 			break;
 		    case XISlavePointer:
 			if (scroll) ximask[0].mask = (void*)(showPtr ? mTouch : ximask0);
-			else if (!t) ximask[0].mask = (void*)(showPtr ? ximask0 : ximaskButton);
+			else if (!t) ximask[0].mask = (void*)(showPtr ? ximask0 : mButton);
 			else {
 				tdevs2++;
-				switch (pi[p_floating]) {
+				switch (pi[p_floating]&3) {
 				    case 1:
 					ximask[0].mask=mTouch;
 					XIGrabDevice(dpy,devid,root,0,None,XIGrabModeSync,XIGrabModeTouch,False,ximask);
@@ -2168,13 +2166,6 @@ static void getHierarchy(){
 //			nkbd++;
 //		    default:
 //			break;
-		}
-
-		if ((pi[p_floating]&8) && xABS[0].en) {
-			if (xABS[2].en || pi[p_floating] == 11) {
-				ximask[0].mask=ximaskTouchRaw;
-				DBG("device %i raw mode%s",devid,xABS[2].en?" + Z!":"");
-			}
 		}
 
 		if (type) {
@@ -2646,17 +2637,17 @@ static void init(){
 	XISetMask(ximaskTouch, XI_TouchUpdate);
 	XISetMask(ximaskTouch, XI_TouchEnd);
 
-	XISetMask(ximaskTouchRaw, XI_RawTouchBegin);
-	XISetMask(ximaskTouchRaw, XI_RawTouchUpdate);
-	XISetMask(ximaskTouchRaw, XI_RawTouchEnd);
+	XISetMask(ximaskRaw, XI_RawTouchBegin);
+	XISetMask(ximaskRaw, XI_RawTouchUpdate);
+	XISetMask(ximaskRaw, XI_RawTouchEnd);
 
 	// my pen with Z! pressure
-	XISetMask(ximaskTouchRaw, XI_RawButtonPress);
-	XISetMask(ximaskTouchRaw, XI_RawButtonRelease);
-	XISetMask(ximaskTouchRaw, XI_RawMotion);
+	XISetMask(ximaskRaw, XI_RawButtonPress);
+	XISetMask(ximaskRaw, XI_RawButtonRelease);
+	XISetMask(ximaskRaw, XI_RawMotion);
 
 	if (pi[p_floating]==3) {
-		if (useRaw) {
+		if (useRawTouch) {
 			XISetMask(ximask0, XI_RawTouchBegin);
 			XISetMask(ximask0, XI_RawTouchUpdate);
 			XISetMask(ximask0, XI_RawTouchEnd);
@@ -2664,6 +2655,11 @@ static void init(){
 			XISetMask(ximask0, XI_TouchBegin);
 			XISetMask(ximask0, XI_TouchUpdate);
 			XISetMask(ximask0, XI_TouchEnd);
+		}
+		if (useRawButton) {
+			XISetMask(ximask0, XI_RawButtonPress);
+			XISetMask(ximask0, XI_RawButtonRelease);
+			XISetMask(ximask0, XI_RawMotion);
 		}
 	}
 
@@ -2834,8 +2830,12 @@ int main(int argc, char **argv){
 		mon = XInternAtom(dpy, pa[p_mon], False);
 	resXY = !mon && pf[p_res]<0;
 	if (pi[p_floating]&4) {
-		useRaw = 1;
+		useRawTouch = 1;
 		pi[p_floating] ^= 4;
+	}
+	if (pi[p_floating]&8) {
+		useRawButton = 1;
+		pi[p_floating] ^= 8;
 	}
 #endif
 	if (!dpy) return 1;
@@ -2872,14 +2872,14 @@ ev2:
 #ifdef XTG
 		    case GenericEvent:
 			if (ev.xcookie.extension == xiopcode) {
-//				DBG("ev %i",ev.xcookie.evtype);
+//				DBG("ev xi %i",ev.xcookie.evtype);
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
 				switch (ev.xcookie.evtype) {
 				    case XI_TouchBegin:
 				    case XI_TouchUpdate:
 				    case XI_TouchEnd:
-				showPtr = 0;
+					showPtr = 0;
 					if (!tdevs2 || !xiGetE()) goto ev;
 					devid = e->deviceid;
 					if (resDev != devid && !chResDev()) goto evfree;
@@ -2898,44 +2898,48 @@ ev2:
 				    case XI_RawButtonPress:
 				    case XI_RawButtonRelease:
 				    case XI_RawMotion:
-					    showPtr = 1;
-					    goto nohide;
+					showPtr = 1;
+					if (!tdevs2 || !xiGetE()) goto ev;
+					end = ev.xcookie.evtype == XI_RawButtonRelease;
+					goto nohide;
 				    case XI_RawTouchBegin:
 				    case XI_RawTouchUpdate:
 				    case XI_RawTouchEnd:
-					showPtr = 1;
-nohide:
+					showPtr = 0;
 					if (!tdevs2 || !xiGetE()) goto ev;
+					end = (ev.xcookie.evtype == XI_RawTouchEnd
+					    || (e->flags & XITouchPendingEnd));
+nohide:
 					devid = e->deviceid;
 					if ((resDev != devid && !(chResDev() && minf2 && dinf->xABS[1].en))
 					    || !e->valuators.mask_len)
 						goto evfree;
 					detail = e->detail;
-					end = (ev.xcookie.evtype == XI_RawTouchEnd
-					    || (e->flags & XITouchPendingEnd));
+					z2 = 0;
 // can use raw_values or valuators.values
 // raw_values have 0 on TouchEnd
 // valuators - on touchsceen & libinput - mapped to Screen
 // IMHO there are just touchpad behaviour.
 // use simple valuators, but keep alter code here too
 #ifdef FAST_VALUATORS
-					switch (dinf->fast&e->valuators.mask[0]) {
+					switch (dinf->fast&(e->valuators.mask[0]|(e->valuators.mask[0]<<4))) {
 					    case 7:
-						z2 = e->valuators.values[2]/dinf->fastABS[2];
+						z2 = e->valuators.values[2]/dinf->fastABS[2] + 1;
 					    case 3:
 						x2 = e->valuators.values[0]/dinf->fastABS[0];
 						y2 = e->valuators.values[1]/dinf->fastABS[1];
-						break;
+						goto val_all;
+					    case 0x43:
+					    case 0x70:
+					    case 0x30:
 					    default:
 						goto evfree;
 					}
 #else
-#define _raw(i) e->raw_values[i]
 					if (e->valuators.mask[0]&3)!=3) goto evfree;
-
-					if (end
-					    // && x2 == 0. && y2 == 0.
-						) {
+#endif
+					// bug: no values
+					if (end) {
 						xiFreeE();
 						for(i=P; i!=N; i=TOUCH_N(i)){
 							Touch *t1 = &touch[i];
@@ -2955,10 +2959,8 @@ nohide:
 						}
 						goto ev2;
 					}
-
-
-					x2 = _valuate(_raw(0),&dinf2->xABS[0],minf2->width1);
-					y2 = _valuate(_raw(1),&dinf2->xABS[1],minf2->height1);
+					x2 = _valuate(e->raw_values[0],&dinf2->xABS[0],minf2->width1);
+					y2 = _valuate(e->raw_values[1],&dinf2->xABS[1],minf2->height1);
 					switch (minf2->rotation) {
 					    case RR_Rotate_0:
 						x2 += minf2->x;
@@ -2982,10 +2984,9 @@ nohide:
 						ERR("not implemented rotation type");
 						goto evfree;
 					}
-					if ((dinf2->xABS[2].en) && (e->valuators.mask[0]&4)) {
-						z2 = _valuate(_raw(2),&dinf2->xABS[2],99) + 1;
-					} else z2 = 0;
-#endif
+					if ((dinf2->xABS[2].en) && (e->valuators.mask[0]&4))
+						z2 = _valuate(e->valuators.values[2],&dinf2->xABS[2],99) + 1;
+val_all:
 					xiFreeE();
 					break;
 #undef e
@@ -3063,19 +3064,8 @@ nohide:
 					continue;
 #undef e
 #define e ((XIHierarchyEvent*)ev.xcookie.data)
-#if 0
-				    case XI_HierarchyChanged:
-					if (xiGetE()) {
-						DBG("HierCh 0x%x",e->flags);
-						//DBG("HierCh %i rm=%i add=%i",devid,e->flags&XISlaveRemoved,e->flags&XISlaveAdded);
-//						if (e->flags&(XISlaveRemoved|XISlaveAdded)) oldShowPtr |= 2;
-						xiFreeE();
-					}
-					oldShowPtr |= 2;
-#else
 				    case XI_HierarchyChanged:
 					oldShowPtr |= 2;
-#endif
 					continue;
 #ifdef _BACKLIGHT
 #undef e
