@@ -2079,7 +2079,7 @@ static void getHierarchy(){
 			continue;
 //		    case XISlaveKeyboard:
 //			if (strstr(d2->name," XTEST ")) continue;
-//			type |= o_kbd;
+//			type1 |= o_kbd;
 //			break;
 		    case XIMasterKeyboard:
 			// type |= o_kbd|o_master;
@@ -2105,15 +2105,13 @@ static void getHierarchy(){
 			}
 		}
 
-		// exclude touchscreen with scrolling
-
-		_short t1 = !!(type1&(o_absolute|o_touch)); // everything possible hidden RawTouch events
-		if (mTouch == &ximaskRaw && t1) {
-			if (!xABS[0].en) {
-				mTouch = &ximaskTouch;
+		if ((type|type1)&(o_kbd|o_master));
+		else if ((!xABS[0].en || !xABS[1].en)) {
+			mTouch = &ximaskTouch;
+			mButton = &ximaskButton;
+			if (useRawTouch || useRawButton)
 				ERR("xi device %i '%s' raw transformation unknown. broken drivers?",devid,d2->name);
-			} else type |= type1;
-		}
+		} else if ((useRawTouch || (useRawButton && xABS[2].en))) type |= type1;
 		
 		// remember z! info if can use pressure (todo)
 		if (t || (type1&o_absolute) || xABS[2].en) type |= type1;
