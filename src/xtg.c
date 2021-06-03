@@ -42,6 +42,8 @@
 //#undef _BACKLIGHT
 #define PROP_FMT
 #undef PROP_FMT
+//#define TRACK_MATRIX
+#define FAST_VALUATORS
 #endif
 
 #include <stdio.h>
@@ -314,7 +316,12 @@ char *ph[MAX_PAR] = {
 	"		0=master (visual artefacts, but enable native masters touch clients)\n"
 	"		2=dynamic master/floating (firefox segfaults)\n"
 	"		3=simple hook all touch events (useful +4=7 - raw)\n"
-	"		+4=use XI_RawTouch* events if possible\n", //f
+	"		+4=use XI_RawTouch* events if possible\n"
+	"		+8=use XI_RawButton* & XI_RawTouch* events if Z (pressure)\n"
+	"			=15 - always Raw events (emulation/debug)\n"
+	"		(really use XI_Raw* both 4 and 8, but result device related)\n"
+	"		(I have Wacom 5020 pen to 3D experiments)"
+	, //f
 
 	"RandR monitor name\n"
 	"		or number 1+\n"
@@ -648,6 +655,13 @@ typedef struct _dinf {
 	Atom mon;
 	int attach0;
 	_short reason;
+#ifdef FAST_VALUATORS
+	_short fast;
+	double fastABS[NdevABS];
+#endif
+#ifdef TRACK_MATRIX
+	float matrix[9];
+#endif
 } dinf_t;
 
 static inline double _valuate(double val, abs_t *a, unsigned long width) {
@@ -903,7 +917,7 @@ static _short setProp(Atom prop, Atom type, int mode, void *data, long cnt, _sho
 	int f = fmtOf(type,32);
 	if (chk&0xf) {
 		_short r;
-		if ((r=getProp(prop,type,data,0,cnt,chk))) return r==2;
+		if ((r=getProp(prop,type,data,0,cnt,chk))) return (r&2);
 #ifdef PROP_FMT
 		data = fmt2fmt(data,type,f,NULL,pr_t,pr_f,cnt);
 		type = pr_t;
@@ -924,6 +938,7 @@ static _short setProp(Atom prop, Atom type, int mode, void *data, long cnt, _sho
 		XRRChangeOutputProperty(dpy,minf->out,prop,type,f,mode,data,cnt);
 		break;
 	    case pr_input:
+		if (prop == aMatrix) DBG("matrix2 chk=%i",chk);
 		XIChangeProperty(dpy,devid,prop,type,f,mode,data,cnt);
 		break;
 	    default:
@@ -1085,7 +1100,13 @@ static void map_to(){
 	float matrix[9] = {0,0,x,0,0,y,0,0,1};
 	matrix[1-m]=w;
 	matrix[3+m]=h;
+#ifdef TRACK_MATRIX
+	if (memcmp(dinf->matrix,matrix,sizeof(matrix)) &&
+	    xiSetProp(aMatrix,aFloat,&matrix,9,2)==1)
+		memcpy(dinf->matrix,matrix,sizeof(matrix));
+#else
 	xiSetProp(aMatrix,aFloat,&matrix,9,4);
+#endif
 }
 
 static void fixMonSize(minf_t *minf, double *dpmw, double *dpmh) {
@@ -1127,13 +1148,6 @@ static void fixMonSize(minf_t *minf, double *dpmw, double *dpmh) {
 			*dpmw /= m;
 			*dpmh = _min;
 		}
-	}
-}
-
-static void clearCache(){
-	DINF(dinf->devid == devid) {
-		memset(dinf,0,sizeof(dinf_t));
-		break;
 	}
 }
 
@@ -1891,6 +1905,7 @@ static void touchToMon(){
 		if (_REASON(m,3,"by size first")) continue;
 		_REASON(dinf->mon,dinf->reason,"");
 	}
+
 	DINF(dinf->mon) MINF(minf->name == dinf->mon) {
 		if (!(dinf->ABS[0]>.0 && dinf->ABS[1]>.0)) {
 			if (minf->type&o_msize) {
@@ -1914,6 +1929,29 @@ static void touchToMon(){
 		map_to();
 		break;
 	}
+#ifdef FAST_VALUATORS
+	// valuator[i]/fastABS[i]
+	DINF(1) {
+		_short i;
+		dinf->fast = 0;
+		for (i = 0; i < 3; i++) {
+			dinf->fastABS[i] = 1;
+			if ((dinf->type&o_absolute)) {
+				if (dinf->xABS[i].en
+				    && dinf->xABS[i].max_min > 0.
+				    && dinf->xABS[i].min == 0.
+				    //&& !dinf->xABS[i].resolution
+				    ) {
+					dinf->fastABS[i] = dinf->xABS[2].max_min / ((i==0)?minf0.width:(i==0)?minf0.height:99);
+					dinf->fast |= (1 << i);
+				}
+			} else if (dinf->xABS[i].en
+			    && dinf->xABS[i].max_min == 0.) {
+				dinf->fast |= (1 << i);
+			}
+		}
+	}
+#endif
 }
 
 abs_t xABS[NdevABS];
@@ -1934,36 +1972,43 @@ static _short xiClasses(XIAnyClassInfo **classes, int num_classes){
 #undef e
 #define e ((XIValuatorClassInfo*)cl)
 		    case XIValuatorClass:
+			int n = e->number;
 			switch (e->mode) {
 			    case Absolute:
 				type1|=o_absolute;
-				if (e->number >= NdevABS) continue;
+				if (n >= NdevABS) continue;
 				break;
 			    case Relative:
-				if (e->number > 1) continue;
+				if (n > 1) continue;
 				break;
 			    default:
 				continue;
 			}
-			if (e->number < 0) break;
-#if 1
+			if (n < 0) break;
+#if 0
 			// think again, valuators order is not varrantied...
 			// but it is good indication to all OK
-			// else use bottom of function
-			if (e->number && !xABS[e->number-1].en) break;
+			if (n && !xABS[n-1].en) break;
 #endif
 			if (e->max > e->min) {
-			    if (e->mode == Relative) DBG("xi device %i class %i Relative, but max > min",devid,e->number);
+			    if (e->mode == Relative) DBG("xi device %i class %i Relative, but max > min",devid,n);
 			} else if (e->max == e->min) {
-				if (e->mode == Absolute) DBG("xi device %i class %i Absolute, but max == min",devid,e->number);
-				if (e->max != -1.0) DBG("xi device %i class %i Absolute, but max == min == %f (wanted -1.)",devid,e->number,e->max);
+				if (e->mode == Absolute) DBG("xi device %i class %i Absolute, but max == min",devid,n);
+				if (e->max != -1.0) DBG("xi device %i class %i Absolute, but max == min == %f (wanted -1.)",devid,n,e->max);
 			} else break; 
-			if (!e->number) memset(&xABS,0,sizeof(xABS));
-			xABS[e->number].min = e->min;
-			xABS[e->number].max_min = e->max - e->min;
-			xABS[e->number].resolution = e->resolution;
-//			if (e->resolution && e->resolution < 1000) DBG("resolution<1000 of fixme: device %i  valuator %i '%s' min %f max %f resolution %i",devid,e->number,natom(n,e->label),e->min,e->max,e->resolution);
-			xABS[e->number].en = 1;
+			if (!n) memset(&xABS,0,sizeof(xABS));
+			xABS[n].min = e->min;
+			xABS[n].max_min = e->max - e->min;
+			xABS[n].resolution = e->resolution;
+//			if (e->resolution && e->resolution < 1000) DBG("resolution<1000 of fixme: device %i  valuator %i '%s' min %f max %f resolution %i",devid,n,natom(n,e->label),e->min,e->max,e->resolution);
+			xABS[n].en = 1;
+//#ifdef FAST_VALUATORS
+			if (e->max > e->min) {
+				if (e->min == 0.
+				    // && e->resolution == 0
+					) xABS[n].en = 2;
+			} else xABS[n].en = 3;
+			
 			break;
 #undef e
 #define e ((XIScrollClassInfo*)cl)
@@ -1972,15 +2017,6 @@ static _short xiClasses(XIAnyClassInfo **classes, int num_classes){
 			break;
 		}
 	}
-#if 0
-	if (xABS[0].en != xABS[1].en
-//		|| (xABS[0].max_min > 0.) != (xABS[1].max_min > 0.)
-		)
-		xABS[0].en = xABS[1].en = xABS[2].en = 0;
-	if (xABS[2].en != xABS[0].en) xABS[2].en = 0;
-//	if ((type1&o_absolute) && xABS[0].en && !(xABS[0].max_min > 0.) && !(xABS[1].max_min > 0.))
-//		xABS[0].en = xABS[1].en = xABS[2].en = 0;
-#endif
 	return type1;
 }
 
@@ -2075,7 +2111,7 @@ static void getHierarchy(){
 
 		_short t1 = !!(type1&(o_absolute|o_touch)); // everything possible hidden RawTouch events
 		if (mTouch == &ximaskTouchRaw && t1) {
-			if (!(xABS[1].en)) {
+			if (!xABS[0].en) {
 				mTouch = &ximaskTouch;
 				ERR("xi device %i '%s' raw transformation unknown. broken drivers?",devid,d2->name);
 			} else type |= type1;
@@ -2090,7 +2126,6 @@ static void getHierarchy(){
 		switch (d2->use) {
 		    case XIFloatingSlave:
 			if (t) switch (pi[p_floating]) {
-			    case 3:
 			    case 1:
 				tdevs2++;
 				break;
@@ -2126,7 +2161,6 @@ static void getHierarchy(){
 				    case 2:
 					if (d2->attachment == cr.return_pointer) c = &cf;
 					break;
-				    case 3:
 				}
 			}
 			break;
@@ -2134,6 +2168,13 @@ static void getHierarchy(){
 //			nkbd++;
 //		    default:
 //			break;
+		}
+
+		if ((pi[p_floating]&8) && xABS[0].en) {
+			if (xABS[2].en || pi[p_floating] == 11) {
+				ximask[0].mask=ximaskTouchRaw;
+				DBG("device %i raw mode%s",devid,xABS[2].en?" + Z!":"");
+			}
 		}
 
 		if (type) {
@@ -2609,6 +2650,11 @@ static void init(){
 	XISetMask(ximaskTouchRaw, XI_RawTouchUpdate);
 	XISetMask(ximaskTouchRaw, XI_RawTouchEnd);
 
+	// my pen with Z! pressure
+	XISetMask(ximaskTouchRaw, XI_RawButtonPress);
+	XISetMask(ximaskTouchRaw, XI_RawButtonRelease);
+	XISetMask(ximaskTouchRaw, XI_RawMotion);
+
 	if (pi[p_floating]==3) {
 		if (useRaw) {
 			XISetMask(ximask0, XI_RawTouchBegin);
@@ -2833,6 +2879,7 @@ ev2:
 				    case XI_TouchBegin:
 				    case XI_TouchUpdate:
 				    case XI_TouchEnd:
+				showPtr = 0;
 					if (!tdevs2 || !xiGetE()) goto ev;
 					devid = e->deviceid;
 					if (resDev != devid && !chResDev()) goto evfree;
@@ -2848,23 +2895,44 @@ ev2:
 					break;
 #undef e
 #define e ((XIRawEvent*)ev.xcookie.data)
+				    case XI_RawButtonPress:
+				    case XI_RawButtonRelease:
+				    case XI_RawMotion:
+					    showPtr = 1;
+					    goto nohide;
 				    case XI_RawTouchBegin:
 				    case XI_RawTouchUpdate:
 				    case XI_RawTouchEnd:
+					showPtr = 1;
+nohide:
 					if (!tdevs2 || !xiGetE()) goto ev;
 					devid = e->deviceid;
 					if ((resDev != devid && !(chResDev() && minf2 && dinf->xABS[1].en))
-					    || !e->valuators.mask_len
-					    || (e->valuators.mask[0]&3)!=3)
+					    || !e->valuators.mask_len)
 						goto evfree;
 					detail = e->detail;
 					end = (ev.xcookie.evtype == XI_RawTouchEnd
 					    || (e->flags & XITouchPendingEnd));
 // can use raw_values or valuators.values
-// raw_values have 0 on touch end
-// valuators - while I have no transformations on 90 of 270
-#if 1
+// raw_values have 0 on TouchEnd
+// valuators - on touchsceen & libinput - mapped to Screen
+// IMHO there are just touchpad behaviour.
+// use simple valuators, but keep alter code here too
+#ifdef FAST_VALUATORS
+					switch (dinf->fast&e->valuators.mask[0]) {
+					    case 7:
+						z2 = e->valuators.values[2]/dinf->fastABS[2];
+					    case 3:
+						x2 = e->valuators.values[0]/dinf->fastABS[0];
+						y2 = e->valuators.values[1]/dinf->fastABS[1];
+						break;
+					    default:
+						goto evfree;
+					}
+#else
 #define _raw(i) e->raw_values[i]
+					if (e->valuators.mask[0]&3)!=3) goto evfree;
+
 					if (end
 					    // && x2 == 0. && y2 == 0.
 						) {
@@ -2877,7 +2945,6 @@ ev2:
 							y2 = to->y;
 							z2 = to->z;
 
-							showPtr = 0;
 							res = resX;
 							tt = 0;
 							m = &bmap;
@@ -2915,38 +2982,10 @@ ev2:
 						ERR("not implemented rotation type");
 						goto evfree;
 					}
-#else
-#undef _raw(i)
-#define _raw(i) e->valuators.values[i]
-					DBG("x/y %f %f     %f %f",e->valuators.values[0],e->valuators.values[1],e->raw_values[0],e->raw_values[1]);
-					//double xx2=x2, yy2=y2;
-					//x2 = _valuate(_raw(0),&dinf2->xABS[1],minf2->width1);
-					//y2 = _valuate(_raw(1),&dinf2->xABS[0],minf2->height1);
-					//XFixesShowCursor(dpy,root);
-					//DBG("x/y %f %f     %f %f",x2-xx2,y2-yy2,x2,y2);
-					if (0)
-					switch (minf2->rotation) {
-					    case RR_Rotate_0:
-					    case RR_Rotate_180:
-						x2 = _valuate(_raw(0),&dinf2->xABS[0],minf2->x + minf2->width);
-						y2 = _valuate(_raw(1),&dinf2->xABS[1],minf2->y + minf2->height);
-						break;
-					    case RR_Rotate_90:
-//						x2 = _valuate(_raw(0),&dinf2->xABS[0],minf2->x2 + 1);
-//						y2 = _valuate(_raw(1),&dinf2->xABS[1],minf2->y2 + 1);
-					    case RR_Rotate_270:
-//						x2 = _valuate(_raw(0),&dinf2->xABS[0],minf2->x2 + 1);
-//						y2 = _valuate(_raw(1),&dinf2->xABS[1],minf2->y2 + 1);
-						break;
-					    default:
-						ERR("not implemented rotation type");
-						goto evfree;
-					}
-#endif
-//					DBG("==x/y %f %f",x2-xx2,y2-yy2);
 					if ((dinf2->xABS[2].en) && (e->valuators.mask[0]&4)) {
 						z2 = _valuate(_raw(2),&dinf2->xABS[2],99) + 1;
 					} else z2 = 0;
+#endif
 					xiFreeE();
 					break;
 #undef e
@@ -2989,24 +3028,45 @@ ev2:
 				    case XI_PropertyEvent:
 					if (xiGetE()) {
 						Atom p = e->property;
-						devid = e->deviceid;
-						xiFreeE();
-						if (
-							//devid!=devid1 ||
-							p==aMatrix
-							|| p==aABS
-							) goto ev2;
-						if (p==aDevMon) {
-							if (mon) goto ev2;
-							clearCache();
+						dinf1 = NULL;
+						int devid1 = e->deviceid;
+						DINF(dinf->devid == devid1) {
+							dinf1 = dinf;
+							break;
 						}
+						xiFreeE();
+						if (p == aMatrix) {
+#ifdef TRACK_MATRIX
+							float m[9];
+							devid = devid1;
+							if (xiGetProp(aMatrix,aFloat,&m,9,0)) goto evfree;
+							DBG("xi device %i prop '%s' changed %s to",devid,natom(0,p),
+								!dinf1?"unlikely to me - untracked":
+								!xiGetProp(aMatrix,aFloat,&m,9,0)?
+								"unknown/bad":memcmp(m,dinf1->matrix,sizeof(m))?
+								    "not our value!":"our"
+								);
+#else
+							DBG("xi device %i prop '%s' changed",devid1,natom(0,p));
+							goto ev2;
+#endif
+						}
+						if (p==aDevMon) {
+							if (dinf1) dinf1->mon = 0;
+							oldShowPtr |= 16;
+							goto ev2;
+						}
+						//if (p==aABS) goto ev2;
+						goto ev2;
 					}
+					oldShowPtr |= 2;
+					continue;
 #undef e
 #define e ((XIHierarchyEvent*)ev.xcookie.data)
 #if 0
-					oldShowPtr |= 2; continue;
 				    case XI_HierarchyChanged:
 					if (xiGetE()) {
+						DBG("HierCh 0x%x",e->flags);
 						//DBG("HierCh %i rm=%i add=%i",devid,e->flags&XISlaveRemoved,e->flags&XISlaveAdded);
 //						if (e->flags&(XISlaveRemoved|XISlaveAdded)) oldShowPtr |= 2;
 						xiFreeE();
@@ -3059,7 +3119,6 @@ ev2:
 				}
 				x2 += pf[p_round];
 				y2 += pf[p_round];
-				showPtr = 0;
 				res = resX;
 				tt = 0;
 				m = &bmap;
