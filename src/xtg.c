@@ -1431,6 +1431,7 @@ static void xrMons0(){
 		free(outputs);
 	}
 	prim0 = prim = 0;
+	minf2 = minf1 =
 	outputs = minf_last = NULL;
 	noutput = i;
     }
@@ -1709,11 +1710,13 @@ static void monFullScreen(){
 static _short findResDev(){
 	if (resDev) DINF(dinf->devid == resDev) {
 		dinf2 = dinf;
+		if (!dinf->mon) return 2;
 		MINF(minf->name == dinf->mon) {
-			if (minf2 == minf) break;
+			if (minf2 == minf) return 1;
 			minf2 = minf;
 			return 0;
 		}
+		minf2 = NULL;
 		return 1;
 	}
 	minf2 = NULL;
@@ -1922,15 +1925,18 @@ static void touchToMon(){
 			dinf->type |= o_changed;
 		}
 		if (!((dinf->type|minf->type)&o_changed)) break;
-		if ((dinf->type&o_changed)) dinf->type ^= o_changed;
-		if ((minf->type&o_changed)) minf->type ^= o_changed;
+		if ((minf->type&o_changed)) {
+			minf->type ^= o_changed;
+			dinf->type |= o_changed;
+		}
 		map_to();
 		break;
 	}
 #ifdef FAST_VALUATORS
 	// valuator[i]/fastABS[i]
-	DINF(1) {
+	DINF(dinf->type&o_changed) {
 		_short i;
+		dinf->type ^= o_changed;
 		dinf->fast = 0;
 		for (i = 0; i < 3; i++) {
 			dinf->fastABS[i] = 1;
@@ -2250,7 +2256,7 @@ busy:
 	inputs = inputs1;
 	ninput = ninput1 = ninput1_;
 	dinf_last = &inputs[ninput];
-
+	findResDev();
 
 #ifdef USE_EVDEV
 	DINF((dinf->type&o_absolute) && !(dinf->ABS[0]>0) && !(dinf->ABS[1]>0)) {
@@ -2742,12 +2748,14 @@ static void xiFreeE(){
 
 static _short chResDev(){
 	resDev = devid;
+	minf2 = NULL;
 	// force swap monitors if dynamic pan?
 #if 1
 	if (!(pi[p_safe]&64)) fixGeometry();
 	else
 #endif
 	    findResDev();
+	minf = minf2?:&minf0;
 	if (dinf2) return 1;
 	resDev = 0;
 	return 0;
@@ -2909,9 +2917,8 @@ ev2:
 					    || (e->flags & XITouchPendingEnd));
 nohide:
 					devid = e->deviceid;
-					if ((resDev != devid && !(chResDev() && minf2 && dinf->xABS[1].en))
-					    || !e->valuators.mask_len)
-						goto evfree;
+					if (!e->valuators.mask_len ||
+					    (resDev != devid && !chResDev())) goto evfree;
 					detail = e->detail;
 					z2 = 0;
 // can use raw_values or valuators.values
@@ -2930,11 +2937,12 @@ nohide:
 					    case 0x43:
 					    case 0x70:
 					    case 0x30:
+						break;
 					    default:
 						goto evfree;
 					}
 #else
-					if (e->valuators.mask[0]&3)!=3) goto evfree;
+					if ((e->valuators.mask[0]&3)!=3 || !dinf->xABS[1].en) goto evfree;
 #endif
 					// bug: no values
 					if (end) {
@@ -2950,33 +2958,33 @@ nohide:
 							res = resX;
 							tt = 0;
 							m = &bmap;
-							g = ((int)x2 <= minf2->x) ? BUTTON_RIGHT : ((int)x2 >= minf2->x2) ? BUTTON_LEFT : ((int)y2 <= minf2->y) ? BUTTON_UP : ((int)y2 >= minf2->y2) ? BUTTON_DOWN : 0;
+							g = ((int)x2 <= minf->x) ? BUTTON_RIGHT : ((int)x2 >= minf->x2) ? BUTTON_LEFT : ((int)y2 <= minf->y) ? BUTTON_UP : ((int)y2 >= minf->y2) ? BUTTON_DOWN : 0;
 							if (g) tt |= PH_BORDER;
 
 							goto tfound;
 						}
 						goto ev2;
 					}
-					x2 = _valuate(e->raw_values[0],&dinf2->xABS[0],minf2->width1);
-					y2 = _valuate(e->raw_values[1],&dinf2->xABS[1],minf2->height1);
-					switch (minf2->rotation) {
+					x2 = _valuate(e->raw_values[0],&dinf2->xABS[0],minf->width1);
+					y2 = _valuate(e->raw_values[1],&dinf2->xABS[1],minf->height1);
+					switch (minf->rotation) {
 					    case RR_Rotate_0:
-						x2 += minf2->x;
-						y2 += minf2->y;
+						x2 += minf->x;
+						y2 += minf->y;
 						break;
 					    case RR_Rotate_90:
 						xx = x2;
-						x2 = minf2->x + minf2->height1 - y2;
-						y2 = minf2->y + xx;
+						x2 = minf->x + minf->height1 - y2;
+						y2 = minf->y + xx;
 						break;
 					    case RR_Rotate_180:
-						x2 = minf2->x + minf2->width1 - x2;
-						y2 = minf2->y + minf2->height1 - y2;
+						x2 = minf->x + minf->width1 - x2;
+						y2 = minf->y + minf->height1 - y2;
 						break;
 					    case RR_Rotate_270:
 						xx = x2;
-						x2 = minf2->x + y2;
-						y2 = minf2->y + minf2->width1 - xx;
+						x2 = minf->x + y2;
+						y2 = minf->y + minf->width1 - xx;
 						break;
 					    default:
 						ERR("not implemented rotation type");
@@ -3110,7 +3118,7 @@ val_all:
 				res = resX;
 				tt = 0;
 				m = &bmap;
-				g = minf2 ? ((int)x2 <= minf2->x) ? BUTTON_RIGHT : ((int)x2 >= minf2->x2) ? BUTTON_LEFT : ((int)y2 <= minf2->y) ? BUTTON_UP : ((int)y2 >= minf2->y2) ? BUTTON_DOWN : 0 : 0;
+				g = ((int)x2 <= minf->x) ? BUTTON_RIGHT : ((int)x2 >= minf->x2) ? BUTTON_LEFT : ((int)y2 <= minf->y) ? BUTTON_UP : ((int)y2 >= minf->y2) ? BUTTON_DOWN : 0;
 				if (g) tt |= PH_BORDER;
 				for(i=P; i!=N; i=TOUCH_N(i)){
 					Touch *t1 = &touch[i];
