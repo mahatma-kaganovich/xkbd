@@ -2256,7 +2256,7 @@ busy:
 	inputs = inputs1;
 	ninput = ninput1 = ninput1_;
 	dinf_last = &inputs[ninput];
-	findResDev();
+	resDev = 0;
 
 #ifdef USE_EVDEV
 	DINF((dinf->type&o_absolute) && !(dinf->ABS[0]>0) && !(dinf->ABS[1]>0)) {
@@ -2748,15 +2748,16 @@ static void xiFreeE(){
 
 static _short chResDev(){
 	resDev = devid;
-	minf2 = NULL;
 	// force swap monitors if dynamic pan?
 #if 1
 	if (!(pi[p_safe]&64)) fixGeometry();
 	else
 #endif
-	    findResDev();
-	minf = minf2?:&minf0;
-	if (dinf2) return 1;
+	    if (findResDev() == 2 && !(dinf2->type&o_absolute)) minf2 = &minf0;
+	if (dinf2) {
+		if (!minf2) minf2 = &minf0;
+		return 1;
+	}
 	resDev = 0;
 	return 0;
 }
@@ -2958,33 +2959,33 @@ nohide:
 							res = resX;
 							tt = 0;
 							m = &bmap;
-							g = ((int)x2 <= minf->x) ? BUTTON_RIGHT : ((int)x2 >= minf->x2) ? BUTTON_LEFT : ((int)y2 <= minf->y) ? BUTTON_UP : ((int)y2 >= minf->y2) ? BUTTON_DOWN : 0;
+							g = ((int)x2 <= minf2->x) ? BUTTON_RIGHT : ((int)x2 >= minf2->x2) ? BUTTON_LEFT : ((int)y2 <= minf2->y) ? BUTTON_UP : ((int)y2 >= minf2->y2) ? BUTTON_DOWN : 0;
 							if (g) tt |= PH_BORDER;
 
 							goto tfound;
 						}
 						goto ev2;
 					}
-					x2 = _valuate(e->raw_values[0],&dinf2->xABS[0],minf->width1);
-					y2 = _valuate(e->raw_values[1],&dinf2->xABS[1],minf->height1);
-					switch (minf->rotation) {
+					x2 = _valuate(e->raw_values[0],&dinf2->xABS[0],minf2->width1);
+					y2 = _valuate(e->raw_values[1],&dinf2->xABS[1],minf2->height1);
+					switch (minf2->rotation) {
 					    case RR_Rotate_0:
-						x2 += minf->x;
-						y2 += minf->y;
+						x2 += minf2->x;
+						y2 += minf2->y;
 						break;
 					    case RR_Rotate_90:
 						xx = x2;
-						x2 = minf->x + minf->height1 - y2;
-						y2 = minf->y + xx;
+						x2 = minf2->x + minf2->height1 - y2;
+						y2 = minf2->y + xx;
 						break;
 					    case RR_Rotate_180:
-						x2 = minf->x + minf->width1 - x2;
-						y2 = minf->y + minf->height1 - y2;
+						x2 = minf2->x + minf2->width1 - x2;
+						y2 = minf2->y + minf2->height1 - y2;
 						break;
 					    case RR_Rotate_270:
 						xx = x2;
-						x2 = minf->x + y2;
-						y2 = minf->y + minf->width1 - xx;
+						x2 = minf2->x + y2;
+						y2 = minf2->y + minf2->width1 - xx;
 						break;
 					    default:
 						ERR("not implemented rotation type");
@@ -3118,7 +3119,7 @@ val_all:
 				res = resX;
 				tt = 0;
 				m = &bmap;
-				g = ((int)x2 <= minf->x) ? BUTTON_RIGHT : ((int)x2 >= minf->x2) ? BUTTON_LEFT : ((int)y2 <= minf->y) ? BUTTON_UP : ((int)y2 >= minf->y2) ? BUTTON_DOWN : 0;
+				g = ((int)x2 <= minf2->x) ? BUTTON_RIGHT : ((int)x2 >= minf2->x2) ? BUTTON_LEFT : ((int)y2 <= minf2->y) ? BUTTON_UP : ((int)y2 >= minf2->y2) ? BUTTON_DOWN : 0;
 				if (g) tt |= PH_BORDER;
 				for(i=P; i!=N; i=TOUCH_N(i)){
 					Touch *t1 = &touch[i];
