@@ -1865,8 +1865,8 @@ static void _add_input(_short t){
 	dinf1->attach0 = d2->attachment;
 	t |= o_changed;
 	memcpy(&dinf1->xABS,&xABS,sizeof(xABS));
-	if (ximask[0].mask) dinf1->evmask[0] = ~ximask[0].mask[0];
-ex:
+	// XI_DeviceChanged==1 set everywhere, so 0 is "no event set"
+//	dinf1->evmask[0] = ...:
 	dinf1->type |= t;
 }
 
@@ -2685,7 +2685,9 @@ static void init(){
 	}
 #endif
 
+	XISetMask(ximaskButton, XI_PropertyEvent);
 	XISetMask(ximaskTouch, XI_PropertyEvent);
+	XISetMask(ximaskRaw, XI_PropertyEvent);
 	XISetMask(ximask0, XI_PropertyEvent);
 
 	XISetMask(ximask0, XI_HierarchyChanged);
