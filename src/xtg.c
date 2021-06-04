@@ -44,6 +44,9 @@
 #undef PROP_FMT
 //#define TRACK_MATRIX
 #define FAST_VALUATORS
+// as soon Z!/pressure or legacy unhooked floating starts to be actual - set it.
+// -f 7|15 will set per device, not XIAllDevices
+//#define PRODUCTION_MODE15
 #endif
 
 #include <stdio.h>
@@ -647,6 +650,8 @@ typedef struct _abs {
 	int resolution;
 } abs_t;
 
+abs_t xABS[NdevABS];
+
 typedef struct _dinf {
 	_short type;
 	int devid;
@@ -662,6 +667,7 @@ typedef struct _dinf {
 #ifdef TRACK_MATRIX
 	float matrix[9];
 #endif
+	xiMask evmask;
 } dinf_t;
 
 static inline double _valuate(double val, abs_t *a, unsigned long width) {
@@ -1858,6 +1864,8 @@ static void _add_input(_short t){
 	dinf1->devid = devid;
 	dinf1->attach0 = d2->attachment;
 	t |= o_changed;
+	memcpy(&dinf1->xABS,&xABS,sizeof(xABS));
+	if (ximask[0].mask) dinf1->evmask[0] = ~ximask[0].mask[0];
 ex:
 	dinf1->type |= t;
 }
@@ -1955,9 +1963,9 @@ static void touchToMon(){
 		}
 	}
 #endif
+	MINF(minf->type&o_changed) minf->type ^= o_changed;
 }
 
-abs_t xABS[NdevABS];
 static _short xiClasses(XIAnyClassInfo **classes, int num_classes){
 	_short type1 = 0;
 	int devid, j;
@@ -2028,8 +2036,8 @@ static void getHierarchy(){
 	ninput1_ = 0;
 	
 	int i,j,ndevs2,nkbd,m=0;
-	void *mTouch = useRawTouch ? &ximaskRaw : &ximaskTouch;
-	void *mButton = useRawButton ? &ximaskRaw : &ximaskButton;
+	void *mTouch = useRawTouch ? ximaskRaw : ximaskTouch;
+	void *mButton = useRawButton ? ximaskRaw : ximaskButton;
 
 	_grabX();
 	XIDeviceInfo *info2 = XIQueryDevice(dpy, XIAllDevices, &ndevs2);
@@ -2163,6 +2171,12 @@ static void getHierarchy(){
 				    case 2:
 					if (d2->attachment == cr.return_pointer) c = &cf;
 					break;
+#ifdef PRODUCTION_MODE15
+				    case 3:
+					if ((mTouch == ximaskRaw && t)
+					    || (mButton == ximaskRaw && xABS[2].en)) ximask[0].mask=ximaskRaw;
+					break;
+#endif
 				}
 			}
 			break;
@@ -2172,10 +2186,7 @@ static void getHierarchy(){
 //			break;
 		}
 
-		if (type) {
-			_add_input(type|=type1);
-			memcpy(&dinf1->xABS,&xABS,sizeof(xABS));
-		}
+		if (type || ximask[0].mask) _add_input(type|=type1);
 		if (pi[p_safe]&1) {
 			if (!(c || ximask[0].mask)) continue;
 			if (busy) {
@@ -2227,7 +2238,12 @@ busy:
 			}
 		}
 		if (c) XIChangeHierarchy(dpy, c, 1);
-		if (ximask[0].mask) XISelectEvents(dpy, root, ximask, Nximask);
+		if (ximask[0].mask) {
+			if (memcmp(&dinf1->evmask,ximask->mask,sizeof(xiMask))) {
+				XISelectEvents(dpy, root, ximask, Nximask);
+				memcpy(&dinf1->evmask,ximask->mask,sizeof(xiMask));
+			}
+		}
 	}
 	switch (pi[p_floating]) {
 	    case 2:
@@ -2650,6 +2666,7 @@ static void init(){
 	XISetMask(ximaskRaw, XI_RawButtonRelease);
 	XISetMask(ximaskRaw, XI_RawMotion);
 
+#ifndef PRODUCTION_MODE15
 	if (pi[p_floating]==3) {
 		if (useRawTouch) {
 			XISetMask(ximask0, XI_RawTouchBegin);
@@ -2666,6 +2683,7 @@ static void init(){
 			XISetMask(ximask0, XI_RawMotion);
 		}
 	}
+#endif
 
 	XISetMask(ximaskTouch, XI_PropertyEvent);
 	XISetMask(ximask0, XI_PropertyEvent);
