@@ -1867,6 +1867,7 @@ static void _add_input(_short t){
 	memcpy(&dinf1->xABS,&xABS,sizeof(xABS));
 	// XI_DeviceChanged==1 set everywhere, so 0 is "no event set"
 //	dinf1->evmask[0] = ...:
+ex:
 	dinf1->type |= t;
 }
 
