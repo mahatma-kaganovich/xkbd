@@ -3066,6 +3066,7 @@ ev2:
 					if (resDev != devid && !chResDev()) goto evfree;
 					if (e->detail != 1)
 						XTestFakeButtonEvent(dpy,e->detail,ev.xcookie.evtype == XI_RawButtonPress,0);
+					// else XTestFakeButtonEvent(dpy,1,0,0);
 					goto evfree;
 				    case XI_RawMotion:
 					showPtr = 1;
@@ -3075,6 +3076,7 @@ ev2:
 					if (!raw2xy()) goto evfree1;
 rbut_common:
 					if (dinf2->xABS[2].en) {
+						zstate = dinf2->zstate;
 						XTestFakeMotionEvent(dpy,screen,x2,y2,0);
 						if (ev.xcookie.evtype == XI_RawButtonPress) {
 							zstate = 0;
@@ -3089,12 +3091,11 @@ rbut_common:
 								// end: press if not pressed and release
 								if (!dinf2->zstate) XTestFakeButtonEvent(dpy,1,1,0);
 								XTestFakeButtonEvent(dpy,1,0,0);
-							} else if (zstate !=2 && dinf2->zstate == 2) {
+							} else if (zstate == 1 && dinf2->zstate == 2) {
 								// local max "press"
-								for (i=1; i <= 1; i<<=1) if (i&detail)
-								    XTestFakeButtonEvent(dpy,1,1,0);
+								XTestFakeButtonEvent(dpy,1,1,0);
 								zstate = 1; // pressed
-							} else if (zstate == 2 && dinf2->zstate != 2) {
+							} else if (zstate == 2 && dinf2->zstate == 1) {
 								// local min "release"
 								if (dinf2->zstate) XTestFakeButtonEvent(dpy,1,0,0);
 							}
