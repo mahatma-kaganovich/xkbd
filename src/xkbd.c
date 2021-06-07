@@ -645,11 +645,10 @@ stop_argv:
 	xrevent += RRScreenChangeNotify;
 #endif
 #ifdef USE_XI
-	int xiopcode, xievent = 0, xierror, xi, ximajor = 2, ximinor = 2;
+	int xiopcode, xievent = 0, xierror, xi, ximajor = 2, ximinor = 4;
 	xi = !(fake_touch&1)
 		&& XQueryExtension(display, "XInputExtension", &xiopcode, &xievent, &xierror)
 		&& XIQueryVersion(display, &ximajor, &ximinor) != BadRequest;
-	
 #endif
 #ifndef MINIMAL
 	// not found how to get keymap change on XInput, so keep Xkb events
@@ -924,7 +923,13 @@ re_crts:
 	XISetMask(mask.mask, XI_TouchBegin);
 	XISetMask(mask.mask, XI_TouchUpdate);
 	XISetMask(mask.mask, XI_TouchEnd);
-
+#if defined(XI_GestureSwipeBegin) && defined(GESTURES_USE)
+	if (ximinor > 3 || ximinor > 2) {
+		XISetMask(mask.mask, XI_GestureSwipeBegin);
+		XISetMask(mask.mask, XI_GestureSwipeUpdate);
+		XISetMask(mask.mask, XI_GestureSwipeEnd);
+	}
+#endif
 	XISelectEvents(display, win, &mask, 1);
       } else
 #endif
@@ -1008,6 +1013,14 @@ _remapped:
 				}
 #endif
 				active_but = kb_handle_events(kb, 0, ex, ey, e->detail, lastid = e->sourceid, e->time, NULL, 0);
+				break;
+#if defined(XI_GestureSwipeBegin) && defined(GESTURES_USE)
+			    case XI_GestureSwipeBegin:
+			    case XI_GestureSwipeUpdate:
+			    case XI_GestureSwipeEnd:
+				fprintf(stderr,"swipe\n");
+				break;
+#endif
 			}
 			XFreeEventData(display, &ev.xcookie);
 		}

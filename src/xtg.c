@@ -3112,6 +3112,7 @@ ev2:
 						break;
 					    case 1:
 						if (dinf2->z - z2 > dinf2->mindiffZ) dinf2->zstate = 2;
+						else if (z2 < dinf2->z) goto z_noise;
 						else if (dinf2->maxZ != 0. && z2 >= dinf2->maxZ) dinf2->zstate = 3;
 						else break;
 						//DBG("pr %f",z2 - dinf2->z);
@@ -3119,6 +3120,7 @@ ev2:
 						break;
 					    case 2:
 						if (z2 - dinf2->z > dinf2->mindiffZ) dinf2->zstate = 1;
+						else if (z2 > dinf2->z) goto z_noise;
 						else if (z2 <= dinf2->minZ) dinf2->zstate = 4;
 						else break;
 						XTestFakeButtonEvent(dpy,dinf2->zdetail,0,0);
@@ -3150,9 +3152,10 @@ ev2:
 						dinf2->z = (dinf2->z*(dinf2->z_ewmh-1)+z2)/dinf2->z_ewmh;
 						break;
 					}
+					dinf2->z = z2;
+z_noise:
 					dinf2->zserial = e->serial;
 					dinf2->ztime = e->time;
-					dinf2->z = z2;
 					xiFreeE();
 					goto ev2;
 				    case XI_RawTouchBegin:
