@@ -667,9 +667,18 @@ typedef struct _dinf {
 	float matrix[9];
 #endif
 	xiMask evmask;
-	double x,y,z,minZ;
+	double z,minZ,maxZ,mindiffZ;
 	_short zstate,z_ewmh;
+	int zdetail;
+	unsigned long zserial;
+	time_t ztime;
 } dinf_t;
+
+#define z_nothing 0
+#define z_inc 1
+#define z_dec 2
+#define z_start 3
+
 
 static inline double _valuate(double val, abs_t *a, unsigned long width) {
 	return (a->max_min > 0) ? (val - a->min)*width/a->max_min : val;
@@ -1882,6 +1891,7 @@ found:
 #endif
 	dinf1->devid = devid;
 	dinf1->attach0 = d2->attachment;
+	dinf1->mindiffZ = 2;
 ch:
 	t |= o_changed;
 	memcpy(&dinf1->xABS,&xABS,sizeof(xABS));
@@ -2919,7 +2929,7 @@ int main(int argc, char **argv){
 #ifdef XTG
 	_short i;
 	int opt;
-	_short tt,g,bx,by,zstate;
+	_short tt,g,bx,by;
 	_int k;
 	_int vl;
 	int detail;
@@ -3059,90 +3069,92 @@ ev2:
 #undef e
 #define e ((XIRawEvent*)ev.xcookie.data)
 				    case XI_RawButtonPress:
+					showPtr = 1;
+					if (!xiGetE()) goto ev;
+					if (resDev != devid && !chResDev()) goto evfree;
+					if (dinf2->zstate == 5 && !dinf2->zdetail && dinf2->zserial == e->serial && dinf2->ztime == e->time) {
+						// source valuator is controlled in XI_RawMotion
+						dinf2->zstate = 1;
+						dinf2->zdetail = e->detail;
+					} else {
+						XTestFakeButtonEvent(dpy,e->detail,1,0);
+					}
+					xiFreeE();
+					goto ev2;
 				    case XI_RawButtonRelease:
 					showPtr = 1;
 					if (!xiGetE()) goto ev;
-					devid = e->deviceid;
 					if (resDev != devid && !chResDev()) goto evfree;
-					if (e->detail != 1)
-						XTestFakeButtonEvent(dpy,e->detail,ev.xcookie.evtype == XI_RawButtonPress,0);
-					// else XTestFakeButtonEvent(dpy,1,0,0);
-					goto evfree;
+					if (dinf2->zdetail == e->detail && dinf2->zstate) {
+						switch (dinf2->zstate) {
+						    case 1:
+							if (dinf2->zserial == e->serial && dinf2->ztime == e->time) break;
+							XTestFakeButtonEvent(dpy,e->detail,1,0);
+						    case 2:
+						    case 3:
+							XTestFakeButtonEvent(dpy,e->detail,0,0);
+						}
+						dinf2->zdetail = 0;
+						dinf2->zstate = 0;
+					} else XTestFakeButtonEvent(dpy,e->detail,0,0);
+					xiFreeE();
+					goto ev2;
 				    case XI_RawMotion:
 					showPtr = 1;
 					if (!xiGetE()) goto ev;
 					devid = e->deviceid;
-					end = ev.xcookie.evtype == XI_RawButtonRelease;
 					if (!raw2xy()) goto evfree1;
-rbut_common:
-					if (dinf2->xABS[2].en) {
-						zstate = dinf2->zstate;
-						XTestFakeMotionEvent(dpy,screen,x2,y2,0);
-						if (ev.xcookie.evtype == XI_RawButtonPress) {
-							zstate = 0;
-							dinf2->zstate = 0;
-						} else {
-							unsigned long i;
-							z1 = dinf2->z;
-							zz = z2 - z1;
-							if (z2 > z1 && z2 >= dinf2->minZ) zstate = 1;
-							else if (z2 < z1) zstate = 2;
-							if (ev.xcookie.evtype == XI_RawButtonRelease) {
-								// end: press if not pressed and release
-								if (!dinf2->zstate) XTestFakeButtonEvent(dpy,1,1,0);
-								XTestFakeButtonEvent(dpy,1,0,0);
-							} else if (zstate == 1 && dinf2->zstate == 2) {
-								// local max "press"
-								XTestFakeButtonEvent(dpy,1,1,0);
-								zstate = 1; // pressed
-							} else if (zstate == 2 && dinf2->zstate == 1) {
-								// local min "release"
-								if (dinf2->zstate) XTestFakeButtonEvent(dpy,1,0,0);
-							}
-						}
-						switch (dinf2->z_ewmh) {
-						    case 0:
-						    case 1:
-							dinf2->z = z2;
-							break;
-						    case 2:
-							dinf2->z = (dinf2->z + z2) / 2;
-							break;
-						    default:
-							dinf2->z = (dinf2->z*(dinf2->z_ewmh-1)+z2)/dinf2->z_ewmh;
-							break;
-						}
-						dinf2->zstate = zstate;
-						dinf2->x = x2;
-						dinf2->y = y2;
+					XTestFakeMotionEvent(dpy,screen,x2,y2,0);
+					if (!dinf2->xABS[2].en) goto evfree;
+					switch (dinf2->zstate) {
+					    case 0:
+						if (dinf2->z == 0. && z2 > 0.) dinf2->zstate = 5;
+						break;
+					    case 1:
+						if (dinf2->z - z2 > dinf2->mindiffZ) dinf2->zstate = 2;
+						else if (dinf2->maxZ != 0. && z2 >= dinf2->maxZ) dinf2->zstate = 3;
+						else break;
+						//DBG("pr %f",z2 - dinf2->z);
+						XTestFakeButtonEvent(dpy,dinf2->zdetail,1,0);
+						break;
+					    case 2:
+						if (z2 - dinf2->z > dinf2->mindiffZ) dinf2->zstate = 1;
+						else if (z2 <= dinf2->minZ) dinf2->zstate = 4;
+						else break;
+						XTestFakeButtonEvent(dpy,dinf2->zdetail,0,0);
+						break;
+					    case 3:
+						if (dinf2->maxZ != 0. && z2 >= dinf2->maxZ) break;
+						dinf2->zstate = 1;
+						XTestFakeButtonEvent(dpy,dinf2->zdetail,0,0);
+						break;
+					    case 4:
+						if (z2 <= dinf2->minZ) break;
+						dinf2->zstate = 2;
+						XTestFakeButtonEvent(dpy,dinf2->zdetail,1,0);
+						break;
+					    case 5: // check button skipped or dup
+						if (dinf2->zserial == e->serial && dinf2->ztime == e->time && z2 == dinf2->z) break;
+						dinf2->zstate = 0;
+						break;
+					}
+					switch (dinf2->z_ewmh) {
+					    case 0:
+					    case 1:
 						dinf2->z = z2;
-						xiFreeE();
-						goto ev2;
-					}
-#if 1
-//					DBG("raw %i",ev.xcookie.evtype);
-					switch (ev.xcookie.evtype) {
-					    case XI_RawButtonPress:
-//						DBG("press");
-						XTestFakeMotionEvent(dpy,screen,x2,y2,0);
-						XTestFakeButtonEvent(dpy,e->detail,1,0);
 						break;
-					    case XI_RawButtonRelease:
-//						DBG("release");
-						if (!end&2) XTestFakeMotionEvent(dpy,screen,x2,y2,0);
-						XTestFakeButtonEvent(dpy,e->detail,0,0);
+					    case 2:
+						dinf2->z = (dinf2->z + z2) / 2;
 						break;
-					    case XI_RawMotion:
-//						DBG("mo");
-						XTestFakeMotionEvent(dpy,screen,x2,y2,0);
+					    default:
+						dinf2->z = (dinf2->z*(dinf2->z_ewmh-1)+z2)/dinf2->z_ewmh;
 						break;
 					}
+					dinf2->zserial = e->serial;
+					dinf2->ztime = e->time;
+					dinf2->z = z2;
 					xiFreeE();
 					goto ev2;
-#else
-					detail = 0;
-					break;
-#endif
 				    case XI_RawTouchBegin:
 				    case XI_RawTouchUpdate:
 				    case XI_RawTouchEnd:

@@ -1220,13 +1220,35 @@ typedef struct _touch {
 	static unsigned short P=0;
 	int t;
 	int type1 = type;
+
+#ifdef BUTTONS_TO1
+	// make non-touch motion single-button
+	if (mask) {
+		if (ptr);
+		else if (mask_len == (sizeof(unsigned int) << 3)) {
+			if (!*(unsigned int *)mask) type = 2;
+		} else {
+			unsigned char m = 0;
+			j = mask_len >> 3;
+			for (i=0; i<j && !m; i++) m |= mask[i];
+			if (!m && (j = mask_len - (j << 3))) m |= mask[i] & ~(j << 1);
+			if (!m) type = 2;
+		}
+		mask_len = 0;
+		mask = NULL;
+		ptr = 1;
+	}
+#else
 	int dead;
 	Time deadTime;
-
+#endif
 	// find touch
 find:
 	if (type && P==N) return NULL;
-	dead = t = -1;
+#ifndef BUTTONS_TO1
+	dead =
+#endif
+	    t = -1;
 	for (i=P; i!=N; TOUCH_INC(i)) {
 		Touch *t1 = &touch[i];
 		if (t1->deviceid == dev) {
@@ -1239,13 +1261,16 @@ find:
 //				if (time==times[i] && x==X[i] && y==Y[i]) return but[i];
 				if (time<=t1->time) return t1->but;
 			}
+#ifndef BUTTONS_TO1
 			if (mask && j<(mask_len<<3) && !(mask[j>>3] & (1 << (j & 7)))
 			    && (dead < 0 || t1->time<deadTime)) {
 				dead = i;
 				deadTime = t1->time;
 			}
+#endif
 		}
 	}
+#ifndef BUTTONS_TO1
 	if (dead >= 0) {
 		if (dead != t) {
 			type = 3;
@@ -1255,6 +1280,7 @@ find:
 		}
 		type = 2;
 	}
+#endif
 	if (type && t<0) {
 //		fprintf(stderr,"untracked touch on state %i\n",type);
 		return NULL;

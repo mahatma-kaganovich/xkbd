@@ -28,6 +28,10 @@
 
 #define DEFAULT_FONT "Monospace-%i|-%i|sans-%i|fixed-%i|fixed"
 
+// to make 1-pointer multibutton devices simple - define
+// for button acrobats - undef
+#define BUTTONS_TO1
+
 // shift,mod/alt
 //#define LEVEL_BITS 2
 // +ctrl-alt
