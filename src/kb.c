@@ -1226,7 +1226,7 @@ typedef struct _touch {
 	if (mask) {
 		if (ptr);
 		else if (mask_len == (sizeof(unsigned int) << 3)) {
-			if (!*(unsigned int *)mask && ~0x87u) type = 2;
+			if (!*(unsigned int *)mask && ~0x78u) type = 2;
 		} else if (mask_len) {
 			j = mask_len >> 3;
 			if (!j) {
