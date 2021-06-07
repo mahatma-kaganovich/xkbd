@@ -1228,12 +1228,12 @@ typedef struct _touch {
 		else if (mask_len == (sizeof(unsigned int) << 3)) {
 			if (!*(unsigned int *)mask) type = 2;
 		} else {
-			unsigned char m = 0;
 			j = mask_len >> 3;
-			for (i=0; i<j && !m; i++) m |= mask[i];
-			if (!m && (j = mask_len - (j << 3))) m |= mask[i] & ~(j << 1);
-			if (!m) type = 2;
+			for (i=0; i<j; i++) if (mask[i]) goto btn1;
+			if (!(j = mask_len&7) || (mask[i] & ~(j << 1))) goto btn1;
+			type = 2;
 		}
+btn1:
 		mask_len = 0;
 		mask = NULL;
 		ptr = 1;
