@@ -1029,6 +1029,13 @@ static void xiSetMask(xiMask mask,int event) {
 }
 
 #ifdef USE_EVDEV
+static _short _evsize(struct libevdev *dev, int c, int i) {
+        const struct input_absinfo *x = libevdev_get_abs_info(dev, c);
+        if (!x || !x->resolution) return 0;
+        dinf->ABS[i] = (x->maximum - x->minimum + .0)/x->resolution;
+        return 1;
+}
+
 static void getEvRes(){
 	devid = dinf->devid;
 	if (!(pi[p_safe]&1024) && xiGetProp(aABS,aFloat,&dinf->ABS,NdevABS,0)) return;
@@ -1039,24 +1046,13 @@ static void getEvRes(){
 	if (fd < 0) goto ret;
 	struct libevdev *device;
 	if (!libevdev_new_from_fd(fd, &device)){
-		_short i;
-		for (i=0; i<NdevABS; i++) {
-			const struct input_absinfo *x = libevdev_get_abs_info(device,
-#if ABS_X == 0 && ABS_Y == 1
-			    i);
-#else
-			    (i==0)?ABS_X:(i==1)?ABS_Y:ABS_Z);
-#endif
-			if (x && x->resolution) dinf->ABS[i] = (x->maximum - x->minimum + 0.)/x->resolution;
-			if (x) DBG("ABS %i %i %i %i %i",devid,i,x->minimum,x->maximum,x->resolution);
-//			else 
+		_short z = 0;
+		if (_evsize(device,ABS_MT_POSITION_X,0) && _evsize(device,ABS_MT_POSITION_Y,1)) {
+			_evsize(device,ABS_MT_PRESSURE,2);
+		} else if (_evsize(device,ABS_X,0) && _evsize(device,ABS_Y,1)) {
+			if (_evsize(device,ABS_PRESSURE,2) || _evsize(device,ABS_Z,2));
 		}
-		int max = libevdev_event_type_get_max(EV_ABS);
-		DBG("max = %i",max);
-		for (i=0; i<max; i++) {
-			const struct input_absinfo *x = libevdev_get_abs_info(device, i);
-			if (x) DBG("+ ABS %i 0x%x %i %i %i %s",devid,i,x->minimum,x->maximum,x->resolution,libevdev_property_get_name(i));
-		}
+		
 		libevdev_free(device);
 		xiSetProp(aABS,aFloat,&dinf->ABS,NdevABS,0);
 	}
@@ -2013,7 +2009,7 @@ static void touchToMon(){
 }
 
 // try libevdev/kernel labeled valuators first
-// first try "Abs MT Position *", next "Abs *", last - first 3
+// first try "Abs MT *", next "Abs *", last - first 3
 typedef struct _abs_cl_t {
 	_short m;
 	void *cl[3];
@@ -2021,7 +2017,7 @@ typedef struct _abs_cl_t {
 	unsigned char *name[5];
 } abs_cl_t;
 abs_cl_t *_abs1, _abs[3] = {
-	{.name = {"Abs MT Position X","Abs MT Position Y","Abs MT Position Pressure"}},
+	{.name = {"Abs MT Position X","Abs MT Position Y","Abs MT Pressure"}},
 	{.name = {"Abs X","Abs Y","Abs Pressure","Abs Z"}},
 };
 
@@ -2044,6 +2040,8 @@ static _short xiClasses(XIAnyClassInfo **classes, int num_classes){
 #undef e
 #define e ((XIValuatorClassInfo*)cl)
 		    case XIValuatorClass:
+			type1 |= o_absolute;;
+			//DBG("dev %i class %i res %i '%s'",devid,e->number,e->resolution,natom(0,e->label));
 			switch (e->mode) {
 			    case Absolute:
 				for (i=0; i<3; i++) {
