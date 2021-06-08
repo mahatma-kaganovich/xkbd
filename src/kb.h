@@ -25,7 +25,7 @@ void kb_size(keyboard *kb);
 void kb_repaint(keyboard *kb);
 void kb_resize(keyboard *kb, int width, int height);
 void kb_destroy(keyboard *kb);
-button *kb_handle_events(keyboard *kb, int type, const int x, const int y, unsigned int ptr, int dev, Time time, unsigned char *mask, int mask_len);
+button *kb_handle_events(keyboard *kb, int type, const int x, const int y, const int z, unsigned int ptr, int dev, Time time, unsigned char *mask, int mask_len);
 Bool kb_do_repeat(keyboard *kb, button *b);
 button * kb_find_button(keyboard *kb, int x, int y);
 unsigned int kb_sync_state(keyboard *kb, unsigned int mods, unsigned int locked_mods, int group);

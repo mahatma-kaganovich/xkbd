@@ -415,6 +415,38 @@ static int rootChanged(XWindowAttributes *wa){
 	return 0;
 }
 
+#ifdef USE_XI
+int use_pressure = 0;
+static int devid_abs_chk = 0;
+static short abs3(int devid){
+	static short ret = 0;
+	if (devid == devid_abs_chk) goto ret1;
+	if (use_pressure == -1 || use_pressure == devid) return 1;
+	if (devid < 2) return 0;
+	ret = 0;
+	int ndevs2,i,j;
+	XIDeviceInfo *info2 = XIQueryDevice(display, devid_abs_chk = devid, &ndevs2);
+	for (i=0; i<ndevs2; i++) {
+		XIDeviceInfo *d2 = &info2[i];
+		if (devid == d2->deviceid) for (j=0; j<d2->num_classes; j++) {
+			XIAnyClassInfo *cl = d2->classes[j];
+			if (cl->type != XIValuatorClass) continue;
+#undef e
+#define e ((XIValuatorClassInfo*)cl)
+			if (e->number == 2 && e->mode == Absolute) {
+				fprintf(stderr,"input %i '%s' using pressure\n",devid,d2->name);
+				ret = 1;
+				goto ret;
+			}
+		}
+	}
+ret:
+	XIFreeDeviceInfo(info2);
+ret1:
+	return ret;
+}
+#endif
+
 int main(int argc, char **argv)
 {
    char *window_name = iam;
@@ -506,6 +538,9 @@ int main(int argc, char **argv)
 	},
 #ifdef CACHE_PIX
 	{ 'C', IAM ".cache", 1, 0, &cache_pix, "pixmap cache 0=disable, 1=enable, 2=preload, 3=direct+cache\n	(3 is optimal, but sometimes start on black bar)" },
+#endif
+#ifdef USE_XI
+	{ 'z', IAM ".z", 2, 0, &use_pressure, "use z (pressure) if possible, experimental:\n	-1=no verify, 0=no, 1=yes, <device>" },
 #endif
 	{ 0, NULL }
    };
@@ -977,10 +1012,16 @@ _remapped:
 			static int lastid = -1;
 			int ex = e->event_x;
 			int ey = e->event_y;
+			int ez = (use_pressure
+			    && e->valuators.mask_len && (e->valuators.mask[0]&7 == 7)
+			    && abs3(e->sourceid)
+			    	) ? e->valuators.values[2] : 0;
 			switch(ev.xcookie.evtype) {
 			    case XI_ButtonRelease: type++;
 			    case XI_Motion: type++; // always detail==0
 			    case XI_ButtonPress:
+				//if (type == 2) 
+				if ((e->valuators.mask_len && e->valuators.mask[0]) || e->detail)
 				if (lastid == e->sourceid) break;
 #ifndef GESTURES_USE
 				{
@@ -994,16 +1035,16 @@ _remapped:
 					break;
 				    default: if (!resized)
 #endif
-					active_but = kb_handle_events(kb, type, ex, ey, e->detail, e->sourceid, e->time,e->buttons.mask,e->buttons.mask_len);
+					active_but = kb_handle_events(kb, type, ex, ey, ez, e->detail, e->sourceid, e->time,e->buttons.mask,e->buttons.mask_len);
 				}
 				break;
 			    case XI_TouchUpdate:
 				if (!(e->flags & XITouchPendingEnd)) {
-					active_but = kb_handle_events(kb, 1, ex, ey, e->detail, lastid = e->sourceid, e->time, NULL, 0);
+					active_but = kb_handle_events(kb, 1, ex, ey, ez, e->detail, lastid = e->sourceid, e->time, NULL, 0);
 					break;
 				}
 			    case XI_TouchEnd:
-				active_but = kb_handle_events(kb, 2, ex, ey, e->detail, lastid = e->sourceid, e->time, NULL, 0);
+				active_but = kb_handle_events(kb, 2, ex, ey, ez, e->detail, lastid = e->sourceid, e->time, NULL, 0);
 				break;
 			    case XI_TouchBegin:
 #ifdef GESTURES_USE
@@ -1012,7 +1053,7 @@ _remapped:
 					break;
 				}
 #endif
-				active_but = kb_handle_events(kb, 0, ex, ey, e->detail, lastid = e->sourceid, e->time, NULL, 0);
+				active_but = kb_handle_events(kb, 0, ex, ey, ez, e->detail, lastid = e->sourceid, e->time, NULL, 0);
 				break;
 #if defined(XI_GestureSwipeBegin) && defined(GESTURES_USE)
 			    case XI_GestureSwipeBegin:
@@ -1040,11 +1081,11 @@ _remapped:
 			break;
 		    default: if (!resized)
 #endif
-			active_but = kb_handle_events(kb, type, ev.xbutton.x, ev.xbutton.y, ev.xbutton.button, 0, ev.xbutton.time, &ev.xbutton.state, sizeof(ev.xbutton.state));
+			active_but = kb_handle_events(kb, type, ev.xbutton.x, 0, ev.xbutton.y, ev.xbutton.button, 0, ev.xbutton.time, &ev.xbutton.state, sizeof(ev.xbutton.state));
 		}
 		break;
 	    case MotionNotify:
-		active_but = kb_handle_events(kb, 1, ev.xmotion.x, ev.xmotion.y, 0, 0, ev.xmotion.time, &ev.xmotion.state, sizeof(ev.xmotion.state));
+		active_but = kb_handle_events(kb, 1, ev.xmotion.x, ev.xmotion.y, 0, 0, 0, ev.xmotion.time, &ev.xmotion.state, sizeof(ev.xmotion.state));
 		break;
 	    case ClientMessage:
 		if ((ev.xclient.message_type == wm_protocols[1])

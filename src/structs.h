@@ -246,6 +246,7 @@ typedef struct _button
   void **siblings;
   unsigned short nsiblings;
 #endif
+  int z; // pressure
 
   char *txt[STD_LEVELS];
   KeySym ks[LEVELS];

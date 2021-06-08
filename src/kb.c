@@ -1188,7 +1188,7 @@ static void _press(button *b, unsigned int flags){
 #define TOUCH_INC(x) (x=(x+1)&TOUCH_MASK)
 #define TOUCH_DEC(x) (x=(x+TOUCH_MASK)&TOUCH_MASK)
 
-button *kb_handle_events(keyboard *kb, int type, const int x, const int y, unsigned int ptr, int dev, Time time, unsigned char *mask, int mask_len)
+button *kb_handle_events(keyboard *kb, int type, const int x, const int y, const int z, unsigned int ptr, int dev, Time time, unsigned char *mask, int mask_len)
 {
 	button *b, *b1, *b2;
 	int i,j;
@@ -1201,7 +1201,7 @@ typedef struct _touch {
 	Time time;
 	button *but;
 #ifdef GESTURES_EMULATE
-	int x, y;
+	int x, y, z;
 	short gesture;
 #ifdef MULTITOUCH
 	unsigned short n;
@@ -1220,6 +1220,7 @@ typedef struct _touch {
 	static unsigned short P=0;
 	int t;
 	int type1 = type;
+
 
 #ifdef BUTTONS_TO1
 	// make non-touch motion single-button
@@ -1242,8 +1243,6 @@ typedef struct _touch {
 			type = 2;
 		} else type = 2;
 btn1:
-		mask_len = 0;
-		mask = NULL;
 		ptr = 1;
 	}
 #else
@@ -1252,7 +1251,7 @@ btn1:
 #endif
 	// find touch
 find:
-	if (type && P==N) return NULL;
+	if (type && P==N && !mask) return NULL;
 #ifndef BUTTONS_TO1
 	dead =
 #endif
@@ -1261,13 +1260,22 @@ find:
 		Touch *t1 = &touch[i];
 		if (t1->deviceid == dev) {
 			j = t1->touchid;
-			if (j == ptr || (!ptr && type == 1 && t < 0)) {
+			if (j == ptr
+#ifndef BUTTONS_TO1
+			    || (!ptr && type == 1 && t < 0)
+#endif
+			    ) {
 				t = i;
 				to = t1;
 				if (type == 2) break;
 				// duplicate (I got BEGIN!)
 //				if (time==times[i] && x==X[i] && y==Y[i]) return but[i];
-				if (time<=t1->time) return t1->but;
+				if (time<=t1->time) {
+					return t1->but;
+				}
+#ifdef BUTTONS_TO1
+				break;
+#endif
 			}
 #ifndef BUTTONS_TO1
 			if (mask && j<(mask_len<<3) && !(mask[j>>3] & (1 << (j & 7)))
@@ -1289,9 +1297,20 @@ find:
 		type = 2;
 	}
 #endif
-	if (type && t<0) {
-//		fprintf(stderr,"untracked touch on state %i\n",type);
-		return NULL;
+	if (t<0) {
+		switch (type) {
+		    case 0:
+			break;
+		    case 1:
+			if (mask) {
+				// button & motion events differ, motion enough to begin/end
+				type = 0;
+				break;
+			}
+		    default:
+//			fprintf(stderr,"untracked touch on state %i\n",type);
+			return NULL;
+		}
 	}
 #else
 	const int t=0;
@@ -1305,6 +1324,7 @@ found:
 		int g = 0;
 #else
 		if (!b) return NULL;
+		b->z = z;
 #endif
 #ifdef MULTITOUCH
 		to = &touch[t = N];
@@ -1317,6 +1337,7 @@ found:
 #ifdef GESTURES_EMULATE
 		to->x = x;
 		to->y = y;
+		to->z = z;
 		to->gesture = !b;
 #ifdef MULTITOUCH
 		if (nt = (!mask && swipe_fingers)) {
@@ -1349,12 +1370,26 @@ found:
 		return b;
 	}
 
+	if (b && b->z < z) b->z = z;
 #ifdef GESTURES_EMULATE
 	if (to->gesture) goto gesture;
 #endif
 	b1 = to->but;
 #ifndef SIBLINGS
-	if (b != b1 && b1) goto drop;
+//	if (b != b1 && b1) goto drop;
+	if (b) {
+		// compare pressure
+		if (b1 == b) {
+			if (b->z < z) b->z = z;
+		} else if (b1) {
+			if (b1->z == z) goto drop;
+			if (b1->z > z) b = b1;
+			else {
+				to->but = b1 = b;
+				b->z = z;
+			}
+		}
+	} else if (b1) goto drop;
 #else
 	/*
 		intersection of sets of sibling buttons
@@ -1363,8 +1398,9 @@ found:
 		else must do other selections.
 	*/
 	n=to->nsib;
-	if (!b) {
-	} else if (!b1) { // NULL -> button: new siblings base list
+	if (!b) goto sib_done;
+	if (b->z < z) b->z = z;
+	if (!b1) { // NULL -> button: new siblings base list
 		// probably never, but keep case visible
 		for(i=0;i<n;i++) _release(to->sib[i]);
 		to->nsib=-1;
@@ -1381,7 +1417,11 @@ found:
 		b=NULL;
 //	} else if (b->cnt) { // pressed somewere
 //		b=NULL;
-	} else { // button -> button, invariant
+	// button -> button, invariant
+	} else if (b1->z != b->z) { // try pressure
+		if (b1->z > b->z) to->but = b = b1;
+		else b = b1;
+	} else {
 		int ns, ns1 = b->nsiblings;
 		button **s1 = (button **)b->siblings;
 		if (n<0) {
@@ -1451,6 +1491,7 @@ found:
 #endif
 		}
 	}
+sib_done:
 #endif // SIBLINGS
 
 	if (type==1){ // motion/to be continued
