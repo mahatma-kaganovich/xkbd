@@ -125,6 +125,11 @@ unsigned char _error;
 
 #undef _WIN_STATE
 
+// for lazy coding
+#define _a(var,name) (var?:(var=XInternAtom(dpy, name, False)))
+#define _A(var,name) static Atom var
+#define _A1(var,name) _A(var,name); var = _a(var,name);
+
 #ifdef XSS
 int xssevent=-100;
 Atom aWMState, aFullScreen;
@@ -647,9 +652,11 @@ typedef struct _abs {
 	_short en;
 	double min,max_min,val;
 	int resolution;
+	int number;
+	_short np,nm;
 } abs_t;
 
-abs_t xABS[NdevABS];
+abs_t xABS[NdevABS], *xabs2;
 
 typedef struct _dinf {
 	_short type;
@@ -1041,6 +1048,14 @@ static void getEvRes(){
 			    (i==0)?ABS_X:(i==1)?ABS_Y:ABS_Z);
 #endif
 			if (x && x->resolution) dinf->ABS[i] = (x->maximum - x->minimum + 0.)/x->resolution;
+			if (x) DBG("ABS %i %i %i %i %i",devid,i,x->minimum,x->maximum,x->resolution);
+//			else 
+		}
+		int max = libevdev_event_type_get_max(EV_ABS);
+		DBG("max = %i",max);
+		for (i=0; i<max; i++) {
+			const struct input_absinfo *x = libevdev_get_abs_info(device, i);
+			if (x) DBG("+ ABS %i 0x%x %i %i %i %s",devid,i,x->minimum,x->maximum,x->resolution,libevdev_property_get_name(i));
 		}
 		libevdev_free(device);
 		xiSetProp(aABS,aFloat,&dinf->ABS,NdevABS,0);
@@ -1997,11 +2012,25 @@ static void touchToMon(){
 	MINF(minf->type&o_changed) minf->type ^= o_changed;
 }
 
+// try libevdev/kernel labeled valuators first
+// first try "Abs MT Position *", next "Abs *", last - first 3
+typedef struct _abs_cl_t {
+	_short m;
+	void *cl[3];
+	Atom a[3];
+	unsigned char *name[5];
+} abs_cl_t;
+abs_cl_t *_abs1, _abs[3] = {
+	{.name = {"Abs MT Position X","Abs MT Position Y","Abs MT Position Pressure"}},
+	{.name = {"Abs X","Abs Y","Abs Pressure","Abs Z"}},
+};
+
 static _short xiClasses(XIAnyClassInfo **classes, int num_classes){
+
 	_short type1 = 0;
-	int devid, j;
-	_short abs;
+	int devid, j, i, k;
 	memset(&xABS,0,sizeof(xABS));
+	_abs[0].m = _abs[1].m = _abs[2].m = 0;
 	for (j=0; j<num_classes; j++) {
 		XIAnyClassInfo *cl = classes[j];
 		devid = cl->sourceid;
@@ -2015,44 +2044,29 @@ static _short xiClasses(XIAnyClassInfo **classes, int num_classes){
 #undef e
 #define e ((XIValuatorClassInfo*)cl)
 		    case XIValuatorClass:
-			int n = e->number;
 			switch (e->mode) {
 			    case Absolute:
-				type1|=o_absolute;
-				if (n >= NdevABS) continue;
-				break;
-			    case Relative:
-				continue;
-//				if (n > 1) continue;
-//				break;
-			    default:
-				continue;
-			}
-			if (n < 0) break;
-#if 0
-			// think again, valuators order is not varrantied...
-			// but it is good indication to all OK
-			if (n && !xABS[n-1].en) break;
-#endif
-			if (e->max > e->min) {
-			    if (e->mode == Relative) DBG("xi device %i class %i Relative, but max > min",devid,n);
-			} else if (e->max == e->min) {
-				break;
-				if (e->mode == Absolute) DBG("xi device %i class %i Absolute, but max == min",devid,n);
-				if (e->max != -1.0) DBG("xi device %i class %i Absolute, but max == min == %f (wanted -1.)",devid,n,e->max);
-			} else break;
-			xABS[n].min = e->min;
-			xABS[n].max_min = e->max - e->min;
-			xABS[n].resolution = e->resolution;
-//			if (e->resolution && e->resolution < 1000) DBG("resolution<1000 of fixme: device %i  valuator %i '%s' min %f max %f resolution %i",devid,n,natom(n,e->label),e->min,e->max,e->resolution);
-			xABS[n].en = 1;
-//#ifdef FAST_VALUATORS
-			if (e->max > e->min) {
-				if (e->min == 0.
-				    // && e->resolution == 0
-					) xABS[n].en = 2;
-			} else xABS[n].en = 3;
-			
+				for (i=0; i<3; i++) {
+					_abs1 = &_abs[i];
+					if (!_abs1->name) {
+						k = e->number;
+						if (k>=0 && k<3) {
+							_abs1->m |= (1<<k);
+							_abs1->cl[k] = cl;
+						}
+						continue;
+					}
+					for (k=0; k<3 && _abs1->name[k]; k++) {
+						int k1 = k;
+						if (k>2) k1 = 2;
+						if (e->label == _a(_abs1->a[k1],_abs1->name[k])) {
+							_abs1->m |= (1<<k1);
+							_abs1->cl[k1] = cl;
+							break;
+						}
+					}
+				}
+			}	
 			break;
 #undef e
 #define e ((XIScrollClassInfo*)cl)
@@ -2060,6 +2074,35 @@ static _short xiClasses(XIAnyClassInfo **classes, int num_classes){
 			type1|=o_scroll;
 			break;
 		}
+	}
+	if (_abs[0].m == 7) i = 0;
+	else if (_abs[1].m == 7) i = 1;
+	else if (_abs[0].m == 3) i = 0;
+	else if (_abs[1].m == 3) i = 1;
+	else if (_abs[0].m || _abs[1].m) return type1;
+	else if (_abs[2].m == 7) i = 2;
+	else if (_abs[2].m == 3) i = 2;
+	else return type1;
+	_abs1 = &_abs[i];
+	for (i = 0; i < 3; i++) {
+		if (!(_abs1->m&(1<<i))) break;
+#undef e
+#define e ((XIValuatorClassInfo*)cl)
+		XIAnyClassInfo *cl = _abs1->cl[i];
+		xABS[i].min = e->min;
+		xABS[i].max_min = e->max - e->min;
+		xABS[i].resolution = e->resolution;
+//		if (e->resolution && e->resolution < 1000) DBG("resolution<1000 of fixme: device %i  valuator %i '%s' min %f max %f resolution %i",devid,i,natom(i,e->label),e->min,e->max,e->resolution);
+		xABS[i].en = 1;
+//#ifdef FAST_VALUATORS
+		if (e->max > e->min) {
+			if (e->min == 0.
+			    // && e->resolution == 0
+				) xABS[i].en = 2;
+		} else xABS[i].en = 3;
+		xABS[i].number = e->number;
+		xABS[i].np = e->number>>3;
+		xABS[i].nm = 1 << (e->number & 7);
 	}
 	return type1;
 }
@@ -2150,7 +2193,7 @@ static void getHierarchy(){
 		type1 |= xiClasses(d2->classes,d2->num_classes);
 
 		if ((type|type1)&(o_kbd|o_master));
-		else if ((!xABS[0].en || !xABS[1].en)) {
+		else if (!xABS[1].en) {
 			mTouch = ximaskTouch;
 			mButton = ximaskButton;
 			if ((useRawTouch || useRawButton) && ((type&type1)&o_absolute))
@@ -2764,11 +2807,12 @@ static void init(){
 
 	XISetMask(ximask0, XI_HierarchyChanged);
 	XISetMask(ximask0, XI_DeviceChanged);
+
+	_grabX();
 	XISelectEvents(dpy, root, ximask, Nximask);
 	XIClearMask(ximask0, XI_HierarchyChanged);
 	//XIClearMask(ximask0, XI_DeviceChanged);
 
-	_grabX();
 	if (pf[p_res]<0 || mon || mon_sz) {
 //		if (xrr = XRRQueryExtension(dpy, &xrevent, &ierr)) {
 		// need xropcode
@@ -2847,6 +2891,7 @@ static _short chResDev(){
 #endif
 	    if (findResDev() == 2 && !(dinf2->type&o_absolute)) minf2 = &minf0;
 	if (dinf2) {
+		xabs2 = (void*)&dinf2->xABS;
 		if (!minf2) minf2 = &minf0;
 		return 1;
 	}
@@ -2863,11 +2908,11 @@ _short z_en;
 static _short raw2xy(){
 double xx;
 int i;
+#define _xabs_ok(p) (xabs2[p].en && e->valuators.mask_len < xabs2[p].number && (e->valuators.mask[xabs2[p].np]&(xabs2[p].nm)))
 #undef e
 #define e ((XIRawEvent*)ev.xcookie.data)
-	if (!e->valuators.mask_len ||
-	    (resDev != devid && !chResDev())) return 0;
-	int msk = e->valuators.mask[0]&7;
+	if (resDev != devid && !chResDev()) return 0;
+	if (!_xabs_ok(0) || !_xabs_ok(1)) return 0;
 
 	z2 = 0;
 	// can use raw_values or valuators.values
@@ -2877,27 +2922,25 @@ int i;
 	// use simple valuators, but keep alter code here too
 	z_en = 0;
 	z2 = 0;
-	if (msk&7 == 7 && dinf2->xABS[2].en) {
-		z2 = e->valuators.values[2] - dinf2->xABS[2].min;
+	if (_xabs_ok(2)) {
+		z2 = e->valuators.values[xabs2[2].number] - xabs2[2].min;
 		z_en = 1;
 	}
-	msk &= 3;
 #ifdef FAST_VALUATORS
-	if (msk&dinf2->fast == 3) {
-		x2 = e->valuators.values[0]/dinf2->fastABS[0];
-		y2 = e->valuators.values[1]/dinf2->fastABS[1];
+	if ((dinf2->fast&3) == 3) {
+		x2 = e->valuators.values[xabs2[0].number]/dinf2->fastABS[0];
+		y2 = e->valuators.values[xabs2[1].number]/dinf2->fastABS[1];
 		return 1;
 	}
 #endif
-	if (ev.xcookie.evtype == XI_RawButtonPress) DBG("PRESS! %x",msk);
-	if (msk !=3 ) return 0;
+	if (ev.xcookie.evtype == XI_RawButtonPress) DBG("PRESS!");
 	// bug: no values
 	if (end) {
 		end |= 2; // end&2 - no coordinates
 		return 1;
 	}
-	x2 = _valuate(e->raw_values[0],&dinf2->xABS[0],minf2->width1);
-	y2 = _valuate(e->raw_values[1],&dinf2->xABS[1],minf2->height1);
+	x2 = _valuate(e->raw_values[xabs2[0].number],&xabs2[0],minf2->width1);
+	y2 = _valuate(e->raw_values[xabs2[1].number],&xabs2[1],minf2->height1);
 	switch (minf2->rotation) {
 	    case RR_Rotate_0:
 		x2 += minf2->x;
@@ -3060,10 +3103,10 @@ ev2:
 					y2 = e->root_y;
 					z2 = 0;
 					z_en = 0;
-					if (!((dinf2->xABS[2].en) && e->valuators.mask_len && (e->valuators.mask[0]&7)==7))
+					if (!_xabs_ok(2))
 						break;
-//					z2 = _valuate(e->valuators.values[2],&dinf2->xABS[2],99) + 1;
-					z2 = e->valuators.values[2] - dinf2->xABS[2].min;
+//					z2 = _valuate(e->valuators.values[xabs2[2].number],&xabs2[2],99) + 1;
+					z2 = e->valuators.values[xabs2[2].number] - xabs2[2].min;
 					z_en = 1;
 					break;
 #undef e
@@ -3105,7 +3148,7 @@ ev2:
 					devid = e->deviceid;
 					if (!raw2xy()) goto evfree1;
 					XTestFakeMotionEvent(dpy,screen,x2,y2,0);
-					if (!dinf2->xABS[2].en) goto evfree;
+					if (!z_en) goto evfree;
 					switch (dinf2->zstate) {
 					    case 0:
 						if (dinf2->z == 0. && z2 > 0.) dinf2->zstate = 5;
