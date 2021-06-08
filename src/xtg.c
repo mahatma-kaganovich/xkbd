@@ -2054,14 +2054,16 @@ static _short xiClasses(XIAnyClassInfo **classes, int num_classes){
 							_abs1->m |= (1<<k);
 							_abs1->cl[k] = cl;
 						}
-						continue;
+						break;
+						//continue;
 					}
-					for (k=0; k<3 && _abs1->name[k]; k++) {
+					for (k=0; k<4 && _abs1->name[k]; k++) {
 						int k1 = k;
 						if (k>2) k1 = 2;
 						if (e->label == _a(_abs1->a[k1],_abs1->name[k])) {
 							_abs1->m |= (1<<k1);
 							_abs1->cl[k1] = cl;
+							i = 3;
 							break;
 						}
 					}
