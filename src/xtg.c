@@ -656,7 +656,7 @@ typedef struct _abs {
 	_short np,nm;
 } abs_t;
 
-abs_t xABS[NdevABS], *xabs2;
+abs_t xABS[NdevABS], *xabs1, *xabs2;
 
 typedef struct _dinf {
 	_short type;
@@ -1035,8 +1035,9 @@ static _short _evsize(struct libevdev *dev, int c, int i) {
 	int mm = x->maximum - x->minimum;
 	if (i == 2) {
 		if (dinf->ABS[i] = mm) return 1;
-		if (!dinf->xABS[2].en && dinf->xABS[1].en) oldShowPtr |= 2;
+		if (!dinf->xABS[i].en && dinf->xABS[1].en) oldShowPtr |= 2;
 		dinf->ABS[i] = mm;
+		if (x->resolution) dinf->ABS[i]/=x->resolution;
 		return 1;
 	}
 	if (!x->resolution) return 0;
@@ -2023,19 +2024,22 @@ typedef struct _abs_cl_t {
 	Atom a[3];
 	unsigned char *name[5];
 } abs_cl_t;
-abs_cl_t *_abs1, _abs[3] = {
+#define ABS_CL0 2
+#define ABS_CL (ABS_CL0 + 1)
+abs_cl_t *_abs1, _abs[ABS_CL] = {
 	{.name = {"Abs MT Position X","Abs MT Position Y","Abs MT Pressure"}},
 	{.name = {"Abs X","Abs Y","Abs Pressure","Abs Z"}},
 };
 
+_short _classes_unsafe;
 static _short xiClasses(XIAnyClassInfo **classes, int num_classes){
 	_short type1 = 0;
 	int devid, j, i, k;
 	memset(&xABS,0,sizeof(xABS));
 	_abs[0].m = _abs[1].m = _abs[2].m = 0;
 #ifdef USE_EVDEV
-	XIAnyClassInfo *clz = NULL;
-	int nclz = 0;
+	XIAnyClassInfo *cl1[3];
+	int ncl1[3] = {0,0,0};
 #endif
 	for (j=0; j<num_classes; j++) {
 		XIAnyClassInfo *cl = classes[j];
@@ -2050,30 +2054,12 @@ static _short xiClasses(XIAnyClassInfo **classes, int num_classes){
 #undef e
 #define e ((XIValuatorClassInfo*)cl)
 		    case XIValuatorClass:
-			type1 |= o_absolute;;
 			switch (e->mode) {
 			    case Absolute:
-				for (i=0; i<3; i++) {
+				type1 |= o_absolute;;
+				for (i=0; i<ABS_CL; i++) {
 					_abs1 = &_abs[i];
-					if (!_abs1->name[0]) {
-						k = e->number;
-#ifdef USE_EVDEV
-
-						if (k == 2 && dinf1 && dinf1->ABS[2] && abs(dinf1->ABS[2]) == e->max - e->min) {
-							nclz++;
-							clz = cl;
-							// find Z by evdev max-min size
-						}
-						if (k>=0 && k<2) {
-#else
-						if (k>=0 && k<3) {
-#endif
-							_abs1->m |= (1<<k);
-							_abs1->cl[k] = cl;
-						}
-						break;
-						//continue;
-					}
+					if (!_abs1->name[0]) break;
 					for (k=0; k<4 && _abs1->name[k]; k++) {
 						int k1 = k;
 						if (k>2) k1 = 2;
@@ -2085,7 +2071,26 @@ static _short xiClasses(XIAnyClassInfo **classes, int num_classes){
 						}
 					}
 				}
-			}	
+				//_abs1 = &_abs[ABS_CL0];
+#ifdef USE_EVDEV
+				if (!dinf1) break;
+				// detects:	z - libinput (if something broken)
+				// 		x, y - others with resolution set
+				unsigned long r = abs((e->resolution > 1000) ? (e->max - e->min)/(e->resolution/1000.) : (e->max - e->min));
+				for (i=0; i<3; i++) {
+					unsigned long l = abs(dinf1->ABS[i]);
+					if (l && l == r) {
+						cl1[i] = cl;
+						ncl1[i]++;
+					}
+				}
+#endif
+				i = e->number;
+				if (i>=0 && i<3) {
+					_abs1->m |= (1<<i);
+					_abs1->cl[i] = cl;
+				}
+			}
 			break;
 #undef e
 #define e ((XIScrollClassInfo*)cl)
@@ -2094,25 +2099,33 @@ static _short xiClasses(XIAnyClassInfo **classes, int num_classes){
 			break;
 		}
 	}
+	_classes_unsafe = 0;
+	if (!(type1&o_absolute)) goto ret;
+	_classes_unsafe = 1;
+#ifdef USE_EVDEV
+	for (i=0;i<3;i++) {
+		if (ncl1[i] == 1) {
+			_abs[ABS_CL0].m |= (1<<i);
+			_abs[ABS_CL0].cl[i] = cl1[i];
+		} else if (i==2) _abs[ABS_CL0].m &= ~(1<<i);
+	}
+#endif
 	if (_abs[0].m == 7) j = 0;
 	else if (_abs[1].m == 7) j = 1;
 	else if (_abs[0].m == 3) j = 0;
 	else if (_abs[1].m == 3) j = 1;
-	else if (_abs[0].m || _abs[1].m) return type1;
-	else if (_abs[2].m == 7) j = 2;
-	else if (_abs[2].m == 3) {
-		j = 2;
-#ifdef USE_EVDEV
-		if (nclz == 1) {
-			_abs[2].cl[2] = clz;
-			_abs[2].m |= 4;
-		}
-#endif
-	} else return type1;
-
+	else if (_abs[0].m || _abs[1].m) goto ret;
+	else if (_abs[ABS_CL0].m == 7) j = ABS_CL0;
+	else if (_abs[ABS_CL0].m == 3) j = ABS_CL0;
+	else  goto ret;
+	_classes_unsafe = (j == ABS_CL0);
 	_abs1 = &_abs[j];
+	if (!(_abs[1].m&4) && ncl1[2] == 1) {
+		_abs->m |= 4;
+		_abs->cl[2] = cl1[2];
+	}
 	for (i = 0; i < 3; i++) {
-		if (!(_abs1->m&(1<<i))) break;
+		if (!(_abs1->m&(1<<i))) continue;
 #undef e
 #define e ((XIValuatorClassInfo*)cl)
 		XIAnyClassInfo *cl = _abs1->cl[i];
@@ -2133,6 +2146,8 @@ static _short xiClasses(XIAnyClassInfo **classes, int num_classes){
 		xABS[i].np = e->number>>3;
 		xABS[i].nm = 1 << (e->number & 7);
 	}
+ret:
+	if (dinf1) memcpy(&dinf1->xABS,&xABS,sizeof(xABS));
 	return type1;
 }
 
@@ -2220,7 +2235,13 @@ static void getHierarchy(){
 			continue;
 		}
 		type1 |= xiClasses(d2->classes,d2->num_classes);
-
+#ifdef USE_EVDEV
+		if (_classes_unsafe && (type1&o_absolute) && !__init) {
+			_add_input(type|=type1);
+			// repeat with evdev ABS
+			xiClasses(d2->classes,d2->num_classes);
+		}
+#endif
 		if ((type|type1)&(o_kbd|o_master));
 		else if (!xABS[1].en) {
 			mTouch = ximaskTouch;
@@ -2325,13 +2346,6 @@ static void getHierarchy(){
 		}
 
 		if (type || ximask[0].mask) _add_input(type|=type1);
-#ifdef USE_EVDEV
-		if (dinf1 && !dinf1->xABS[2].en && dinf1->ABS[2] > 0 && dinf1->xABS[1].en) {
-			// find z by size from evdev
-			xiClasses(d2->classes,d2->num_classes);
-			dinf1->xABS[2] = xABS[2];
-		}
-#endif
 		if (pi[p_safe]&1) {
 			if (!(c || ximask[0].mask)) continue;
 			if (busy) {
@@ -2424,7 +2438,9 @@ busy:
 #ifdef USE_EVDEV
 	DINF((dinf->type&o_absolute) && !(dinf->ABS[0]>0) && !(dinf->ABS[1]>0) && !(dinf->ABS[2]>0)) {
 		getEvRes();
-		if (dinf->ABS[0] > 0 && !dinf->xABS[2].en) oldShowPtr |= 2;
+		for (i=0; i<3; i++) {
+			if (dinf->ABS[i] > 0 && !dinf->xABS[i].en) oldShowPtr |= 2;
+		}
 	}
 #endif
 	// drivers are unsafe, evdev first
