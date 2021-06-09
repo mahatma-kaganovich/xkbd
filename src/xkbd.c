@@ -947,7 +947,7 @@ re_crts:
 #ifdef USE_XI
       // keep it constant to compile-out unused event filtering
       if(xi) {
-	static unsigned char mask_[XIMaskLen(XI_TouchEnd)] = {};
+	static unsigned char mask_[XIMaskLen(XI_LASTEVENT)] = {}; // sometimes I add XI_GestureSwipe* ...
 	static XIEventMask mask = { .mask_len = sizeof(mask_), .mask = (unsigned char *)&mask_ };
 	mask.deviceid = DeviceIdMask;
 
