@@ -654,7 +654,10 @@ typedef struct _abs {
 	double min,max_min;
 	int resolution;
 	int number;
+//#define _EARLY_MASK
+#ifdef _EARLY_MASK
 	_short np,nm;
+#endif
 } abs_t;
 
 abs_t xABS[NdevABS], *xabs1, *xabs2;
@@ -2144,8 +2147,10 @@ static _short xiClasses(XIAnyClassInfo **classes, int num_classes){
 				) xABS[i].en = 2;
 		} else xABS[i].en = 3;
 		xABS[i].number = e->number;
+#ifdef _EARLY_MASK
 		xABS[i].np = e->number>>3;
 		xABS[i].nm = 1 << (e->number & 7);
+#endif
 	}
 ret:
 	if (dinf1) memcpy(&dinf1->xABS,&xABS,sizeof(xABS));
@@ -2957,6 +2962,18 @@ static _short chResDev(){
 #endif
 
 #ifdef XTG
+
+#ifdef _EARLY_MASK
+#define _xabs_ok(p) (xabs2[p].en && e->valuators.mask_len > xabs2[p].number && (e->valuators.mask[xabs2[p].np]&(xabs2[p].nm)))
+#else
+#define _xabs_ok(p) (xabs2[p].en && e->valuators.mask_len > xabs2[p].number && XIMaskIsSet(e->valuators.mask,xabs2[p].number))
+#endif
+
+#undef e
+#define e ((XIRawEvent*)ev.xcookie.data)
+
+#define _val_z2() z2 = (z_en = _xabs_ok(2)) ? e->valuators.values[xabs2[2].number] - xabs2[2].min : 0;
+
 double x2,y2;
 double z2;
 _short z_en;
@@ -2964,24 +2981,15 @@ _short z_en;
 static _short raw2xy(){
 double xx;
 int i;
-#define _xabs_ok(p) (xabs2[p].en && e->valuators.mask_len < xabs2[p].number && (e->valuators.mask[xabs2[p].np]&(xabs2[p].nm)))
-#undef e
-#define e ((XIRawEvent*)ev.xcookie.data)
 	if (resDev != devid && !chResDev()) return 0;
 	if (!_xabs_ok(0) || !_xabs_ok(1)) return 0;
 
-	z2 = 0;
 	// can use raw_values or valuators.values
 	// raw_values have 0 on TouchEnd
 	// valuators - on touchsceen & libinput - mapped to Screen
 	// IMHO there are just touchpad behaviour.
 	// use simple valuators, but keep alter code here too
-	z_en = 0;
-	z2 = 0;
-	if (_xabs_ok(2)) {
-		z2 = e->valuators.values[xabs2[2].number] - xabs2[2].min;
-		z_en = 1;
-	}
+	_val_z2();
 #ifdef FAST_VALUATORS
 	if ((dinf2->fast&3) == 3) {
 		x2 = e->valuators.values[xabs2[0].number]/dinf2->fastABS[0];
@@ -3156,13 +3164,7 @@ ev2:
 					    | ((!!(e->flags & XITouchPendingEnd))<<2); // end&4 - drop event
 					x2 = e->root_x;
 					y2 = e->root_y;
-					z2 = 0;
-					z_en = 0;
-					if (!_xabs_ok(2))
-						break;
-//					z2 = _valuate(e->valuators.values[xabs2[2].number],&xabs2[2],99) + 1;
-					z2 = e->valuators.values[xabs2[2].number] - xabs2[2].min;
-					z_en = 1;
+					_val_z2();
 					break;
 #undef e
 #define e ((XIRawEvent*)ev.xcookie.data)
