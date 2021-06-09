@@ -1764,7 +1764,7 @@ static _short findResDev(){
 }
 
 static void fixGeometry(){
-	if (findResDev() && resDev == devid) return;
+	findResDev();
 	if (minf2) goto find1;
 	DINF(TDIRECT(dinf->type)) {
 		MINF((minf->type&o_active) && dinf->mon == minf->name) {
@@ -2439,8 +2439,8 @@ busy:
 	inputs = inputs1;
 	ninput = ninput1 = ninput1_;
 	dinf_last = &inputs[ninput];
-	resDev = 0;
-
+	dinf1 = NULL;
+	findResDev();
 #ifdef USE_EVDEV
 	DINF((dinf->type&o_absolute) && !(dinf->ABS[0]>0) && !(dinf->ABS[1]>0) && !(dinf->ABS[2]>0)) {
 		getEvRes();
@@ -2458,6 +2458,7 @@ busy:
 	}
 
 	oldShowPtr |= 16;
+	devid = 0;
 }
 
 static void _signals(void *f){
@@ -2947,10 +2948,12 @@ static _short chResDev(){
 	resDev = devid;
 	// force swap monitors if dynamic pan?
 #if 1
-	if (!(pi[p_safe]&64)) fixGeometry();
-	else
+	minf_t *m = minf2;
+	findResDev();
+	if (dinf2 && !(pi[p_safe]&64) && minf2 && minf2 != m) fixGeometry();
+#else
+	if (findResDev() == 2 && !(dinf2->type&o_absolute)) minf2 = NULL
 #endif
-	    if (findResDev() == 2 && !(dinf2->type&o_absolute)) minf2 = &minf0;
 	if (dinf2) {
 		xabs2 = (void*)&dinf2->xABS;
 		if (!minf2) minf2 = &minf0;
@@ -2962,6 +2965,8 @@ static _short chResDev(){
 #endif
 
 #ifdef XTG
+
+
 
 #ifdef _EARLY_MASK
 #define _xabs_ok(p) (xabs2[p].en && e->valuators.mask_len > xabs2[p].number && (e->valuators.mask[xabs2[p].np]&(xabs2[p].nm)))
@@ -3172,7 +3177,7 @@ ev2:
 					showPtr = 1;
 					if (!xiGetE()) goto ev;
 					if (resDev != devid && !chResDev()) goto evfree;
-					if (dinf2->zstate == 5 && !dinf2->zdetail && dinf2->zserial == e->serial && dinf2->ztime == e->time) {
+					if (dinf2->zstate == 5 && !dinf2->zdetail && dinf2->zserial == e->serial && dinf2->ztime == T) {
 						// source valuator is controlled in XI_RawMotion
 						dinf2->zstate = 1;
 						dinf2->zdetail = e->detail;
@@ -3255,7 +3260,7 @@ ev2:
 					dinf2->z = z2;
 z_noise:
 					dinf2->zserial = e->serial;
-					dinf2->ztime = e->time;
+					dinf2->ztime = T;
 					xiFreeE();
 					goto ev2;
 				    case XI_RawTouchBegin:
