@@ -948,7 +948,7 @@ re_crts:
       // keep it constant to compile-out unused event filtering
       if(xi) {
 	static unsigned char mask_[XIMaskLen(XI_LASTEVENT)] = {}; // sometimes I add XI_GestureSwipe* ...
-	static XIEventMask mask = { .mask_len = sizeof(mask_), .mask = (unsigned char *)&mask_ };
+	static XIEventMask mask = { .mask_len = XIMaskLen(XI_LASTEVENT), .mask = (unsigned char *)&mask_ };
 	mask.deviceid = DeviceIdMask;
 
 	if (!(fake_touch&4)) XISetMask(mask.mask, XI_Motion);

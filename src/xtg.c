@@ -180,19 +180,20 @@ Atom aNode;
 XWindowAttributes wa;
 #endif
 
-#define MASK_LEN XIMaskLen(XI_LASTEVENT)
+//#define MASK_LEN XIMaskLen(XI_LASTEVENT)
+#define MASK_LEN ((XI_LASTEVENT+7)>>3)
 typedef unsigned char xiMask[MASK_LEN];
 xiMask ximaskButton = {}, ximaskTouch = {}, ximask0 = {}, ximaskRaw = {};
 xiMask ximaskRoot = {};
 _short Nximask = 1;
-XIEventMask ximask[] = {{ .deviceid = XIAllDevices, .mask_len = MASK_LEN, .mask = (void*)&ximask0 },
-//			 { .deviceid = XIAllMasterDevices, .mask_len = MASK_LEN, .mask = (void*)&ximaskRoot }
+XIEventMask ximask[] = {{ .deviceid = XIAllDevices, .mask_len = MASK_LEN, .mask = ximask0 },
+//			 { .deviceid = XIAllMasterDevices, .mask_len = MASK_LEN, .mask = ximaskRoot }
 			};
 //#define MASK(m) ((void*)ximask[0].mask=m)
 #ifdef _BACKLIGHT
 xiMask ximaskWin0 = {};
-XIEventMask ximaskWin[] = {{ .deviceid = XIAllMasterDevices, .mask_len = MASK_LEN, .mask = (void*)&ximaskWin0 },
-//			 { .deviceid = XIAllDevices, .mask_len = MASK_LEN, .mask = (void*)&ximaskWin0 }
+XIEventMask ximaskWin[] = {{ .deviceid = XIAllMasterDevices, .mask_len = MASK_LEN, .mask = ximaskWin0 },
+//			 { .deviceid = XIAllDevices, .mask_len = MASK_LEN, .mask = ximaskWin0 }
 			};
 #if 0
 #define _WIN_STATE
