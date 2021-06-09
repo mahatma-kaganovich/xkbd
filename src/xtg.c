@@ -650,7 +650,7 @@ static inline void _ungrabX(){
 typedef struct _abs {
 	// "max" used only as "max - min"
 	_short en;
-	double min,max_min,val;
+	double min,max_min;
 	int resolution;
 	int number;
 	_short np,nm;
@@ -1030,10 +1030,18 @@ static void xiSetMask(xiMask mask,int event) {
 
 #ifdef USE_EVDEV
 static _short _evsize(struct libevdev *dev, int c, int i) {
-        const struct input_absinfo *x = libevdev_get_abs_info(dev, c);
-        if (!x || !x->resolution) return 0;
-        dinf->ABS[i] = (x->maximum - x->minimum + .0)/x->resolution;
-        return 1;
+	const struct input_absinfo *x = libevdev_get_abs_info(dev, c);
+	if (!x) return 0;
+	int mm = x->maximum - x->minimum;
+	if (i == 2) {
+		if (dinf->ABS[i] = mm) return 1;
+		if (!dinf->xABS[2].en && dinf->xABS[1].en) oldShowPtr |= 2;
+		dinf->ABS[i] = mm;
+		return 1;
+	}
+	if (!x->resolution) return 0;
+	dinf->ABS[i] = (mm + .0)/x->resolution;
+	return 1;
 }
 
 static void getEvRes(){
@@ -1046,13 +1054,12 @@ static void getEvRes(){
 	if (fd < 0) goto ret;
 	struct libevdev *device;
 	if (!libevdev_new_from_fd(fd, &device)){
-		_short z = 0;
 		if (_evsize(device,ABS_MT_POSITION_X,0) && _evsize(device,ABS_MT_POSITION_Y,1)) {
-			_evsize(device,ABS_MT_PRESSURE,2);
+			if (!_evsize(device,ABS_MT_PRESSURE,2)) goto _z;
 		} else if (_evsize(device,ABS_X,0) && _evsize(device,ABS_Y,1)) {
+_z:
 			if (_evsize(device,ABS_PRESSURE,2) || _evsize(device,ABS_Z,2));
 		}
-		
 		libevdev_free(device);
 		xiSetProp(aABS,aFloat,&dinf->ABS,NdevABS,0);
 	}
@@ -2022,11 +2029,14 @@ abs_cl_t *_abs1, _abs[3] = {
 };
 
 static _short xiClasses(XIAnyClassInfo **classes, int num_classes){
-
 	_short type1 = 0;
 	int devid, j, i, k;
 	memset(&xABS,0,sizeof(xABS));
 	_abs[0].m = _abs[1].m = _abs[2].m = 0;
+#ifdef USE_EVDEV
+	XIAnyClassInfo *clz = NULL;
+	int nclz = 0;
+#endif
 	for (j=0; j<num_classes; j++) {
 		XIAnyClassInfo *cl = classes[j];
 		devid = cl->sourceid;
@@ -2041,14 +2051,23 @@ static _short xiClasses(XIAnyClassInfo **classes, int num_classes){
 #define e ((XIValuatorClassInfo*)cl)
 		    case XIValuatorClass:
 			type1 |= o_absolute;;
-			//DBG("dev %i class %i res %i '%s'",devid,e->number,e->resolution,natom(0,e->label));
 			switch (e->mode) {
 			    case Absolute:
 				for (i=0; i<3; i++) {
 					_abs1 = &_abs[i];
-					if (!_abs1->name) {
+					if (!_abs1->name[0]) {
 						k = e->number;
+#ifdef USE_EVDEV
+
+						if (k == 2 && dinf1 && dinf1->ABS[2] && abs(dinf1->ABS[2]) == e->max - e->min) {
+							nclz++;
+							clz = cl;
+							// find Z by evdev max-min size
+						}
+						if (k>=0 && k<2) {
+#else
 						if (k>=0 && k<3) {
+#endif
 							_abs1->m |= (1<<k);
 							_abs1->cl[k] = cl;
 						}
@@ -2075,20 +2094,30 @@ static _short xiClasses(XIAnyClassInfo **classes, int num_classes){
 			break;
 		}
 	}
-	if (_abs[0].m == 7) i = 0;
-	else if (_abs[1].m == 7) i = 1;
-	else if (_abs[0].m == 3) i = 0;
-	else if (_abs[1].m == 3) i = 1;
+	if (_abs[0].m == 7) j = 0;
+	else if (_abs[1].m == 7) j = 1;
+	else if (_abs[0].m == 3) j = 0;
+	else if (_abs[1].m == 3) j = 1;
 	else if (_abs[0].m || _abs[1].m) return type1;
-	else if (_abs[2].m == 7) i = 2;
-	else if (_abs[2].m == 3) i = 2;
-	else return type1;
-	_abs1 = &_abs[i];
+	else if (_abs[2].m == 7) j = 2;
+	else if (_abs[2].m == 3) {
+		j = 2;
+#ifdef USE_EVDEV
+		if (nclz == 1) {
+			_abs[2].cl[2] = clz;
+			_abs[2].m |= 4;
+		}
+#endif
+	} else return type1;
+
+	_abs1 = &_abs[j];
 	for (i = 0; i < 3; i++) {
 		if (!(_abs1->m&(1<<i))) break;
 #undef e
 #define e ((XIValuatorClassInfo*)cl)
 		XIAnyClassInfo *cl = _abs1->cl[i];
+		if (j == 2)
+			DBG("input %i unknown %s label use valuator: %i '%s'",devid,j?(j==2)?"Pressure":"Y":"X",e->number,natom(0,e->label));
 		xABS[i].min = e->min;
 		xABS[i].max_min = e->max - e->min;
 		xABS[i].resolution = e->resolution;
@@ -2296,6 +2325,13 @@ static void getHierarchy(){
 		}
 
 		if (type || ximask[0].mask) _add_input(type|=type1);
+#ifdef USE_EVDEV
+		if (dinf1 && !dinf1->xABS[2].en && dinf1->ABS[2] > 0 && dinf1->xABS[1].en) {
+			// find z by size from evdev
+			xiClasses(d2->classes,d2->num_classes);
+			dinf1->xABS[2] = xABS[2];
+		}
+#endif
 		if (pi[p_safe]&1) {
 			if (!(c || ximask[0].mask)) continue;
 			if (busy) {
@@ -2386,8 +2422,9 @@ busy:
 	resDev = 0;
 
 #ifdef USE_EVDEV
-	DINF((dinf->type&o_absolute) && !(dinf->ABS[0]>0) && !(dinf->ABS[1]>0)) {
+	DINF((dinf->type&o_absolute) && !(dinf->ABS[0]>0) && !(dinf->ABS[1]>0) && !(dinf->ABS[2]>0)) {
 		getEvRes();
+		if (dinf->ABS[0] > 0 && !dinf->xABS[2].en) oldShowPtr |= 2;
 	}
 #endif
 	// drivers are unsafe, evdev first
@@ -2458,6 +2495,7 @@ static void _eXit(int sig){
 }
 
 static void setShowCursor(){
+repeat0:
 	static int cnt = 1;
 //	if (--cnt && XPending(dpy)) return;
 //	cnt = noutput + ninput + 1;
@@ -2494,11 +2532,12 @@ repeat:
 		return;
 	}
 	// oldShowPtr &= (1|2|4|8|16); // sanitize
-	if (oldShowPtr == showPtr || !--cnt) return;
+	if (oldShowPtr == showPtr) return;
+	if (--cnt) goto repeat;
 	forceUngrab();
 	DBG("setShowCursor() loop");
 	if (XPending(dpy)) return;
-	goto repeat;
+	goto repeat0;
 }
 
 static void _set_bmap(_int g, _short i, _int j){
@@ -2933,7 +2972,6 @@ int i;
 		return 1;
 	}
 #endif
-	if (ev.xcookie.evtype == XI_RawButtonPress) DBG("PRESS!");
 	// bug: no values
 	if (end) {
 		end |= 2; // end&2 - no coordinates
@@ -3224,10 +3262,12 @@ z_noise:
 							oldShowPtr |= 2;
 							if (e->reason != XIDeviceChange) goto evfree1;
 						}
+						dinf1 = NULL;
 						if (e->sourceid && e->sourceid != e->deviceid) {
 							DINF(dinf->devid == e->sourceid) {
 								showPtr = !TDIRECT(dinf->type);
 								if (oldShowPtr&2) goto evfree1;
+								dinf1 = dinf;
 								break;
 							}
 						} //else if (e->reason == XIDeviceChange) devid = e->deviceid;
