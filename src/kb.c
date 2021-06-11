@@ -1225,23 +1225,9 @@ typedef struct _touch {
 #ifdef BUTTONS_TO1
 	// make non-touch motion single-button
 	if (mask) {
-		if (ptr);
-#if defined(__BYTE_ORDER) &&  __BYTE_ORDER == __LITTLE_ENDIAN
-		else if (mask_len == (sizeof(unsigned int) << 3)) {
-			if (!*(unsigned int *)mask && ~0x78u) type = 2;
-		}
-#endif
-		else if (mask_len) {
-			j = mask_len >> 3;
-			if (!j) {
-				if (mask[0] & ((1 << mask_len)-1) & 0x87u) goto btn1;
-			} else {
-				if (mask[0] & 0x87u) goto btn1;
-				for (i=1; i<j; i++) if (mask[i]) goto btn1;
-				if (!(j = mask_len&7) || (mask[i] & ((1 << j)-1))) goto btn1;
-			}
-			type = 2;
-		} else type = 2;
+		if (ptr) goto btn1;
+		for (i=0; i<mask_len; i++) if (mask[i]) goto btn1;
+		type = 2;
 btn1:
 		ptr = 1;
 	}
