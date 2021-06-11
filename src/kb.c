@@ -1370,7 +1370,6 @@ found:
 		return b;
 	}
 
-	if (b && b->z < z) b->z = z;
 #ifdef GESTURES_EMULATE
 	if (to->gesture) goto gesture;
 #endif
@@ -1418,7 +1417,7 @@ found:
 //	} else if (b->cnt) { // pressed somewere
 //		b=NULL;
 	// button -> button, invariant
-	} else if (b1->z != b->z) { // try pressure
+	} else if (b1->z != b->z && b->z) { // try pressure
 		if (b1->z > b->z) to->but = b = b1;
 		else b = b1;
 	} else {

@@ -180,8 +180,8 @@ Atom aNode;
 XWindowAttributes wa;
 #endif
 
-//#define MASK_LEN XIMaskLen(XI_LASTEVENT)
-#define MASK_LEN ((XI_LASTEVENT+7)>>3)
+// right: ((XI_LASTEVENT+7)/8), but 4 + XI_GestureSwipeEnd -> BadValue
+#define MASK_LEN XIMaskLen(XI_LASTEVENT)
 typedef unsigned char xiMask[MASK_LEN];
 xiMask ximaskButton = {}, ximaskTouch = {}, ximask0 = {}, ximaskRaw = {};
 xiMask ximaskRoot = {};
@@ -654,10 +654,7 @@ typedef struct _abs {
 	double min,max_min;
 	int resolution;
 	int number;
-//#define _EARLY_MASK
-#ifdef _EARLY_MASK
 	_short np,nm;
-#endif
 } abs_t;
 
 abs_t xABS[NdevABS], *xabs1, *xabs2;
@@ -2147,10 +2144,8 @@ static _short xiClasses(XIAnyClassInfo **classes, int num_classes){
 				) xABS[i].en = 2;
 		} else xABS[i].en = 3;
 		xABS[i].number = e->number;
-#ifdef _EARLY_MASK
 		xABS[i].np = e->number>>3;
 		xABS[i].nm = 1 << (e->number & 7);
-#endif
 	}
 ret:
 	if (dinf1) memcpy(&dinf1->xABS,&xABS,sizeof(xABS));
@@ -2966,18 +2961,11 @@ static _short chResDev(){
 
 #ifdef XTG
 
-
-
-#ifdef _EARLY_MASK
-#define _xabs_ok(p) (xabs2[p].en && e->valuators.mask_len > xabs2[p].number && (e->valuators.mask[xabs2[p].np]&(xabs2[p].nm)))
-#else
-#define _xabs_ok(p) (xabs2[p].en && e->valuators.mask_len > xabs2[p].number && XIMaskIsSet(e->valuators.mask,xabs2[p].number))
-#endif
-
 #undef e
 #define e ((XIRawEvent*)ev.xcookie.data)
 
-#define _val_z2() z2 = (z_en = _xabs_ok(2)) ? e->valuators.values[xabs2[2].number] - xabs2[2].min : 0;
+#define _xabs_ok(p) ((xabs1=&xabs2[p])->en && e->valuators.mask_len > xabs1->np && (e->valuators.mask[xabs1->np]&(xabs1->nm)))
+#define _val_z2() z2 = (z_en = _xabs_ok(2)) ? e->valuators.values[xabs1->number] - xabs1->min : 0;
 
 double x2,y2;
 double z2;
@@ -3174,9 +3162,12 @@ ev2:
 #undef e
 #define e ((XIRawEvent*)ev.xcookie.data)
 				    case XI_RawButtonPress:
+DBG("XI_RawButtonPress");
 					showPtr = 1;
 					if (!xiGetE()) goto ev;
+DBG("XI_RawButtonPress 1");
 					if (resDev != devid && !chResDev()) goto evfree;
+DBG("XI_RawButtonPress 2");
 					if (dinf2->zstate == 5 && !dinf2->zdetail && dinf2->zserial == e->serial && dinf2->ztime == T) {
 						// source valuator is controlled in XI_RawMotion
 						dinf2->zstate = 1;
@@ -3184,9 +3175,12 @@ ev2:
 					} else {
 						XTestFakeButtonEvent(dpy,e->detail,1,0);
 					}
+DBG("XI_RawButtonPress 3");
 					xiFreeE();
+DBG("XI_RawButtonPress OK");
 					goto ev2;
 				    case XI_RawButtonRelease:
+DBG("XI_RawButtonRelease");
 					showPtr = 1;
 					if (!xiGetE()) goto ev;
 					if (resDev != devid && !chResDev()) goto evfree;
@@ -3203,8 +3197,10 @@ ev2:
 						dinf2->zstate = 0;
 					} else XTestFakeButtonEvent(dpy,e->detail,0,0);
 					xiFreeE();
+DBG("XI_RawButtonRelease OK");
 					goto ev2;
 				    case XI_RawMotion:
+DBG("XI_RawMotions");
 					showPtr = 1;
 					if (!xiGetE()) goto ev;
 					devid = e->deviceid;
@@ -3262,6 +3258,7 @@ z_noise:
 					dinf2->zserial = e->serial;
 					dinf2->ztime = T;
 					xiFreeE();
+DBG("XI_RawMotions OK");
 					goto ev2;
 				    case XI_RawTouchBegin:
 				    case XI_RawTouchUpdate:
@@ -3524,6 +3521,19 @@ tfound:
 				}
 				xx = x2 - x1;
 				yy = y2 - y1;
+
+				{
+					time_t t = T - to->time;
+//					if (!z_en) {
+						double _z2 = t*t/(xx*xx + yy*yy + 1);
+						DBG("z %f emu %f",z2,_z2);
+//					}
+					//double zz = (z2 - z1);
+//					DBG("tm %f",t*t/(xx*xx + yy*yy + zz*zz + .1));
+				}
+
+
+
 				bx = 0;
 				by = 0;
 				if (xx<0) {xx = -xx; bx = BUTTON_LEFT;}

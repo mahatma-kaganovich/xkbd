@@ -416,32 +416,66 @@ static int rootChanged(XWindowAttributes *wa){
 }
 
 #ifdef USE_XI
-int use_pressure = 0;
-static int devid_abs_chk = 0;
+int use_pressure = 0, z_number = 2;
+unsigned short z_byte = 0;
+unsigned char z_mask = 7;
+// value > 0 -> exists
+#define Z_ADD -1.1
+double z_min = Z_ADD;
 static short abs3(int devid){
+	static int devid_abs_chk = 0;
 	static short ret = 0;
 	if (devid == devid_abs_chk) goto ret1;
 	if (use_pressure == -1 || use_pressure == devid) return 1;
 	if (devid < 2) return 0;
 	ret = 0;
-	int ndevs2,i,j;
-	XIDeviceInfo *info2 = XIQueryDevice(display, devid_abs_chk = devid, &ndevs2);
-	for (i=0; i<ndevs2; i++) {
-		XIDeviceInfo *d2 = &info2[i];
-		if (devid == d2->deviceid) for (j=0; j<d2->num_classes; j++) {
-			XIAnyClassInfo *cl = d2->classes[j];
-			if (cl->type != XIValuatorClass) continue;
+	int ndevs2,i,l,nabs;
+	unsigned char *label;
+	XIAnyClassInfo *cl3 = NULL, *cl;
+	XIDeviceInfo *d2 = XIQueryDevice(display, devid_abs_chk = devid, &ndevs2);
+	if (!ndevs2 || devid != d2->deviceid) goto ret;
+	for (i=0; i<d2->num_classes; i++) {
+		cl = d2->classes[i];
+		if (cl->type != XIValuatorClass) continue;
 #undef e
 #define e ((XIValuatorClassInfo*)cl)
-			if (e->number == 2 && e->mode == Absolute) {
-				fprintf(stderr,"input %i '%s' using pressure\n",devid,d2->name);
-				ret = 1;
-				goto ret;
-			}
+		if (e->mode != Absolute) continue;
+#if 0
+		if (e->number == 2) {
+			fprintf(stderr,"input %i '%s' using pressure\n",devid,d2->name);
+			ret = 1;
+			break;
 		}
+#else
+		label = XGetAtomName(display,e->label);
+		l = strlen(label);
+		if (   (l > 8  && !strcmp(&label[l-8],"Pressure"))
+		    || (l > 2  && !strcmp(&label[l-2]," Z"))
+			    ) {
+				ret = 1;
+				break;
+			}
+			XFree(label);
+			if (e->number == 2) cl3 = cl;
+#endif
+	}
+	if (!ret && cl3 && use_pressure == devid) {
+		label = XGetAtomName(display,e->label);
+		cl = cl3;
+		ret = 1;
+		fprintf(stderr,"forced unknown label: ");
+	}
+	if (ret) {
+		z_number = e->number;
+		fprintf(stderr,"input %i '%s' using pressure valuator %i '%s'\n",devid,d2->name,z_number,label);
+		XFree(label);
+		z_byte = z_number >> 3;
+		z_mask = 1 << (e->number & 7);
+		z_min = e->min + Z_ADD;
+		ret = 1;
 	}
 ret:
-	XIFreeDeviceInfo(info2);
+	if (d2) XIFreeDeviceInfo(d2);
 ret1:
 	return ret;
 }
@@ -604,15 +638,17 @@ Options:\n\
 			break;
 		    case 1:
 		    case 2:
-			j = strtol(argv[++i],&r,10);
+			if (!argv[++i]) goto no_more_param;
+			j = strtol(argv[i],&r,10);
 			if (!*r && r!=argv[i]) {
 				*(int *)res1->ptr = j;
 			} else if (res1->type == 1){
 				fprintf(stderr,"%s: invalid option value: %s %s\n",iam,s,argv[i]);
 //				exit(1);
 			} else {
-				*(int *)res1->ptr = 1;
 				i--;
+no_more_param:
+				*(int *)res1->ptr = 1;
 			}
 			break;
 		}
@@ -947,8 +983,10 @@ re_crts:
 #ifdef USE_XI
       // keep it constant to compile-out unused event filtering
       if(xi) {
-	static unsigned char mask_[XIMaskLen(XI_LASTEVENT)] = {}; // sometimes I add XI_GestureSwipe* ...
-	static XIEventMask mask = { .mask_len = XIMaskLen(XI_LASTEVENT), .mask = (unsigned char *)&mask_ };
+        // right: ((XI_LASTEVENT+7)/8), but 4 + XI_GestureSwipeEnd -> BadValue
+#define XI_MASK_LEN XIMaskLen(XI_LASTEVENT)
+	static unsigned char mask_[XI_MASK_LEN] = {};
+	static XIEventMask mask = { .mask_len = XI_MASK_LEN, .mask = (unsigned char *)&mask_ };
 	mask.deviceid = DeviceIdMask;
 
 	if (!(fake_touch&4)) XISetMask(mask.mask, XI_Motion);
@@ -1013,9 +1051,9 @@ _remapped:
 			int ex = e->event_x;
 			int ey = e->event_y;
 			int ez = (use_pressure
-			    && e->valuators.mask_len && (e->valuators.mask[0]&7 == 7)
 			    && abs3(e->sourceid)
-			    	) ? e->valuators.values[2] : 0;
+			    && e->valuators.mask_len > z_byte && (e->valuators.mask[z_byte]&z_mask == z_mask)
+				) ? (e->valuators.values[z_number] - z_min) : 0;
 			switch(ev.xcookie.evtype) {
 			    case XI_ButtonRelease: type++;
 			    case XI_Motion: type++; // always detail==0
