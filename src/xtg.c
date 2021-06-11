@@ -2964,7 +2964,12 @@ static _short chResDev(){
 #undef e
 #define e ((XIRawEvent*)ev.xcookie.data)
 
+#if defined(__BYTE_ORDER) &&  __BYTE_ORDER == __LITTLE_ENDIAN
 #define _xabs_ok(p) ((xabs1=&xabs2[p])->en && e->valuators.mask_len > xabs1->np && (e->valuators.mask[xabs1->np]&(xabs1->nm)))
+#else
+#define _xabs_ok(p) ((xabs1=&xabs2[p])->en && e->valuators.mask_len > xabs1->np && XIMaskIsSet(e->valuators.mask, xabs1->number))
+#endif
+
 #define _val_z2() z2 = (z_en = _xabs_ok(2)) ? e->valuators.values[xabs1->number] - xabs1->min : 0;
 
 double x2,y2;

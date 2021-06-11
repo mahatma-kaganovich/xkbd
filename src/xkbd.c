@@ -1051,10 +1051,17 @@ _remapped:
 			static int lastid = -1;
 			int ex = e->event_x;
 			int ey = e->event_y;
+#if defined(__BYTE_ORDER) &&  __BYTE_ORDER == __LITTLE_ENDIAN
 			z_t ez = (use_pressure
 				&& abs3(e->sourceid)
 				&& e->valuators.mask_len > z_byte && (e->valuators.mask[z_byte]&z_mask == z_mask)
 				) ? (e->valuators.values[z_number] - z_min) : 0;
+#else
+			z_t ez = (use_pressure
+				&& abs3(e->sourceid)
+				&& e->valuators.mask_len > z_byte && (XIMaskIsSet(e->valuators.mask, z_number))
+				) ? (e->valuators.values[z_number] - z_min) : 0;
+#endif
 			switch(ev.xcookie.evtype) {
 			    case XI_ButtonRelease: type++;
 			    case XI_Motion: type++; // always detail==0
