@@ -424,6 +424,7 @@ unsigned char z_mask = 7;
 double z_min = Z_ADD;
 static short abs3(int devid){
 	static int devid_abs_chk = 0;
+	static int evtype_abs_chk = 0;
 	static short ret = 0;
 	if (devid == devid_abs_chk) goto ret1;
 	if (use_pressure == -1 || use_pressure == devid) return 1;
@@ -1051,16 +1052,17 @@ _remapped:
 			int ex = e->event_x;
 			int ey = e->event_y;
 			int ez = (use_pressure
-			    && abs3(e->sourceid)
-			    && e->valuators.mask_len > z_byte && (e->valuators.mask[z_byte]&z_mask == z_mask)
+				&& abs3(e->sourceid)
+				&& e->valuators.mask_len > z_byte && (e->valuators.mask[z_byte]&z_mask == z_mask)
 				) ? (e->valuators.values[z_number] - z_min) : 0;
 			switch(ev.xcookie.evtype) {
 			    case XI_ButtonRelease: type++;
 			    case XI_Motion: type++; // always detail==0
 			    case XI_ButtonPress:
-				//if (type == 2) 
-				if ((e->valuators.mask_len && e->valuators.mask[0]) || e->detail)
-				if (lastid == e->sourceid) break;
+				if (lastid == e->sourceid) {
+					if (!e->detail) break;
+					lastid = -1;
+				}
 #ifndef GESTURES_USE
 				{
 #else

@@ -1256,6 +1256,7 @@ find:
 	dead =
 #endif
 	    t = -1;
+//	to = NULL;
 	for (i=P; i!=N; TOUCH_INC(i)) {
 		Touch *t1 = &touch[i];
 		if (t1->deviceid == dev) {
@@ -1274,6 +1275,13 @@ find:
 					return t1->but;
 				}
 #ifdef BUTTONS_TO1
+				break;
+			} else if (j==1 && !type) {
+				// touch after emulated motion
+				// first emulated motion bug: old x,y
+				// reuse touch
+				t = i;
+				to = t1;
 				break;
 #endif
 			}
@@ -1327,9 +1335,11 @@ found:
 		b->z = z;
 #endif
 #ifdef MULTITOUCH
-		to = &touch[t = N];
-		TOUCH_INC(N);
-		if (N==P) TOUCH_INC(P);
+		if (t<0) {
+			to = &touch[t = N];
+			TOUCH_INC(N);
+			if (N==P) TOUCH_INC(P);
+		}
 #endif
 		to->time = time;
 		to->touchid = ptr;
@@ -1338,7 +1348,11 @@ found:
 		to->x = x;
 		to->y = y;
 		to->z = z;
+#ifdef BUTTONS_TO1
+		to->gesture = !b && !mask;
+#else
 		to->gesture = !b;
+#endif
 #ifdef MULTITOUCH
 		if (nt = (!mask && swipe_fingers)) {
 			n = N;
