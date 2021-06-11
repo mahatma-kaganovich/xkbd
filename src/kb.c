@@ -1188,7 +1188,7 @@ static void _press(button *b, unsigned int flags){
 #define TOUCH_INC(x) (x=(x+1)&TOUCH_MASK)
 #define TOUCH_DEC(x) (x=(x+TOUCH_MASK)&TOUCH_MASK)
 
-button *kb_handle_events(keyboard *kb, int type, const int x, const int y, const int z, unsigned int ptr, int dev, Time time, unsigned char *mask, int mask_len)
+button *kb_handle_events(keyboard *kb, int type, const int x, const int y, const z_t z, unsigned int ptr, int dev, Time time, unsigned char *mask, int mask_len)
 {
 	button *b, *b1, *b2;
 	int i,j;
@@ -1201,7 +1201,8 @@ typedef struct _touch {
 	Time time;
 	button *but;
 #ifdef GESTURES_EMULATE
-	int x, y, z;
+	int x, y;
+	z_t z;
 	short gesture;
 #ifdef MULTITOUCH
 	unsigned short n;

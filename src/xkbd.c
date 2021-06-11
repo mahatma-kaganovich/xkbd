@@ -1051,7 +1051,7 @@ _remapped:
 			static int lastid = -1;
 			int ex = e->event_x;
 			int ey = e->event_y;
-			int ez = (use_pressure
+			z_t ez = (use_pressure
 				&& abs3(e->sourceid)
 				&& e->valuators.mask_len > z_byte && (e->valuators.mask[z_byte]&z_mask == z_mask)
 				) ? (e->valuators.values[z_number] - z_min) : 0;
@@ -1066,6 +1066,7 @@ _remapped:
 #ifndef GESTURES_USE
 				{
 #else
+				fprintf(stderr,"+ %i %i,%i %i %i\n",e->sourceid,ex,ey,e->detail,type);
 				switch (e->detail) {
 				    case 7: //XkbLockModifiers(display,XkbUseCoreKbd,STATE(KBIT_CAPS),kb->state ^ STATE(KBIT_CAPS));break;
 				    case 6: //XkbLockGroup(display,XkbUseCoreKbd,kb->group+1); break;
@@ -1075,6 +1076,7 @@ _remapped:
 					break;
 				    default: if (!resized)
 #endif
+				fprintf(stderr,"++++++++++++ %i,%i %i %i\n",ex,ey,e->detail,type);
 					active_but = kb_handle_events(kb, type, ex, ey, ez, e->detail, e->sourceid, e->time,e->buttons.mask,e->buttons.mask_len);
 				}
 				break;

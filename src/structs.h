@@ -32,6 +32,10 @@
 // for button acrobats - undef
 #define BUTTONS_TO1
 
+// if you sure in your touch/drivers - can change
+#define z_t double
+//#define z_t int
+
 // shift,mod/alt
 //#define LEVEL_BITS 2
 // +ctrl-alt
