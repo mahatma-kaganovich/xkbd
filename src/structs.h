@@ -30,7 +30,7 @@
 
 // to make 1-pointer multibutton devices simple - define
 // for button acrobats - undef
-#define BUTTONS_TO1
+#define BUTTONS_TO1 1
 
 // if you sure in your touch/drivers - can change
 #define z_t double

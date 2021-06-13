@@ -1221,7 +1221,11 @@ typedef struct _touch {
 	static unsigned short P=0;
 	int t;
 	int type1 = type;
-
+#ifndef BUTTONS_TO1
+	int dead;
+	Time deadTime;
+#endif
+#endif
 
 #ifdef BUTTONS_TO1
 	// make non-touch motion single-button
@@ -1233,12 +1237,11 @@ typedef struct _touch {
 		}
 		type = 2;
 btn1:
-		ptr = 1;
+		ptr = BUTTONS_TO1;
 	}
-#else
-	int dead;
-	Time deadTime;
 #endif
+
+#ifdef MULTITOUCH
 	// find touch
 find:
 	if (type && P==N && !mask) return NULL;
@@ -1266,7 +1269,7 @@ find:
 				}
 #ifdef BUTTONS_TO1
 				break;
-			} else if (j==1 && !type) {
+			} else if (j==BUTTONS_TO1 && !type) {
 				// touch after emulated motion
 				// first emulated motion bug: old x,y
 				// reuse touch

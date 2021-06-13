@@ -515,6 +515,7 @@ int main(int argc, char **argv)
    FILE *fp;
    KeySym mode_switch_ksym;
    XWindowAttributes wa;
+   unsigned char st1;
 
    static struct resource {
 	char param;
@@ -1010,9 +1011,11 @@ re_crts:
 	// may be lost "release" on libinput
 	// probably need all motions or nothing
 	// button events required for mouse only or if XI not used
-//	Button1MotionMask |
-      evmask|=ButtonPressMask|ButtonReleaseMask|((fake_touch&4)?0:ButtonMotionMask);
+//#define btn_motions (Button1MotionMask|Button2MotionMask|Button3MotionMask)
+#define btn_motions ButtonMotionMask
+//#define btn_motions PointerMotionMask
 
+      evmask|=ButtonPressMask|ButtonReleaseMask|((fake_touch&4)?0:btn_motions);
 
       setWA.override_redirect = !!(dock & 4096);
 //      XSelectInput(display, win, evmask);
@@ -1073,7 +1076,6 @@ _remapped:
 #ifndef GESTURES_USE
 				{
 #else
-				fprintf(stderr,"+ %i %i,%i %i %i\n",e->sourceid,ex,ey,e->detail,type);
 				switch (e->detail) {
 				    case 7: //XkbLockModifiers(display,XkbUseCoreKbd,STATE(KBIT_CAPS),kb->state ^ STATE(KBIT_CAPS));break;
 				    case 6: //XkbLockGroup(display,XkbUseCoreKbd,kb->group+1); break;
@@ -1083,7 +1085,6 @@ _remapped:
 					break;
 				    default: if (!resized)
 #endif
-				fprintf(stderr,"++++++++++++ %i,%i %i %i\n",ex,ey,e->detail,type);
 					active_but = kb_handle_events(kb, type, ex, ey, ez, e->detail, e->sourceid, e->time,e->buttons.mask,e->buttons.mask_len);
 				}
 				break;
@@ -1118,6 +1119,8 @@ _remapped:
 #endif
 	    case ButtonRelease: type=2;
 	    case ButtonPress:
+//#define ButtonScrollMask 0x7800u
+#define ButtonScrollMask (Button4Mask|Button5Mask|((Button4Mask|Button5Mask)<<2))
 #ifndef GESTURES_USE
 		{
 #else
@@ -1130,11 +1133,22 @@ _remapped:
 			break;
 		    default: if (!resized)
 #endif
-			active_but = kb_handle_events(kb, type, ev.xbutton.x, 0, ev.xbutton.y, ev.xbutton.button, 0, ev.xbutton.time, &ev.xbutton.state, sizeof(ev.xbutton.state));
+#ifdef BUTTONS_TO1
+			// now THIS mask unused directly
+			//st1 = !!(ev.xbutton.state & ~ButtonScrollMask);
+			active_but = kb_handle_events(kb, type, ev.xbutton.x, ev.xbutton.y, 0, ev.xbutton.button, 0, ev.xbutton.time, &st1, sizeof(st1));
+#else
+			active_but = kb_handle_events(kb, type, ev.xbutton.x, ev.xbutton.y, 0, ev.xbutton.button, 0, ev.xbutton.time, &ev.xbutton.state, sizeof(ev.xbutton.state));
+#endif
 		}
 		break;
 	    case MotionNotify:
+#ifdef BUTTONS_TO1
+		st1 = !!(ev.xmotion.state & ~ButtonScrollMask);
+		active_but = kb_handle_events(kb, 1, ev.xmotion.x, ev.xmotion.y, 0, 0, 0, ev.xmotion.time, &st1, sizeof(st1));
+#else
 		active_but = kb_handle_events(kb, 1, ev.xmotion.x, ev.xmotion.y, 0, 0, 0, ev.xmotion.time, &ev.xmotion.state, sizeof(ev.xmotion.state));
+#endif
 		break;
 	    case ClientMessage:
 		if ((ev.xclient.message_type == wm_protocols[1])
