@@ -2462,6 +2462,7 @@ static void _signals(void *f){
 		SIGABRT,
 		SIGQUIT,
 		SIGHUP,
+		SIGTERM,
 		0,
 		};
 	int *s;
