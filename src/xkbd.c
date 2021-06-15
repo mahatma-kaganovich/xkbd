@@ -417,28 +417,14 @@ static int rootChanged(XWindowAttributes *wa){
 
 #ifdef USE_XI
 
-XIDeviceInfo *d2;
-XIDeviceInfo *d2_last;
-XIDeviceInfo *info2 = NULL;
-XIAnyClassInfo *cl;
-XIAnyClassInfo **cl_;
-XIAnyClassInfo **cl_last;
+XIDeviceInfo *d2, *d2_last, *info2 = NULL;
+XIAnyClassInfo *cl, **cl_, **cl_last;
 int ndevs2;
 int lastid; // last touch event device
 
 #define XIINF(x) for(d2=info2; d2!=d2_last; d2++) if (x)
 #define XIINF_D(devid) XIINF(d2->deviceid == devid)
-#define CLINF(devid) if (_cl0(devid)) for(; cl_ != cl_last; cl = *(++cl_))
-
-static int _cl0(int devid){
-	XIINF_D(devid) {
-		if (!d2->num_classes) break;
-		cl_last = &(cl_ = d2->classes)[d2->num_classes];
-		cl = *cl_;
-		return 1;
-	}
-	return 0;
-}
+#define CLINF() for(cl_last = &(cl_ = d2->classes)[d2->num_classes]; cl_ != cl_last && (cl = *cl_); cl_++)
 
 int use_pressure = 0, z_number = 2;
 unsigned short z_byte = 0;
@@ -446,53 +432,44 @@ unsigned char z_mask = 7;
 // value > 0 -> exists
 #define Z_ADD -1.1
 double z_min = Z_ADD;
-static short abs3(int devid){
+static _ushort abs3(int devid){
 	static int devid_abs_chk = 0;
-	static short ret = 0;
+	static _ushort ret = 0;
 	if (devid == devid_abs_chk) goto ret;
-	if (use_pressure < 0) return use_pressure == -1 || use_pressure == -devid;
-	ret = 0;
-	int i,l;
+	devid_abs_chk = devid;
+	if (use_pressure < 0) {
+		ret = use_pressure == -1 || use_pressure == -devid;
+		goto ret;
+	}
 	char *label;
 	XIAnyClassInfo *cl3 = NULL;
 #undef e
 #define e ((XIValuatorClassInfo*)cl)
-	devid_abs_chk = devid;
-	CLINF(devid) if (cl->type == XIValuatorClass && e->mode == Absolute) {
-#if 0
-		if (e->number == 2) {
-			fprintf(stderr,"input %i '%s' using pressure\n",devid,d2->name);
-			ret = 1;
-			break;
-		}
-#else
-		label = XGetAtomName(display,e->label);
-		l = strlen(label);
-		if (   (l > 8  && !strcmp(&label[l-8],"Pressure"))
-		    || (l > 2  && !strcmp(&label[l-2]," Z"))
-			    ) {
-				ret = 1;
-				break;
-			}
+	XIINF_D(devid) {
+		CLINF() if (cl->type == XIValuatorClass && e->mode == Absolute) {
+			label = XGetAtomName(display,e->label);
+			int l = strlen(label);
+			if (   (l >= 8  && !strcmp(&label[l-8],"Pressure"))
+			    || (l > 2  && !strcmp(&label[l-2]," Z"))
+			    ) goto found;
 			XFree(label);
 			if (e->number == 2) cl3 = cl;
-#endif
+		}
+		break;
 	}
-	if (!ret && cl3 && use_pressure == devid) {
-		label = XGetAtomName(display,e->label);
-		cl = cl3;
-		ret = 1;
-		fprintf(stderr,"forced unknown label: ");
-	}
-	if (ret) {
-		z_number = e->number;
-		fprintf(stderr,"input %i '%s' using pressure valuator %i '%s'\n",devid,d2->name,z_number,label);
-		XFree(label);
-		z_byte = z_number >> 3;
-		z_mask = 1 << (e->number & 7);
-		z_min = e->min + Z_ADD;
-		ret = 1;
-	}
+	ret = 0;
+	if (!(cl3 && use_pressure == devid)) goto ret;
+	cl = cl3;
+	label = XGetAtomName(display,e->label);
+	fprintf(stderr,"forced unknown label: ");
+found:
+	z_number = e->number;
+	z_byte = z_number >> 3;
+	z_mask = 1 << (z_number & 7);
+	z_min = e->min + Z_ADD;
+	fprintf(stderr,"input %i '%s' using pressure valuator %i '%s'\n",devid,d2->name,z_number,label);
+	XFree(label);
+	ret = 1;
 ret:
 	return ret;
 }
@@ -504,9 +481,13 @@ static void _getMT(int devid) {
 	lastid = devid;
 #undef e
 #define e ((XITouchClassInfo*)cl)
-	CLINF(lastid) if (cl->type == XITouchClass) {
-		num_touches = e->num_touches; // 0 = infinite
-		fprintf(stderr,"input %i '%s' num_touches %i\n",devid,d2->name,num_touches);
+	XIINF_D(lastid) {
+		CLINF() if (cl->type == XITouchClass) {
+			num_touches = e->num_touches; // 0 = infinite
+			fprintf(stderr,"input %i '%s' num_touches %i\n",lastid,d2->name,num_touches);
+			break;
+		}
+		break;
 	}
 }
 #else
