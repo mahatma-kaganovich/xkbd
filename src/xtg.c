@@ -3167,12 +3167,9 @@ ev2:
 #undef e
 #define e ((XIRawEvent*)ev.xcookie.data)
 				    case XI_RawButtonPress:
-DBG("XI_RawButtonPress");
 					showPtr = 1;
 					if (!xiGetE()) goto ev;
-DBG("XI_RawButtonPress 1");
 					if (resDev != devid && !chResDev()) goto evfree;
-DBG("XI_RawButtonPress 2");
 					if (dinf2->zstate == 5 && !dinf2->zdetail && dinf2->zserial == e->serial && dinf2->ztime == T) {
 						// source valuator is controlled in XI_RawMotion
 						dinf2->zstate = 1;
@@ -3180,12 +3177,9 @@ DBG("XI_RawButtonPress 2");
 					} else {
 						XTestFakeButtonEvent(dpy,e->detail,1,0);
 					}
-DBG("XI_RawButtonPress 3");
 					xiFreeE();
-DBG("XI_RawButtonPress OK");
 					goto ev2;
 				    case XI_RawButtonRelease:
-DBG("XI_RawButtonRelease");
 					showPtr = 1;
 					if (!xiGetE()) goto ev;
 					if (resDev != devid && !chResDev()) goto evfree;
@@ -3202,10 +3196,8 @@ DBG("XI_RawButtonRelease");
 						dinf2->zstate = 0;
 					} else XTestFakeButtonEvent(dpy,e->detail,0,0);
 					xiFreeE();
-DBG("XI_RawButtonRelease OK");
 					goto ev2;
 				    case XI_RawMotion:
-DBG("XI_RawMotions");
 					showPtr = 1;
 					if (!xiGetE()) goto ev;
 					devid = e->deviceid;
@@ -3263,7 +3255,6 @@ z_noise:
 					dinf2->zserial = e->serial;
 					dinf2->ztime = T;
 					xiFreeE();
-DBG("XI_RawMotions OK");
 					goto ev2;
 				    case XI_RawTouchBegin:
 				    case XI_RawTouchUpdate:

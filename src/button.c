@@ -174,12 +174,12 @@ int button_calc_vwidth(button *b)
 
 #ifdef CACHE_SIZES
   int i,sz = 0;
-  for (i=0; i<STD_LEVELS; i++) if (b->txt[i]) sz = max(sz,_but_size(b,i));
+  for (i=0; i<STD_LEVELS; i++) if (b->txt[i]) sz = _max(sz,_but_size(b,i));
   b->vwidth = sz;
 #else
-  b->vwidth = max(
+  b->vwidth = _max(
 	_button_get_txt_size(b->kb, DEFAULT_TXT(b)),
-    max(_button_get_txt_size(b->kb, SHIFT_TXT(b)),
+    _max(_button_get_txt_size(b->kb, SHIFT_TXT(b)),
 	_button_get_txt_size(b->kb, MOD_TXT(b))
     ));
 #endif
@@ -227,7 +227,7 @@ int button_render(button *b, int mode)
   int w = b->act_width - (p<<1);
   int h = b->act_height - (p<<1);
   int line = ((kb->line_width+1)>>1);
-  p = max(p - line,0);
+  p = _max(p - line,0);
   int ax = b->vx + p;
   int ay = b->vy + p;
   p <<= 1;

@@ -237,12 +237,12 @@ static void _prop(int i, Atom prop, Atom type, void *data, int n, int mode){
 	XChangeProperty(display,win,prop,type,i,mode,(unsigned char *)data,n); 
 }
 
-static void _propAtom32(Atom prop, char *data){
+static void _propAtom32(Atom prop, unsigned char *data){
 	Atom a=_atom(data);
 	_prop(32,prop,XA_ATOM,&a,1,PropModeAppend);
 }
 
-static void _propAtom32Rep(Atom prop, char *data){
+static void _propAtom32Rep(Atom prop, unsigned char *data){
 	Atom a=_atom(data);
 	_prop(32,prop,XA_ATOM,&a,1,PropModeAppend);
 }
@@ -416,6 +416,30 @@ static int rootChanged(XWindowAttributes *wa){
 }
 
 #ifdef USE_XI
+
+XIDeviceInfo *d2;
+XIDeviceInfo *d2_last;
+XIDeviceInfo *info2 = NULL;
+XIAnyClassInfo *cl;
+XIAnyClassInfo **cl_;
+XIAnyClassInfo **cl_last;
+int ndevs2;
+int lastid; // last touch event device
+
+#define XIINF(x) for(d2=info2; d2!=d2_last; d2++) if (x)
+#define XIINF_D(devid) XIINF(d2->deviceid == devid)
+#define CLINF(devid) if (_cl0(devid)) for(; cl_ != cl_last; cl = *(++cl_))
+
+static int _cl0(int devid){
+	XIINF_D(devid) {
+		if (!d2->num_classes) break;
+		cl_last = &(cl_ = d2->classes)[d2->num_classes];
+		cl = *cl_;
+		return 1;
+	}
+	return 0;
+}
+
 int use_pressure = 0, z_number = 2;
 unsigned short z_byte = 0;
 unsigned char z_mask = 7;
@@ -424,23 +448,18 @@ unsigned char z_mask = 7;
 double z_min = Z_ADD;
 static short abs3(int devid){
 	static int devid_abs_chk = 0;
-	static int evtype_abs_chk = 0;
 	static short ret = 0;
-	if (devid == devid_abs_chk) goto ret1;
-	if (use_pressure == -1 || use_pressure == devid) return 1;
-	if (devid < 2) return 0;
+	if (devid == devid_abs_chk) goto ret;
+	if (use_pressure == -1) return 1;
+//	if (use_pressure == devid) return 1;
 	ret = 0;
-	int ndevs2,i,l,nabs;
-	unsigned char *label;
-	XIAnyClassInfo *cl3 = NULL, *cl;
-	XIDeviceInfo *d2 = XIQueryDevice(display, devid_abs_chk = devid, &ndevs2);
-	if (!ndevs2 || devid != d2->deviceid) goto ret;
-	for (i=0; i<d2->num_classes; i++) {
-		cl = d2->classes[i];
-		if (cl->type != XIValuatorClass) continue;
+	int i,l;
+	char *label;
+	XIAnyClassInfo *cl3 = NULL;
 #undef e
 #define e ((XIValuatorClassInfo*)cl)
-		if (e->mode != Absolute) continue;
+	devid_abs_chk = devid;
+	CLINF(devid) if (cl->type == XIValuatorClass && e->mode == Absolute) {
 #if 0
 		if (e->number == 2) {
 			fprintf(stderr,"input %i '%s' using pressure\n",devid,d2->name);
@@ -476,10 +495,25 @@ static short abs3(int devid){
 		ret = 1;
 	}
 ret:
-	if (d2) XIFreeDeviceInfo(d2);
-ret1:
 	return ret;
 }
+
+#ifdef COUNT_TOUCHES
+uint8_t num_touches;
+#define getMT(dev) if (lastid != dev) _getMT(dev);
+static void _getMT(int devid) {
+	lastid = devid;
+#undef e
+#define e ((XITouchClassInfo*)cl)
+	CLINF(lastid) if (cl->type == XITouchClass) {
+		num_touches = e->num_touches; // 0 = infinite
+		fprintf(stderr,"input %i '%s' num_touches %i\n",devid,d2->name,num_touches);
+	}
+}
+#else
+#define getMT(dev) lastid = dev
+#endif
+
 #endif
 
 int main(int argc, char **argv)
@@ -789,10 +823,10 @@ re_crts:
 				    ))
 				    ) continue;
 				found++;
-				X1=max(X1,x1);
-				Y1=max(Y1,y1);
-				X2=min(X2,x2);
-				Y2=min(Y2,y2);
+				X1=_max(X1,x1);
+				Y1=_max(Y1,y1);
+				X2=_min(X2,x2);
+				Y2=_min(Y2,y2);
 				subpixel_order = oinf->subpixel_order;
 				scr_mwidth=oinf->mm_width;
 				scr_mheight=oinf->mm_height;
@@ -861,8 +895,8 @@ re_crts:
       x += X1;
       y += Y1;
       // if unknown - try relevant temporary size = 500x200mm or 3x1
-      w=width?:height?min(height*3,scr_width):scr_mwidth?500*scr_width/scr_mwidth:scr_width;
-      h=height?:scr_mheight?200*scr_height/scr_mheight:(min(scr_height,w)/3);
+      w=width?:height?_min(height*3,scr_width):scr_mwidth?500*scr_width/scr_mwidth:scr_width;
+      h=height?:scr_mheight?200*scr_height/scr_mheight:(_min(scr_height,w)/3);
 //      w=width?:scr_width; h=height?:scr_height;
       if (!left) x += scr_width - w;
       if (!top) y += scr_height - h;
@@ -998,6 +1032,7 @@ re_crts:
 	XISetMask(mask.mask, XI_TouchBegin);
 	XISetMask(mask.mask, XI_TouchUpdate);
 	XISetMask(mask.mask, XI_TouchEnd);
+	XISetMask(mask.mask, XI_DeviceChanged);
 #if defined(XI_GestureSwipeBegin) && defined(GESTURES_USE)
 	if (ximinor > 3 || ximinor > 2) {
 		XISetMask(mask.mask, XI_GestureSwipeBegin);
@@ -1035,23 +1070,29 @@ _remapped:
 	XMapWindow(display, win);
       }
       XFlush(display);
+#ifdef USE_XI
+hierarchy:
+      if (info2) XIFreeDeviceInfo(info2);
+      d2_last = info2 = XIQueryDevice(display, XIAllDevices, &ndevs2);
+      if (ndevs2) d2_last = &info2[ndevs2];
+      lastid = -1;
+#endif
 
       while (1)
       {
-	    int type = 0;
+	    _ushort type = 0;
 	    XNextEvent(display, &ev);
 //	    if (ev.type<36) fprintf(stderr,"+%i ",ev.type);
 	    switch (ev.type) {
 #ifdef USE_XI
-		case GenericEvent: if (ev.xcookie.extension == xiopcode
+		case GenericEvent: if (ev.xcookie.extension == xiopcode) {
 //		    && ev.xgeneric.extension == 131
-		    && XGetEventData(display, &ev.xcookie)
-		    ) {
+			if (ev.xcookie.evtype == XI_DeviceChanged) goto hierarchy;
+			if (!XGetEventData(display, &ev.xcookie)) break;
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
-			if (e->sourceid != e->deviceid && DeviceIdMask == XIAllDevices) break;
+			if (e->sourceid != e->deviceid && DeviceIdMask == XIAllDevices) goto evfree;
 			// protect from fusion button/touch events
-			static int lastid = -1;
 			int ex = e->event_x;
 			int ey = e->event_y;
 #if defined(__BYTE_ORDER) &&  __BYTE_ORDER == __LITTLE_ENDIAN
@@ -1090,11 +1131,13 @@ _remapped:
 				break;
 			    case XI_TouchUpdate:
 				if (!(e->flags & XITouchPendingEnd)) {
-					active_but = kb_handle_events(kb, 1, ex, ey, ez, e->detail, lastid = e->sourceid, e->time, NULL, 0);
+					getMT(e->sourceid);
+					active_but = kb_handle_events(kb, 1, ex, ey, ez, e->detail, lastid, e->time, NULL, 0);
 					break;
 				}
 			    case XI_TouchEnd:
-				active_but = kb_handle_events(kb, 2, ex, ey, ez, e->detail, lastid = e->sourceid, e->time, NULL, 0);
+				getMT(e->sourceid);
+				active_but = kb_handle_events(kb, 2, ex, ey, ez, e->detail, lastid, e->time, NULL, 0);
 				break;
 			    case XI_TouchBegin:
 #ifdef GESTURES_USE
@@ -1103,7 +1146,8 @@ _remapped:
 					break;
 				}
 #endif
-				active_but = kb_handle_events(kb, 0, ex, ey, ez, e->detail, lastid = e->sourceid, e->time, NULL, 0);
+				getMT(e->sourceid);
+				active_but = kb_handle_events(kb, 0, ex, ey, ez, e->detail, lastid, e->time, NULL, 0);
 				break;
 #if defined(XI_GestureSwipeBegin) && defined(GESTURES_USE)
 			    case XI_GestureSwipeBegin:
@@ -1113,6 +1157,7 @@ _remapped:
 				break;
 #endif
 			}
+evfree:
 			XFreeEventData(display, &ev.xcookie);
 		}
 		break;

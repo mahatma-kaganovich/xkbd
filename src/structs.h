@@ -28,6 +28,9 @@
 
 #define DEFAULT_FONT "Monospace-%i|-%i|sans-%i|fixed-%i|fixed"
 
+typedef uint_fast8_t _ushort;
+typedef int_fast16_t _sshort;
+
 // to make 1-pointer multibutton devices simple - define
 // for button acrobats - undef
 #define BUTTONS_TO1 1
@@ -110,6 +113,9 @@ static inline unsigned int MODS(unsigned int l){
 
 #ifdef USE_XI
 #define MULTITOUCH
+// can count touches and reuse overcounted over device capabilities
+// but IMHO no lost touches observed. so, keep code disabled
+//#define COUNT_TOUCHES
 #else
 #undef MULTITOUCH
 #endif
@@ -332,14 +338,17 @@ extern unsigned long int scr_width;
 extern unsigned long int scr_height;
 extern unsigned long scr_mwidth;
 extern unsigned long scr_mheight;
+#ifdef COUNT_TOUCHES
+extern uint8_t num_touches;
+#endif
 #ifdef CACHE_PIX
 extern int cache_pix;
 #else
 #define cache_pix 0
 #endif
 
-static inline long min(long x,long y){ return x<y?x:y; }
-static inline long max(long x,long y){ return x>y?x:y; }
+static inline long _min(long x,long y){ return x<y?x:y; }
+static inline long _max(long x,long y){ return x>y?x:y; }
 
 static inline int strlen1utf8(char *s) {
 	int cnt=0;

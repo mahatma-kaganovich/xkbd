@@ -47,16 +47,16 @@
 
 #define DEFAULT_FONT "Monospace-%i|-%i|sans-%i|fixed-%i|fixed"
 
-static KeySym *keymap = NULL;
-static int minkc = 0;
-static int maxkc = 0;
-static int notkc = 0;
-static int ks_per_kc = 0;
+KeySym *keymap = NULL;
+int minkc = 0;
+int maxkc = 0;
+int notkc = 0;
+int ks_per_kc = 0;
 
-static char *font = NULL;
-static char *font1 = NULL;
-static char *loaded_font = NULL;
-static char *loaded_font1 = NULL;
+char *font = NULL;
+char *font1 = NULL;
+char *loaded_font = NULL;
+char *loaded_font1 = NULL;
 
 static void kb_process_keypress(button *b, int repeat, unsigned int flags);
 static int kb_switch_layout(keyboard *kb, int kbd_layout_num, int shift);
@@ -824,7 +824,7 @@ static void cache_preload(keyboard *kb,int layout){
 	kb->state = st;
 }
 
-static char fname[32] = "";
+char fname[32] = "";
 
 void kb_size(keyboard *kb) {
 	long w,h,mw,mh,w1,w2,h1,h2;
@@ -847,15 +847,15 @@ void kb_size(keyboard *kb) {
 			for(ip=bx->root_kid; ip; ip= ip->next) {
 				b = (button *)ip->data;
 				w2+=b->width+(b->b_size<<1);
-				h2=max(h2,b->height+(b->b_size<<1));
+				h2=_max(h2,b->height+(b->b_size<<1));
 				if (!b->width) bx->undef++;
 			}
 			bx->width = w2;
 			bx->height = h2;
 			h1+=h2;
-			w=max(w,w2);
+			w=_max(w,w2);
 		}
-		h=max(h,h1);
+		h=_max(h,h1);
 	}
 	if (!kb->width) kb->width=w;
 	if (!kb->height) kb->height=h;
@@ -872,19 +872,19 @@ void kb_size(keyboard *kb) {
 	    float d=(w2 && h2)?(w2+0.)/h2:3;
 	    if (!kb->vbox->act_height && !kb->vbox->act_width) {
 		kb->vbox->act_width=scr_width;
-		kb->vbox->act_height=ldiv(min(scr_height,scr_width)*d2,d1).quot;
+		kb->vbox->act_height=ldiv(_min(scr_height,scr_width)*d2,d1).quot;
 		if (w2 && w2<kb->vbox->act_width) kb->vbox->act_width=w2;
 		if (h2 && h2<kb->vbox->act_height) kb->vbox->act_height=h2;
 	    } else if (!kb->vbox->act_height) {
-		kb->vbox->act_height=ldiv(min(scr_height,kb->vbox->act_width)*d2,d1).quot;
+		kb->vbox->act_height=ldiv(_min(scr_height,kb->vbox->act_width)*d2,d1).quot;
 		if (!h2){
 		} else if (!w2) kb->vbox->act_height=h2;
-		else kb->vbox->act_height=min(kb->vbox->act_height,ldiv(h2*kb->vbox->act_width,w2).quot);
+		else kb->vbox->act_height=_min(kb->vbox->act_height,ldiv(h2*kb->vbox->act_width,w2).quot);
 	    } else if (!kb->vbox->act_width) {
-		kb->vbox->act_width=min(scr_width,ldiv(kb->vbox->act_height*d1,d2).quot);
+		kb->vbox->act_width=_min(scr_width,ldiv(kb->vbox->act_height*d1,d2).quot);
 		if (!w2){
 		} else if (!h2) kb->vbox->act_width=w2;
-		else kb->vbox->act_width=min(kb->vbox->act_width,ldiv(w2*kb->vbox->act_height,h2).quot);
+		else kb->vbox->act_width=_min(kb->vbox->act_width,ldiv(w2*kb->vbox->act_height,h2).quot);
 	    }
 	}
 
@@ -900,8 +900,8 @@ void kb_size(keyboard *kb) {
 	else kb->font1 = kb->font;
 
 #ifdef USE_XFT
-	kb->vheight = max(kb->font->height,kb->font->ascent+kb->font->descent);
-	kb->vheight1 = max(kb->font1->height,kb->font1->ascent+kb->font1->descent);
+	kb->vheight = _max(kb->font->height,kb->font->ascent+kb->font->descent);
+	kb->vheight1 = _max(kb->font1->height,kb->font1->ascent+kb->font1->descent);
 #else
 	kb->vheight = b->kb->font->ascent + b->kb->font->descent;
 	kb->vheight1 = b->kb->font1->ascent + b->kb->font1->descent;
@@ -1031,7 +1031,7 @@ void kb_size(keyboard *kb) {
 			bx->y = cy;
 			//bx->x = 0;
 			bx->act_width = vbox->act_width;
-			bx->act_height = max(bx->min_height,
+			bx->act_height = _max(bx->min_height,
 			    (!listp->next && vbox->act_height>=scr_height)?
 				vbox->act_height - hack - cy:
 			    (vbox->height && bx->height)?
@@ -1042,7 +1042,7 @@ void kb_size(keyboard *kb) {
 				b = (button *)ip->data;
 				b->x = cx; /*remember relative to holding box ! */
 				//b->y = 0;
-				b->act_width = max(b->vwidth + (b->b_size<<1),
+				b->act_width = _max(b->vwidth + (b->b_size<<1),
 				    (!ip->next && vbox->act_width>=scr_width)?
 					bx->act_width - hack - cx:
 				    (b->width && bx->width)?
@@ -1054,7 +1054,7 @@ void kb_size(keyboard *kb) {
 				b->vx = button_get_abs_x(b) - vbox->x + vbox->vx;
 				b->vy = button_get_abs_y(b) - vbox->y + vbox->vy;
 			}
-			fx = max(fx,cx);
+			fx = _max(fx,cx);
 		    }
 		    vbox->act_height = cy + hack;
 		    vbox->act_width = fx + hack;
@@ -1188,7 +1188,7 @@ static void _press(button *b, unsigned int flags){
 #define TOUCH_INC(x) (x=(x+1)&TOUCH_MASK)
 #define TOUCH_DEC(x) (x=(x+TOUCH_MASK)&TOUCH_MASK)
 
-button *kb_handle_events(keyboard *kb, int type, const int x, const int y, const z_t z, unsigned int ptr, int dev, Time time, unsigned char *mask, int mask_len)
+button *kb_handle_events(keyboard *kb, _ushort type, const int x, const int y, const z_t z, unsigned int ptr, int dev, Time time, unsigned char *mask, int mask_len)
 {
 	button *b, *b1, *b2;
 	int i,j;
@@ -1219,8 +1219,8 @@ typedef struct _touch {
 #ifdef MULTITOUCH
 	static unsigned short N=0;
 	static unsigned short P=0;
-	int t;
-	int type1 = type;
+	_sshort t;
+	_ushort type1 = type;
 #ifndef BUTTONS_TO1
 	int dead;
 	Time deadTime;
@@ -1245,6 +1245,10 @@ btn1:
 	// find touch
 find:
 	if (type && P==N && !mask) return NULL;
+#ifdef COUNT_TOUCHES
+	unsigned short tcnt = 0;
+	short t_old = ptr;
+#endif
 #ifndef BUTTONS_TO1
 	dead =
 #endif
@@ -1278,6 +1282,12 @@ find:
 				break;
 #endif
 			}
+#ifdef COUNT_TOUCHES
+			else if (num_touches) {
+				tcnt++;
+				if (j < t_old) t_old = j;
+			}
+#endif
 #ifndef BUTTONS_TO1
 			if (mask && j<(mask_len<<3) && !(mask[j>>3] & (1 << (j & 7)))
 			    && (dead < 0 || t1->time<deadTime)) {
@@ -1301,6 +1311,12 @@ find:
 	if (t<0) {
 		switch (type) {
 		    case 0:
+#ifdef COUNT_TOUCHES
+			if (tcnt > num_touches) {
+				to = &touch[t = t_old]; // reuse oldest overcounted
+				fprintf(stderr,"input %i touch count=%i over num_touches=%i - reuse\n",dev,tcnt,num_touches);
+			}
+#endif
 			break;
 		    case 1:
 			if (mask) {
@@ -1312,6 +1328,8 @@ find:
 //			fprintf(stderr,"untracked touch on state %i\n",type);
 			return NULL;
 		}
+#ifdef COUNT_TOUCHES
+#endif
 	}
 #else
 	const int t=0;
