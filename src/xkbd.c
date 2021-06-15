@@ -1095,17 +1095,15 @@ hierarchy:
 			// protect from fusion button/touch events
 			int ex = e->event_x;
 			int ey = e->event_y;
+			z_t ez = (use_pressure
+				&& abs3(e->sourceid)
+				&& e->valuators.mask_len > z_byte
 #if defined(__BYTE_ORDER) &&  __BYTE_ORDER == __LITTLE_ENDIAN
-			z_t ez = (use_pressure
-				&& abs3(e->sourceid)
-				&& e->valuators.mask_len > z_byte && (e->valuators.mask[z_byte]&z_mask == z_mask)
-				) ? (e->valuators.values[z_number] - z_min) : 0;
+				&& (e->valuators.mask[z_byte]&z_mask == z_mask)
 #else
-			z_t ez = (use_pressure
-				&& abs3(e->sourceid)
-				&& e->valuators.mask_len > z_byte && (XIMaskIsSet(e->valuators.mask, z_number))
-				) ? (e->valuators.values[z_number] - z_min) : 0;
+				&& (XIMaskIsSet(e->valuators.mask, z_number))
 #endif
+				) ? (e->valuators.values[z_number] - z_min) : 0;
 			switch(ev.xcookie.evtype) {
 			    case XI_ButtonRelease: type++;
 			    case XI_Motion: type++; // always detail==0
@@ -1165,7 +1163,7 @@ evfree:
 	    case ButtonRelease: type=2;
 	    case ButtonPress:
 //#define ButtonScrollMask 0x7800u
-#define ButtonScrollMask (Button4Mask|Button5Mask|((Button4Mask|Button5Mask)<<2))
+#define ButtonScrollMask (Button4Mask|Button5Mask|(Button5Mask<<1)|(Button5Mask<<2))
 #ifndef GESTURES_USE
 		{
 #else
