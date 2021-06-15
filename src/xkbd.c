@@ -450,8 +450,7 @@ static short abs3(int devid){
 	static int devid_abs_chk = 0;
 	static short ret = 0;
 	if (devid == devid_abs_chk) goto ret;
-	if (use_pressure == -1) return 1;
-//	if (use_pressure == devid) return 1;
+	if (use_pressure < 0) return use_pressure == -1 || use_pressure == -devid;
 	ret = 0;
 	int i,l;
 	char *label;
@@ -1032,7 +1031,10 @@ re_crts:
 	XISetMask(mask.mask, XI_TouchBegin);
 	XISetMask(mask.mask, XI_TouchUpdate);
 	XISetMask(mask.mask, XI_TouchEnd);
-	XISetMask(mask.mask, XI_DeviceChanged);
+#ifndef COUNT_TOUCHES
+	if (use_pressure>0) 
+#endif
+		XISetMask(mask.mask, XI_DeviceChanged);
 #if defined(XI_GestureSwipeBegin) && defined(GESTURES_USE)
 	if (ximinor > 3 || ximinor > 2) {
 		XISetMask(mask.mask, XI_GestureSwipeBegin);
@@ -1072,9 +1074,14 @@ _remapped:
       XFlush(display);
 #ifdef USE_XI
 hierarchy:
-      if (info2) XIFreeDeviceInfo(info2);
-      d2_last = info2 = XIQueryDevice(display, XIAllDevices, &ndevs2);
-      if (ndevs2) d2_last = &info2[ndevs2];
+#ifndef COUNT_TOUCHES
+      if (use_pressure>0)
+#endif
+      {
+	if (info2) XIFreeDeviceInfo(info2);
+	d2_last = info2 = XIQueryDevice(display, XIAllDevices, &ndevs2);
+	if (ndevs2) d2_last = &info2[ndevs2];
+      }
       lastid = -1;
 #endif
 
@@ -1087,8 +1094,8 @@ hierarchy:
 #ifdef USE_XI
 		case GenericEvent: if (ev.xcookie.extension == xiopcode) {
 //		    && ev.xgeneric.extension == 131
-			if (ev.xcookie.evtype == XI_DeviceChanged) goto hierarchy;
 			if (!XGetEventData(display, &ev.xcookie)) break;
+			if (ev.xcookie.evtype == XI_DeviceChanged) goto dev_ch;
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
 			if (e->sourceid != e->deviceid && DeviceIdMask == XIAllDevices) goto evfree;
@@ -1154,6 +1161,13 @@ hierarchy:
 				fprintf(stderr,"swipe\n");
 				break;
 #endif
+#undef e
+#define e ((XIDeviceChangedEvent*)ev.xcookie.data)
+			    case XI_DeviceChanged:
+dev_ch:
+				if (e->reason == XISlaveSwitch && DeviceIdMask != XIAllMasterDevices) break;
+				XFreeEventData(display, &ev.xcookie);
+				goto hierarchy;
 			}
 evfree:
 			XFreeEventData(display, &ev.xcookie);
