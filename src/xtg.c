@@ -679,7 +679,7 @@ typedef struct _dinf {
 	_short zstate,z_ewmh;
 	int zdetail;
 	unsigned long zserial;
-	time_t ztime;
+	Time ztime;
 } dinf_t;
 
 #define z_nothing 0
@@ -3517,19 +3517,6 @@ tfound:
 				}
 				xx = x2 - x1;
 				yy = y2 - y1;
-
-				{
-					time_t t = T - to->time;
-//					if (!z_en) {
-						double _z2 = t*t/(xx*xx + yy*yy + 1);
-						DBG("z %f emu %f",z2,_z2);
-//					}
-					//double zz = (z2 - z1);
-//					DBG("tm %f",t*t/(xx*xx + yy*yy + zz*zz + .1));
-				}
-
-
-
 				bx = 0;
 				by = 0;
 				if (xx<0) {xx = -xx; bx = BUTTON_LEFT;}

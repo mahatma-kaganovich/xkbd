@@ -1001,7 +1001,7 @@ re_crts:
 		if (Xkb_sync) m|=XkbStateNotifyMask;
 		XkbSelectEvents(display,XkbUseCoreKbd,XkbAllEventsMask,m);
 		if (m & XkbStateNotifyMask)
-			XkbSelectEventDetails(display,XkbUseCoreKbd,XkbStateNotifyMask,XkbAllStateComponentsMask,XkbModifierStateMask|XkbModifierLatchMask|XkbModifierLockMask|XkbModifierBaseMask);
+			XkbSelectEventDetails(display,XkbUseCoreKbd,XkbStateNotify,XkbAllStateComponentsMask,XkbModifierStateMask|XkbModifierLatchMask|XkbModifierLockMask|XkbModifierBaseMask|XkbGroupStateMask);
 	}
 #endif
 
@@ -1165,7 +1165,7 @@ hierarchy:
 #define e ((XIDeviceChangedEvent*)ev.xcookie.data)
 			    case XI_DeviceChanged:
 dev_ch:
-				if (e->reason == XISlaveSwitch && DeviceIdMask != XIAllMasterDevices) break;
+				if (e->reason == XISlaveSwitch) break;
 				XFreeEventData(display, &ev.xcookie);
 				goto hierarchy;
 			}
@@ -1277,6 +1277,8 @@ evfree:
 	    default:
 #ifndef MINIMAL
 		if (ev.type == xkbEventType) {
+			static unsigned long serial = 0;
+			static Time t = 0;
 #undef e
 #define e ((XkbEvent)ev)
 			switch (e.any.xkb_type) {
@@ -1289,6 +1291,9 @@ evfree:
 			    case XkbNewKeyboardNotify:
 #undef e
 #define e (((XkbEvent)ev).new_kbd)
+				if (e.serial == serial && e.time == t) break;
+				t = e.time;
+				serial = e.serial;
 				// Xkbd send false notify, so we must compare maps
 				if (e.min_key_code != e.old_min_key_code || e.max_key_code != e.old_max_key_code || e.device != e.old_device
 				    || kb_load_keymap(display)
