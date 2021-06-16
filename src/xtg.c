@@ -1592,6 +1592,7 @@ static void xrMons0(){
 					if (XRRSetCrtcConfig(dpy,xrrr,oinf->crtcs[i],xrrr->timestamp,0,0,m0x1->id,RR_Rotate_0,&minf->out,1)==Success) {
 						XRRFreeOutputInfo(oinf);
 						oinf = XRRGetOutputInfo(dpy, xrrr, minf->out);
+						minf->type |= o_changed;
 						if (!oinf || oinf->crtc) goto _on;
 					}
 				}
@@ -1665,7 +1666,7 @@ _on:
 	    pr_set(xrp_non_desktop,0);
 #ifdef _BACKLIGHT
     if ((pi[p_safe]&4096)) {
-	MINF(minf->type & (o_active|o_backlight) == o_active|o_backlight && minf->width && minf->height) {
+	MINF((minf->type & (o_active|o_backlight)) == (o_active|o_backlight) && minf->width && minf->height) {
 		if (!minf->win) {
 			simpleWin(0);
 			oldShowPtr |= 16;
