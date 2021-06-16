@@ -355,7 +355,7 @@ char *ph[MAX_PAR] = {
 	"		4(+8) cursor recheck (tricky)\n"
 	"		5(+16) no mon dpi\n"
 	"		6(+32) no mon primary\n"
-	"		7(+64) no vertical panning\n"
+	"		7(+64) no vertical panning && auto-on\n"
 	"		8(+128) auto bits 6,7 on primary present - enable primary & disable panning\n"
 	"		9(+256) use mode sizes for panning (errors in xrandr tool!)\n"
 	"		10(+512) keep dpi different x & y (image panned non-aspected)\n"
@@ -1548,13 +1548,62 @@ static void xrMons0(){
 		minf->mheight1 = minf->mheight = oinf->mm_height;
 		minf->type |= o_changed;
 	}
-	if (minf->mwidth && minf->mheight) minf->type |= o_msize;
+	unsigned long mwh10 = 0;
+	if (minf->mwidth && minf->mheight) {
+		minf->type |= o_msize;
+		mwh10 = minf->mwidth*10/minf->mheight;
+	}
 	//xrGetRangeProp(xrp_bl,&minf->bl);
 #ifdef _BACKLIGHT
 	if (minf->prop[xrp_bl].en) minf->type |= o_backlight;
 #endif
-	if (!(minf->crt = oinf->crtc) || !(cinf=XRRGetCrtcInfo(dpy, xrrr, minf->crt)))
-		continue;
+
+	XRRModeInfo *m,*m0 = NULL,*m1 = NULL, *m0x = NULL, *m0x1 = NULL;
+	RRMode id;
+	int j;
+	// find first preferred simple: m0
+	// and with size: m0x
+	// and with size proportional to mm: m0x1
+	for (j=0; j<oinf->npreferred && !m0x1; j++) {
+		id = oinf->modes[j];
+		for (i=0; i<xrrr->nmode && !m0x1; i++) {
+			m = &xrrr->modes[i];
+			if (m->id != id) continue;
+			if (m->width && m->height) {
+				if (m->width*10/m->height == mwh10) m0x1 = m;
+				m0x = m;
+			} else if (!m0) m0 = m;
+		}
+	}
+	if (!m0x1) m0x1 = m0x;
+	//else m0x = m0x1;
+
+	if (!(pi[p_safe]&64)
+	    && !oinf->crtc
+	    && m0x1
+	    && minf->connection == RR_Connected
+	    ) {
+		for (i=0; i<oinf->ncrtc; i++) {
+			cinf=XRRGetCrtcInfo(dpy, xrrr, oinf->crtcs[i]);
+			if (!cinf->noutput)
+			for (j=0; j<cinf->npossible; j++) {
+				if (cinf->possible[j] == minf->out) {
+					DBG("output %s off -> auto crtc %ix%i",oinf->name,m0x1->width,m0x1->height);
+					if (XRRSetCrtcConfig(dpy,xrrr,oinf->crtcs[i],xrrr->timestamp,0,0,m0x1->id,RR_Rotate_0,&minf->out,1)==Success) {
+						XRRFreeOutputInfo(oinf);
+						oinf = XRRGetOutputInfo(dpy, xrrr, minf->out);
+						if (!oinf || oinf->crtc) goto _on;
+					}
+				}
+			}
+			XRRFreeCrtcInfo(cinf);
+			cinf = NULL;
+		}
+_on:
+		if (!oinf) continue;
+	}
+
+	if (!(minf->crt = oinf->crtc) || !(cinf=XRRGetCrtcInfo(dpy, xrrr, minf->crt))) continue;
 	minf->width = minf->width0 = cinf->width;
 	minf->height = minf->height0 = cinf->height;
 	if (minf->x != cinf->x || minf->y != cinf->y || minf->rotation != cinf->rotation) {
@@ -1563,26 +1612,14 @@ static void xrMons0(){
 		minf->rotation = cinf->rotation;
 		minf->type |= o_changed;
 	}
-	XRRModeInfo *m,*m0 = NULL,*m1 = NULL, *m0x = NULL;
-	RRMode id = cinf->mode;
+//	XRRModeInfo *m,*m0 = NULL,*m1 = NULL, *m0x = NULL;
+	id = cinf->mode;
 	// find precise current mode
 	for (i=0; i<xrrr->nmode; i++) {
 		m = &xrrr->modes[i];
 		if (m->id == id) {
 			m1 = m;
 			break;
-		}
-	}
-	int j;
-	// find first preferred simple: m0
-	// and with size: m0x
-	for (j=0; j<oinf->npreferred && !m0x; j++) {
-		id = oinf->modes[j];
-		for (i=0; i<xrrr->nmode && !m0x; i++) {
-			m = &xrrr->modes[i];
-			if (m->id != id) continue;
-			if (m->width && m->height) m0x = m;
-			else if (!m0) m0 = m;
 		}
 	}
 	if (pi[p_safe]&256) m0 = m1;
@@ -1628,7 +1665,7 @@ static void xrMons0(){
 	    pr_set(xrp_non_desktop,0);
 #ifdef _BACKLIGHT
     if ((pi[p_safe]&4096)) {
-	MINF_T2(o_active|o_backlight,o_active|o_backlight) {
+	MINF(minf->type & (o_active|o_backlight) == o_active|o_backlight && minf->width && minf->height) {
 		if (!minf->win) {
 			simpleWin(0);
 			oldShowPtr |= 16;
@@ -2672,6 +2709,7 @@ static int xerrh(Display *dpy, XErrorEvent *err){
 		case X_RRQueryOutputProperty:
 		case X_RRChangeOutputProperty:
 		case X_RRDeleteOutputProperty: goto ex;
+		case X_RRSetCrtcConfig:
 		case X_RRSetScreenSize: goto msg;
 		}
 	} else if (err->request_code == xfopcode) {
@@ -3605,7 +3643,7 @@ next_dnd:
 					}
 					XTestFakeMotionEvent(dpy,screen,x2,y2,0);
 					XTestFakeButtonEvent(dpy,g,0,0);
-					//fprintf(stderr,"button %i\n",g);
+					fprintf(stderr,"button %i\n",g);
 				}
 //				XFlush(dpy);
 				to->tail = xx;
