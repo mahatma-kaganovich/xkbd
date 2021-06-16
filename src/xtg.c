@@ -1585,8 +1585,8 @@ static void xrMons0(){
 	    ) {
 		for (i=0; i<oinf->ncrtc; i++) {
 			cinf=XRRGetCrtcInfo(dpy, xrrr, oinf->crtcs[i]);
-			if (!cinf->noutput)
-			for (j=0; j<cinf->npossible; j++) {
+			if (!cinf->noutput && !cinf->mode)
+			    for (j=0; j<cinf->npossible; j++) {
 				if (cinf->possible[j] == minf->out) {
 					DBG("output %s off -> auto crtc %ix%i",oinf->name,m0x1->width,m0x1->height);
 					if (XRRSetCrtcConfig(dpy,xrrr,oinf->crtcs[i],xrrr->timestamp,0,0,m0x1->id,RR_Rotate_0,&minf->out,1)==Success) {
@@ -3643,7 +3643,6 @@ next_dnd:
 					}
 					XTestFakeMotionEvent(dpy,screen,x2,y2,0);
 					XTestFakeButtonEvent(dpy,g,0,0);
-					fprintf(stderr,"button %i\n",g);
 				}
 //				XFlush(dpy);
 				to->tail = xx;
