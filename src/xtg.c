@@ -2309,8 +2309,8 @@ static void getHierarchy(){
 				switch (pi[p_floating]) {
 				    case 1:
 					if (type&o_touch) {
-						DBG("input %i grab touch events%s",devid,(ximask[0].mask == ximaskRaw)?" raw":"");
 						ximask[0].mask=mTouch;
+						DBG("input %i grab touch events%s",devid,(ximask[0].mask == ximaskRaw)?" raw":"");
 						XIGrabDevice(dpy,devid,root,0,None,XIGrabModeSync,XIGrabModeTouch,False,ximask);
 //						XIGrabTouchBegin(dpy,devid,root,0,ximask,0,NULL);
 						ximask[0].mask=NULL;

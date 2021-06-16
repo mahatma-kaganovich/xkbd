@@ -1080,7 +1080,7 @@ hierarchy:
 		case GenericEvent: if (ev.xcookie.extension == xiopcode) {
 //		    && ev.xgeneric.extension == 131
 			if (!XGetEventData(display, &ev.xcookie)) break;
-			if ((1 << ev.xcookie.evtype) & (XI_ButtonPressMask|XI_ButtonReleaseMask|XI_Motion|XI_TouchBeginMask|XI_TouchUpdateMask|XI_TouchEndMask)) {
+			if ((1 << ev.xcookie.evtype) & (XI_ButtonPressMask|XI_ButtonReleaseMask|XI_MotionMask|XI_TouchBeginMask|XI_TouchUpdateMask|XI_TouchEndMask)) {
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
 				if (e->sourceid != e->deviceid && DeviceIdMask == XIAllDevices) goto evfree;
