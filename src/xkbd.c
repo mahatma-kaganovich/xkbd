@@ -1002,7 +1002,7 @@ re_crts:
         // right: ((XI_LASTEVENT+7)/8), but 4 + XI_GestureSwipeEnd -> BadValue
 #define XI_MASK_LEN XIMaskLen(XI_LASTEVENT)
 	static unsigned char mask_[XI_MASK_LEN] = {};
-	static XIEventMask mask = { .mask_len = XI_MASK_LEN, .mask = (unsigned char *)&mask_ };
+	static XIEventMask mask = { .mask_len = XI_MASK_LEN, .mask = mask_ };
 	mask.deviceid = DeviceIdMask;
 
 	if (!(fake_touch&4)) XISetMask(mask.mask, XI_Motion);
@@ -1017,7 +1017,7 @@ re_crts:
 #endif
 		XISetMask(mask.mask, XI_DeviceChanged);
 #if defined(XI_GestureSwipeBegin) && defined(GESTURES_USE)
-	if (ximinor > 3 || ximinor > 2) {
+	if (ximinor > 3 || ximajor > 2) {
 		XISetMask(mask.mask, XI_GestureSwipeBegin);
 		XISetMask(mask.mask, XI_GestureSwipeUpdate);
 		XISetMask(mask.mask, XI_GestureSwipeEnd);
@@ -1066,6 +1066,10 @@ hierarchy:
       lastid = -1;
 #endif
 
+#define ex e->event_x
+#define ey e->event_y
+      z_t ez = 0;
+
       while (1)
       {
 	    _ushort type = 0;
@@ -1076,22 +1080,20 @@ hierarchy:
 		case GenericEvent: if (ev.xcookie.extension == xiopcode) {
 //		    && ev.xgeneric.extension == 131
 			if (!XGetEventData(display, &ev.xcookie)) break;
-			if (ev.xcookie.evtype == XI_DeviceChanged) goto dev_ch;
+			if ((1 << ev.xcookie.evtype) & (XI_ButtonPressMask|XI_ButtonReleaseMask|XI_Motion|XI_TouchBeginMask|XI_TouchUpdateMask|XI_TouchEndMask)) {
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
-			if (e->sourceid != e->deviceid && DeviceIdMask == XIAllDevices) goto evfree;
-			// protect from fusion button/touch events
-			int ex = e->event_x;
-			int ey = e->event_y;
-			z_t ez = (use_pressure
-				&& abs3(e->sourceid)
-				&& e->valuators.mask_len > z_byte
+				if (e->sourceid != e->deviceid && DeviceIdMask == XIAllDevices) goto evfree;
+				if (use_pressure)
+				    ez = (abs3(e->sourceid)
+					&& e->valuators.mask_len > z_byte
 #if defined(__BYTE_ORDER) &&  __BYTE_ORDER == __LITTLE_ENDIAN
-				&& (e->valuators.mask[z_byte]&z_mask == z_mask)
+					&& (e->valuators.mask[z_byte]&z_mask == z_mask)
 #else
-				&& (XIMaskIsSet(e->valuators.mask, z_number))
+					&& (XIMaskIsSet(e->valuators.mask, z_number))
 #endif
-				) ? (e->valuators.values[z_number] - z_min) : 0;
+					) ? (e->valuators.values[z_number] - z_min) : 0;
+			}
 			switch(ev.xcookie.evtype) {
 			    case XI_ButtonRelease: type++;
 			    case XI_Motion: type++; // always detail==0
@@ -1136,16 +1138,35 @@ hierarchy:
 				active_but = kb_handle_events(kb, 0, ex, ey, ez, e->detail, lastid, e->time, NULL, 0);
 				break;
 #if defined(XI_GestureSwipeBegin) && defined(GESTURES_USE)
+#undef e
+#define e ((XIGestureSwipeEvent*)ev.xcookie.data)
 			    case XI_GestureSwipeBegin:
 			    case XI_GestureSwipeUpdate:
+				//fprintf(stderr,"XI_GestureSwipe*\n");
+				break;
 			    case XI_GestureSwipeEnd:
-				fprintf(stderr,"swipe\n");
+				//fprintf(stderr,"XI_GestureSwipeEnd\n");
+#if 0
+			    {
+				if (e->flags&XIGestureSwipeEventCancelled) break;
+				int x = e->delta_x, y = e->delta_y, x1;
+				//int x = e->delta_unaccel_x, y = e->delta_unaccel_y;
+				_ushort bx = 0, by = 0;
+				if (x < 0) {x=-x; bx=7;}
+				else if (x > 0) bx=6;
+				if (y < 0) {y=-y; by=5;}
+				else if (y > 0) by=4;
+				if (x < y) {bx = by;x1=x;x=y;y=x1}
+				//else if (x == y) break;
+				if ((y<<2) > x) break;
+				if (!bx) _hide(sig[bx]);
+			    }
+#endif
 				break;
 #endif
 #undef e
 #define e ((XIDeviceChangedEvent*)ev.xcookie.data)
 			    case XI_DeviceChanged:
-dev_ch:
 				if (e->reason == XISlaveSwitch) break;
 				XFreeEventData(display, &ev.xcookie);
 				goto hierarchy;
