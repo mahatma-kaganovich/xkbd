@@ -1527,33 +1527,6 @@ static void xrMons0(){
 		active++;
 	}
 	minf->name = XInternAtom(dpy, oinf->name, False);
-	int nprop = 0;
-	Atom *props = XRRListOutputProperties(dpy, minf->out, &nprop);
-	for (prI=0; prI<xrp_cnt; prI++) {
-		_short r = 0;
-		for (i=0; i<nprop; i++) {
-			if (a_xrp[prI] == props[i]) r|=2;
-			else if (a_xrp_save[prI] == props[i]) r|=1;
-		}
-		if (r<2) continue;
-		pr = &minf->prop[prI];
-#ifndef MINIMAL
-		if (pr->en) continue;
-#endif
-		_pr_get(r);
-	}
-	XFree(props);
-	if (minf->prop[xrp_non_desktop].en) {
-		if (minf->prop[xrp_non_desktop].v.i == 1) {
-			minf->type |= o_non_desktop;
-			non_desktop++;
-		}
-		if (minf->prop[xrp_non_desktop].vs[0].i == 1) {
-			non_desktop0++;
-			if ((minf->type&o_active)) active--; // think there are not active-born
-			if (!minf->prop[xrp_non_desktop].v.i) non_desktop1++;
-		}
-	}
 	if (minf->mwidth != oinf->mm_width || minf->mheight != oinf->mm_height) {
 		if (minf->mwidth1 != oinf->mm_width || minf->mheight1 != oinf->mm_height) minf->type |= o_changed;
 		minf->mwidth1 = minf->mwidth = oinf->mm_width;
@@ -1564,10 +1537,6 @@ static void xrMons0(){
 		minf->type |= o_msize;
 		mwh25 = minf->mwidth*25/minf->mheight;
 	}
-	//xrGetRangeProp(xrp_bl,&minf->bl);
-#ifdef _BACKLIGHT
-	if (minf->prop[xrp_bl].en) minf->type |= o_backlight;
-#endif
 
 	XRRModeInfo *m,*m0 = NULL,*m1 = NULL, *m0x = NULL;
 	RRMode id;
@@ -1620,6 +1589,38 @@ static void xrMons0(){
 _on:
 		if (!oinf) continue;
 	}
+
+	int nprop = 0;
+	Atom *props = XRRListOutputProperties(dpy, minf->out, &nprop);
+	for (prI=0; prI<xrp_cnt; prI++) {
+		_short r = 0;
+		for (i=0; i<nprop; i++) {
+			if (a_xrp[prI] == props[i]) r|=2;
+			else if (a_xrp_save[prI] == props[i]) r|=1;
+		}
+		if (r<2) continue;
+		pr = &minf->prop[prI];
+#ifndef MINIMAL
+		if (pr->en) continue;
+#endif
+		_pr_get(r);
+	}
+	XFree(props);
+	if (minf->prop[xrp_non_desktop].en) {
+		if (minf->prop[xrp_non_desktop].v.i == 1) {
+			minf->type |= o_non_desktop;
+			non_desktop++;
+		}
+		if (minf->prop[xrp_non_desktop].vs[0].i == 1) {
+			non_desktop0++;
+			if ((minf->type&o_active)) active--; // think there are not active-born
+			if (!minf->prop[xrp_non_desktop].v.i) non_desktop1++;
+		}
+	}
+#ifdef _BACKLIGHT
+	if (!oinf->crtc) minf->prop[xrp_bl].en = 0;
+	if (minf->prop[xrp_bl].en) minf->type |= o_backlight;
+#endif
 
 	if (!(minf->crt = oinf->crtc) || !(cinf=XRRGetCrtcInfo(dpy, xrrr, minf->crt))) continue;
 	minf->width = minf->width0 = cinf->width;
