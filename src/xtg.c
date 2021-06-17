@@ -42,7 +42,7 @@
 //#undef _BACKLIGHT
 #define PROP_FMT
 #undef PROP_FMT
-//#define TRACK_MATRIX
+#define TRACK_MATRIX
 #define FAST_VALUATORS
 // as soon Z!/pressure or legacy unhooked floating starts to be actual - set it.
 // -f 7|15 will set per device, not XIAllDevices
@@ -355,7 +355,7 @@ char *ph[MAX_PAR] = {
 	"		4(+8) cursor recheck (tricky)\n"
 	"		5(+16) no mon dpi\n"
 	"		6(+32) no mon primary\n"
-	"		7(+64) no vertical panning && auto-on\n"
+	"		7(+64) no vertical panning && auto-on && ondemand XI2 prop 'scaling mode' = Full\n"
 	"		8(+128) auto bits 6,7 on primary present - enable primary & disable panning\n"
 	"		9(+256) use mode sizes for panning (errors in xrandr tool!)\n"
 	"		10(+512) keep dpi different x & y (image panned non-aspected)\n"
@@ -515,6 +515,7 @@ typedef union _xrp_ {
 
 typedef enum {
 	xrp_non_desktop,
+	xrp_sm,
 #ifdef _BACKLIGHT
 	xrp_bl,
 #endif
@@ -527,6 +528,7 @@ typedef enum {
 
 char *an_xrp[xrp_cnt] = {
 	RR_PROPERTY_NON_DESKTOP,
+	"scaling mode",
 #ifdef _BACKLIGHT
 	RR_PROPERTY_BACKLIGHT,
 #endif
@@ -538,11 +540,14 @@ char *an_xrp[xrp_cnt] = {
 
 Atom type_xrp[xrp_cnt] = {
 	XA_INTEGER,
+	XA_ATOM,
 #ifdef _BACKLIGHT
 	XA_INTEGER,
 #endif
+#ifdef XSS
 	XA_ATOM,
 	XA_ATOM,
+#endif
 };
 
 _xrp_t val_xrp[xrp_cnt] = {};
@@ -1544,43 +1549,45 @@ static void xrMons0(){
 		}
 	}
 	if (minf->mwidth != oinf->mm_width || minf->mheight != oinf->mm_height) {
+		if (minf->mwidth1 != oinf->mm_width || minf->mheight1 != oinf->mm_height) minf->type |= o_changed;
 		minf->mwidth1 = minf->mwidth = oinf->mm_width;
 		minf->mheight1 = minf->mheight = oinf->mm_height;
-		minf->type |= o_changed;
 	}
-	unsigned long mwh10 = 0;
+	unsigned long mwh25 = 0;
 	if (minf->mwidth && minf->mheight) {
 		minf->type |= o_msize;
-		mwh10 = minf->mwidth*10/minf->mheight;
+		mwh25 = minf->mwidth*25/minf->mheight;
 	}
 	//xrGetRangeProp(xrp_bl,&minf->bl);
 #ifdef _BACKLIGHT
 	if (minf->prop[xrp_bl].en) minf->type |= o_backlight;
 #endif
 
-	XRRModeInfo *m,*m0 = NULL,*m1 = NULL, *m0x = NULL, *m0x1 = NULL;
+	XRRModeInfo *m,*m0 = NULL,*m1 = NULL, *m0x = NULL;
 	RRMode id;
 	int j;
 	// find first preferred simple: m0
-	// and with size: m0x
-	// and with size proportional to mm: m0x1
-	for (j=0; j<oinf->npreferred && !m0x1; j++) {
+	// and with maximal size|clock: m0x
+	for (j=0; j<(oinf->npreferred?:oinf->nmode); j++) {
 		id = oinf->modes[j];
-		for (i=0; i<xrrr->nmode && !m0x1; i++) {
+		for (i=0; i<xrrr->nmode; i++) {
 			m = &xrrr->modes[i];
 			if (m->id != id) continue;
 			if (m->width && m->height) {
-				if (m->width*10/m->height == mwh10) m0x1 = m;
-				m0x = m;
+				if (!m0x || ((m->width == m0x->width && m->height == m0x->height)?
+				    (m->dotClock > m0x->dotClock):
+				    (m->width >= m0x->width && m->height >= m0x->height)))
+					    m0x = m;
 			} else if (!m0) m0 = m;
 		}
 	}
-	if (!m0x1) m0x1 = m0x;
-	//else m0x = m0x1;
-
+	m = m0x;
+	if (!m0x) m = m0;
+	else if (mwh25 && mwh25 != m0x->width*25/m0x->height)
+		DBG("WARNING: output %s has maximum [preferred] mode %ix%i not proportional to size in mm",oinf->name,m0x->width,m0x->height);
 	if (!(pi[p_safe]&64)
 	    && !oinf->crtc
-	    && m0x1
+	    && m
 	    && minf->connection == RR_Connected
 	    ) {
 		for (i=0; i<oinf->ncrtc; i++) {
@@ -1588,17 +1595,18 @@ static void xrMons0(){
 			if (!cinf->noutput && !cinf->mode)
 			    for (j=0; j<cinf->npossible; j++) {
 				if (cinf->possible[j] == minf->out) {
-					DBG("output %s off -> auto crtc %ix%i",oinf->name,m0x1->width,m0x1->height);
-					if (XRRSetCrtcConfig(dpy,xrrr,oinf->crtcs[i],xrrr->timestamp,0,0,m0x1->id,RR_Rotate_0,&minf->out,1)==Success) {
+					DBG("output %s off -> auto crtc %ix%i",oinf->name,m->width,m->height);
+					if (XRRSetCrtcConfig(dpy,xrrr,oinf->crtcs[i],xrrr->timestamp,0,0,m->id,RR_Rotate_0,&minf->out,1)==Success) {
 						XRRFreeOutputInfo(oinf);
 						oinf = XRRGetOutputInfo(dpy, xrrr, minf->out);
 						minf->type |= o_changed;
-						if (!oinf || oinf->crtc) goto _on;
+						if (!oinf || oinf->crtc) break;
 					}
 				}
 			}
 			XRRFreeCrtcInfo(cinf);
 			cinf = NULL;
+			if (!oinf || oinf->crtc) break;
 		}
 _on:
 		if (!oinf) continue;
@@ -1613,7 +1621,6 @@ _on:
 		minf->rotation = cinf->rotation;
 		minf->type |= o_changed;
 	}
-//	XRRModeInfo *m,*m0 = NULL,*m1 = NULL, *m0x = NULL;
 	id = cinf->mode;
 	// find precise current mode
 	for (i=0; i<xrrr->nmode; i++) {
@@ -1629,6 +1636,8 @@ _on:
 		minf->width = m1->width;
 		minf->height = m1->height;
 	}
+	if (!(pi[p_safe]&64))
+		pr_set(xrp_sm,m1 && mwh25 && minf->height && mwh25 == minf->width*25/minf->height);
 	if (m0) {
 		minf->width0 = m0->width;
 		minf->height0 = m0->height;
@@ -1667,7 +1676,7 @@ _on:
 #ifdef _BACKLIGHT
     if ((pi[p_safe]&4096)) {
 	MINF((minf->type & (o_active|o_backlight)) == (o_active|o_backlight) && minf->width && minf->height) {
-		if (!minf->win) {
+		if (!minf->win || (minf->type|o_changed)) {
 			simpleWin(0);
 			oldShowPtr |= 16;
 		}
@@ -1716,19 +1725,29 @@ static _short setScrSize(double dpmx,double dpmy,_short preset){
 		mpy = py/dpmy + .5;
 		if (abs((dx1-dpmx)*254)>1 || abs((dy1-dpmy)*254)>1) goto set;
 	}
+	py = max(py,py1);
 	if (minf0.width != px || minf0.height != py || xrevent1 < 0) {
 set:
-		DBG("set screen size %lux%lu / %lux%lumm - %.1f %.1fdpi",px,py,mpx,mpy,25.4*px/mpx,25.4*py/mpy);
 #ifndef MINIMAL
+		static unsigned long w1 = 0, h1 = 0, mpx1 = 0, mpy1 = 0;
+		if (!preset || w1 != px || h1 != py || mpx != mpx1 || mpy != mpy1)
+#endif
+			DBG("set screen size %lux%lu / %lux%lumm - %.1f %.1fdpi",px,py,mpx,mpy,25.4*px/mpx,25.4*py/mpy);
+#ifndef MINIMAL
+		else return 1; // reduce blinking, may be bad
 		XFlush(dpy);
 		XSync(dpy,False);
 		_error = 0;
 #endif
-		XRRSetScreenSize(dpy,root,px,_max(py,py1),mpx,mpy);
+		XRRSetScreenSize(dpy,root,px,py,mpx,mpy);
 #ifndef MINIMAL
 		XFlush(dpy);
 		XSync(dpy,False);
 		if (_error) return 0;
+		w1 = px;
+		h1 = py;
+		mpx1 = mpx;
+		mpy1 = mpy;
 #endif
 	}
 	return 1;
@@ -2855,6 +2874,7 @@ static void init(){
 	if (pa[p_content_type]) val_xrp[xrp_ct].a = XInternAtom(dpy, pa[p_content_type], False);
 	if (pa[p_colorspace]) val_xrp[xrp_cs].a = XInternAtom(dpy, pa[p_colorspace], False);
 #endif
+	val_xrp[xrp_sm].a = XInternAtom(dpy, "Full", False); // if native aspect
 
 	XISetMask(ximaskButton, XI_ButtonPress);
 	XISetMask(ximaskButton, XI_ButtonRelease);
