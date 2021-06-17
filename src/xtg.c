@@ -1451,6 +1451,68 @@ err:
 	_pr_free(1);
 }
 
+static void _scr_size();
+static _short xrEvent() {
+	if (ev.type == xrevent) {
+#undef e
+#define e ((XRRScreenChangeNotifyEvent*)&ev)
+		// RANDR time(s) is static
+		//TIME(T,e->timestamp > e->config_timestamp ? e->timestamp : e->config_timestamp);
+		oldShowPtr |= 8|16;
+		if (xrevent1 < 0 || minf0.rotation != e->rotation) {
+			minf0.rotation = e->rotation;
+			oldShowPtr |= 8|16;
+		}
+		if (XRRUpdateConfiguration(&ev)) _scr_size();
+	}
+#ifdef RROutputPropertyNotifyMask
+	    else if (ev.type == xrevent1) {
+#undef e
+#define e ((XRRNotifyEvent*)&ev)
+		// RANDR time(s) is static
+		//XRRTimes(dpy,screen,&T);
+		oldShowPtr |= 16;
+#ifndef MINIMAL
+		switch (e->subtype) {
+#undef e
+#define e ((XRROutputPropertyNotifyEvent*)&ev)
+		    case RRNotify_OutputProperty:
+			pr = NULL;
+			MINF(minf->out == e->output) {
+				for (prI = 0; prI<xrp_cnt; prI++) {
+					if (e->property == a_xrp_save[prI]) return 1;
+					if (e->property != a_xrp[prI]) continue;
+					if (prI == xrp_non_desktop) oldShowPtr |= 8;
+					pr = &minf->prop[prI];
+					if (XRP_EQ(pr->v,pr->v1)) break;
+					pr->v1 = pr->v;
+					return 1;
+				}
+				break;
+			}
+			if (!pr || e->state) return 1;
+			_xrPropFlush();
+			_pr_get(0);
+			xrPropFlush();
+			break;
+		    default:
+			oldShowPtr |= 8;
+		}
+#else
+		oldShowPtr |= 8;
+#endif
+	}
+#endif
+	else return 0;
+	return 1;
+}
+
+static void clEvents(int event){
+	if (event > 0) while (XCheckTypedEvent(dpy,event,&ev)) {
+		xrEvent();
+	}
+}
+
 static void fixGeometry();
 static void xrMons0(){
     if (!xrr) {
@@ -1467,6 +1529,10 @@ static void xrMons0(){
     xrrFree();
     _grabX();
     xrrSet();
+    XSync(dpy,False);
+    clEvents(xrevent);
+    clEvents(xrevent1);
+    oldShowPtr &= ~8;
     int nout = -1, active = 0, non_desktop = 0, non_desktop0 = 0, non_desktop1 = 0;
     unsigned int _y = minf0.height;
     XRRCrtcInfo *cinf = NULL;
@@ -2979,6 +3045,7 @@ static void init(){
 //		XFixesSelectCursorInput(dpy,root,XFixesDisplayCursorNotifyMask);
 	}
 #endif
+	XFlush(dpy); // reduce concurrence extensions/core
 	XSelectInput(dpy, root, evmask);
 	oldxerrh = XSetErrorHandler(xerrh);
 
@@ -3852,58 +3919,7 @@ evfree1:
 			}
 #endif
 #endif
-#undef e
-#define e ((XRRScreenChangeNotifyEvent*)&ev)
-			if (ev.type == xrevent) {
-				// RANDR time(s) is static
-				//TIME(T,e->timestamp > e->config_timestamp ? e->timestamp : e->config_timestamp);
-				oldShowPtr |= 8|16;
-				if (xrevent1 < 0 || minf0.rotation != e->rotation) {
-					minf0.rotation = e->rotation;
-					oldShowPtr |= 8|16;
-				}
-				if (XRRUpdateConfiguration(&ev)) _scr_size();
-				break;
-			}
-#ifdef RROutputPropertyNotifyMask
-#undef e
-#define e ((XRRNotifyEvent*)&ev)
-			if (ev.type == xrevent1) {
-				// RANDR time(s) is static
-				//XRRTimes(dpy,screen,&T);
-				oldShowPtr |= 16;
-				switch (e->subtype) {
-#ifndef MINIMAL
-#undef e
-#define e ((XRROutputPropertyNotifyEvent*)&ev)
-				    case RRNotify_OutputProperty:
-					pr = NULL;
-					MINF(minf->out == e->output) {
-						for (prI = 0; prI<xrp_cnt; prI++) {
-							if (e->property == a_xrp_save[prI]) goto ev2;
-							if (e->property != a_xrp[prI]) continue;
-							if (prI == xrp_non_desktop) oldShowPtr |= 8;
-							pr = &minf->prop[prI];
-							if (XRP_EQ(pr->v,pr->v1)) break;
-							pr->v1 = pr->v;
-							goto ev2;
-						}
-						break;
-					}
-					if (!pr) goto ev2;
-					if (e->state) goto ev2;
-					_xrPropFlush();
-					_pr_get(0);
-					xrPropFlush();
-					break;
-#endif
-				    default:
-					oldShowPtr |= 8;
-				}
-				break;
-			}
-			
-#endif
+			if (xrEvent()) break;
 #undef e
 #define e ((XFixesCursorNotifyEvent*)&ev)
 //			if (ev.type == xfevent) {
