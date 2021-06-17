@@ -1467,6 +1467,7 @@ static void xrMons0(){
     _grabX();
     xrrSet();
     int nout = -1, active = 0, non_desktop = 0, non_desktop0 = 0, non_desktop1 = 0;
+    unsigned int _y = minf0.height;
     XRRCrtcInfo *cinf = NULL;
     XRROutputInfo *oinf = NULL;
     i = xrrr ? xrrr->noutput : 0;
@@ -1600,17 +1601,13 @@ static void xrMons0(){
 			    for (j=0; j<cinf->npossible; j++) {
 				if (cinf->possible[j] == minf->out) {
 					DBG("output %s off -> auto crtc %ix%i",oinf->name,m->width,m->height);
-					unsigned int _y = 0;
-#if 1
-					_y = minf0.height;
-#endif
 					if (XRRSetCrtcConfig(dpy,xrrr,oinf->crtcs[i],xrrr->timestamp,0,_y,m->id,RR_Rotate_0,&minf->out,1)==Success) {
 						XRRFreeOutputInfo(oinf);
 						oinf = XRRGetOutputInfo(dpy, xrrr, minf->out);
 						minf->type |= o_changed;
 						if (!oinf || oinf->crtc) {
 #if 0
-							XRRSetScreenSize(dpy,root,minf0.width=_max(minf0.width,m->width),minf0.height += m->height,minf0.mwidth=_max(minf0.mwidth,minf->mwidth),minf0.mheight += minf->mheight);
+							XRRSetScreenSize(dpy,root,minf0.width=_max(minf0.width,m->width),minf0.height = _y,minf0.mwidth=_max(minf0.mwidth,minf->mwidth),minf0.mheight += minf->mheight);
 							XFlush(dpy);
 							XSync(dpy,False);
 #endif
