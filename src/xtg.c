@@ -42,7 +42,7 @@
 //#undef _BACKLIGHT
 #define PROP_FMT
 #undef PROP_FMT
-#define TRACK_MATRIX
+//#define TRACK_MATRIX
 #define FAST_VALUATORS
 // as soon Z!/pressure or legacy unhooked floating starts to be actual - set it.
 // -f 7|15 will set per device, not XIAllDevices
@@ -1141,9 +1141,13 @@ static void map_to(){
 	matrix[1-m]=w;
 	matrix[3+m]=h;
 #ifdef TRACK_MATRIX
-	if (memcmp(dinf->matrix,matrix,sizeof(matrix)) &&
-	    xiSetProp(aMatrix,aFloat,&matrix,9,2)==1)
-		memcpy(dinf->matrix,matrix,sizeof(matrix));
+	if (!memcmp(dinf->matrix,matrix,sizeof(matrix))) return;
+	if (xiSetProp(aMatrix,aFloat,&matrix,9,2)!=1) return;
+	memcpy(dinf->matrix,matrix,sizeof(matrix));
+	// wacom touch + pen sometimes changed paired, confused me
+	DBG("input %i map_to %ux%u %ux%u rotation 0x%x from %ux%u -> m=%i w=%f h=%f",devid,minf->x,minf->y,minf->height1,minf->height1,minf->rotation,minf0.width1,minf0.height1,m,w,h);
+	//XFlush(dpy);
+	//XSync(dpy,False);
 #else
 	xiSetProp(aMatrix,aFloat,&matrix,9,4);
 #endif
@@ -1596,11 +1600,22 @@ static void xrMons0(){
 			    for (j=0; j<cinf->npossible; j++) {
 				if (cinf->possible[j] == minf->out) {
 					DBG("output %s off -> auto crtc %ix%i",oinf->name,m->width,m->height);
-					if (XRRSetCrtcConfig(dpy,xrrr,oinf->crtcs[i],xrrr->timestamp,0,0,m->id,RR_Rotate_0,&minf->out,1)==Success) {
+					unsigned int _y = 0;
+#if 1
+					_y = minf0.height;
+#endif
+					if (XRRSetCrtcConfig(dpy,xrrr,oinf->crtcs[i],xrrr->timestamp,0,_y,m->id,RR_Rotate_0,&minf->out,1)==Success) {
 						XRRFreeOutputInfo(oinf);
 						oinf = XRRGetOutputInfo(dpy, xrrr, minf->out);
 						minf->type |= o_changed;
-						if (!oinf || oinf->crtc) break;
+						if (!oinf || oinf->crtc) {
+#if 0
+							XRRSetScreenSize(dpy,root,minf0.width=_max(minf0.width,m->width),minf0.height += m->height,minf0.mwidth=_max(minf0.mwidth,minf->mwidth),minf0.mheight += minf->mheight);
+							XFlush(dpy);
+							XSync(dpy,False);
+#endif
+							break;
+						}
 					}
 				}
 			}
@@ -3404,17 +3419,18 @@ z_noise:
 							dinf1 = dinf;
 							break;
 						}
+						unsigned long serial = e->serial;
 						xiFreeE();
 						if (p == aMatrix) {
 #ifdef TRACK_MATRIX
 							float m[9];
 							devid = devid1;
-							if (xiGetProp(aMatrix,aFloat,&m,9,0)) continue;
-							DBG("xi device %i prop '%s' changed %s to",devid,natom(0,p),
+							DBG("xi device %i prop '%s' changed %s (%lu/%lu)",devid,natom(0,p),
 								!dinf1?"unlikely to me - untracked":
 								!xiGetProp(aMatrix,aFloat,&m,9,0)?
 								"unknown/bad":memcmp(m,dinf1->matrix,sizeof(m))?
-								    "not our value!":"our"
+								    "not our value!":"our",
+								T,serial
 								);
 #else
 							DBG("xi device %i prop '%s' changed",devid1,natom(0,p));
