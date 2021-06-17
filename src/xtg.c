@@ -1606,6 +1606,7 @@ static void xrMons0(){
 						oinf = XRRGetOutputInfo(dpy, xrrr, minf->out);
 						minf->type |= o_changed;
 						if (!oinf || oinf->crtc) {
+							_y += m->height;
 #if 0
 							XRRSetScreenSize(dpy,root,minf0.width=_max(minf0.width,m->width),minf0.height = _y,minf0.mwidth=_max(minf0.mwidth,minf->mwidth),minf0.mheight += minf->mheight);
 							XFlush(dpy);
