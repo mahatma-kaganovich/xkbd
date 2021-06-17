@@ -1451,6 +1451,7 @@ err:
 	_pr_free(1);
 }
 
+static void fixGeometry();
 static void xrMons0(){
     if (!xrr) {
 	minf_last = outputs = &minf0;
@@ -1607,11 +1608,6 @@ static void xrMons0(){
 						minf->type |= o_changed;
 						if (!oinf || oinf->crtc) {
 							_y += m->height;
-#if 0
-							XRRSetScreenSize(dpy,root,minf0.width=_max(minf0.width,m->width),minf0.height = _y,minf0.mwidth=_max(minf0.mwidth,minf->mwidth),minf0.mheight += minf->mheight);
-							XFlush(dpy);
-							XSync(dpy,False);
-#endif
 							break;
 						}
 					}
@@ -1700,6 +1696,7 @@ _on:
     }}
 #endif
 ret: {}
+//    if (_y > minf0.height) fixGeometry();
 //    _ungrabX(); // forceUngrab() instead
 }
 
