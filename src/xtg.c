@@ -1429,6 +1429,13 @@ static void _pr_get(_short r){
 		pr->vs[0] = v;
 		saved = 1;
 	}
+	switch (prI) {
+#ifdef _BACKLIGHT
+	    case xrp_bl: // prevent to saved Backlight 0
+		if (pr->vs[0].i == pr->p->values[0]) pr->vs[0].i = pr->p->values[1];
+		break;
+#endif
+	}
 	if (!_pr_chk(&pr->vs[0])) pr->vs[0] = pr->v;
 	if (_init && saved && !XRP_EQ(pr->vs[0],pr->v)) {
 		xrSetProp(a_xrp[prI],type,&pr->vs[0],1,0);
@@ -1637,7 +1644,7 @@ static void xrMons0(){
 			    for (j=0; j<cinf->npossible; j++) {
 				if (cinf->possible[j] == minf->out) {
 					DBG("output %s off -> auto crtc %ix%i",oinf->name,m->width,m->height);
-					if (XRRSetCrtcConfig(dpy,xrrr,oinf->crtcs[i],xrrr->timestamp,0,_y,m->id,RR_Rotate_0,&minf->out,1)==Success) {
+					if (XRRSetCrtcConfig(dpy,xrrr,oinf->crtcs[i],CurrentTime,0,_y,m->id,RR_Rotate_0,&minf->out,1)==Success) {
 						XRRFreeOutputInfo(oinf);
 						oinf = XRRGetOutputInfo(dpy, xrrr, minf->out);
 						minf->type |= o_changed;
@@ -1684,7 +1691,6 @@ _on:
 		}
 	}
 #ifdef _BACKLIGHT
-	if (!oinf->crtc) minf->prop[xrp_bl].en = 0;
 	if (minf->prop[xrp_bl].en) minf->type |= o_backlight;
 #endif
 
