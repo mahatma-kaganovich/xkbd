@@ -68,7 +68,7 @@ XWindowAttributes wa0;
 char *display_name = NULL;
 
 CARD32 prop[12] = {2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-int crts=0, X1,Y1,X2,Y2, top=0, left=0;
+int crts=0, X1,Y1,X2,Y2, top, left;
 //unsigned int dock = 1974;
 unsigned int dock = 4018;
 
@@ -420,11 +420,18 @@ static int rootChanged(XWindowAttributes *wa){
 XIDeviceInfo *d2, *d2_last, *info2 = NULL;
 XIAnyClassInfo *cl, **cl_, **cl_last;
 int ndevs2;
-int lastid; // last touch event device
+int lastid = -1; // last touch event device
 
 #define XIINF(x) for(d2=info2; d2!=d2_last; d2++) if (x)
 #define XIINF_D(devid) XIINF(d2->deviceid == devid)
-#define CLINF() for(cl_last = &(cl_ = d2->classes)[d2->num_classes]; cl_ != cl_last && (cl = *cl_); cl_++)
+#define CLINF_(classes,num_classes) for(cl_last = &(cl_ = classes)[num_classes]; cl_ != cl_last && (cl = *cl_); cl_++)
+#define CLINF() CLINF_(d2->classes,d2->num_classes)
+
+static void getHierarchy(int dev){
+	if (info2) XIFreeDeviceInfo(info2);
+	d2_last = info2 = XIQueryDevice(display, dev, &ndevs2);
+	if (ndevs2) d2_last = &info2[ndevs2];
+}
 
 int use_pressure = 0, z_number = 2;
 unsigned short z_byte = 0;
@@ -472,6 +479,37 @@ found:
 	ret = 1;
 ret:
 	return ret;
+}
+
+static _ushort findAbsXY(unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2){
+	_ushort m;
+	unsigned int x,y;
+	XIINF(lastid < 0 || lastid == d2->deviceid) {
+		m = 0;
+		CLINF() switch (cl->type) {
+#undef e
+#define e ((XIValuatorClassInfo*)cl)
+		    case XIValuatorClass:
+			if (e->mode == Absolute) switch (e->number) {
+			    case 0: 
+				x = e->value * scr_width / (e->max - e->min);
+				m |= 1;
+				break;
+			    case 1:
+				y = e->value * scr_height / (e->max - e->min);
+				m |= 2;
+				break;
+			}
+			break;
+#define e ((XITouchClassInfo*)cl)
+//		    case XITouchClass:
+//			if (e->mode == XIDirectTouch) m |= 4;
+//			break;
+		}
+		if ((m&3)==3 && x >= x1 && y >= y1 && x <= x2 && x <= y2) return 1;
+		if (lastid > 0) break;
+	}
+	return 0;
 }
 
 #ifdef COUNT_TOUCHES
@@ -736,6 +774,12 @@ stop_argv:
 	xi = !(fake_touch&1)
 		&& XQueryExtension(display, "XInputExtension", &xiopcode, &xievent, &xierror)
 		&& XIQueryVersion(display, &ximajor, &ximinor) != BadRequest;
+#ifndef COUNT_TOUCHES
+//	if (use_pressure>0
+//	    || !(dock&(2|64))
+//		)
+#endif
+		getHierarchy(XIAllDevices);
 #endif
 #ifndef MINIMAL
 	// not found how to get keymap change on XInput, so keep Xkb events
@@ -745,6 +789,7 @@ stop_argv:
 #endif
 
 chScreen:
+   top = left = 0;
    screen = DefaultScreen(display);
    rootWin = RootWindow(display, screen);
    scr_width = DisplayWidth(display,screen);
@@ -778,6 +823,10 @@ re_crts:
 				int y1=cinf->y;
 				int x2=cinf->width;
 				int y2=cinf->height;
+				if (cinf->rotation & (RR_Rotate_90|RR_Rotate_270)) {
+					x2 = cinf->height;
+					y2 = cinf->width;
+				}
 				for (j=0; j<xrrr->nmode; j++) {
 					XRRModeInfo *m = &xrrr->modes[j];
 					if (m->id==cinf->mode) {
@@ -795,13 +844,17 @@ re_crts:
 					if (dock & 2 && y2>Y2 && x2>X1 && x1<=X1) top=1;
 					else if (dock & 64 && x2>X2 && y2>Y1 && y1<=X1) left=1;
 					continue;
-				} else if (repeat==1 && (output?
-				    strcmp(oinf->name,output):(
-					!strncasecmp(oinf->name,"HDMI",4)||
-					!strncasecmp(oinf->name,"DP",2)||
-					!strncasecmp(oinf->name,"DVI",3)
-				    ))
-				    ) continue;
+				} else switch (repeat) {
+				    case 1:
+					if ((output ?
+						strcmp(oinf->name,output):
+					    info2 ? !findAbsXY(x1,y1,x2,y2):(
+						!strncasecmp(oinf->name,"HDMI",4)||
+						!strncasecmp(oinf->name,"DP",2)||
+						!strncasecmp(oinf->name,"DVI",3)
+						))) continue;
+					break;
+				}
 				found++;
 				X1=_max(X1,x1);
 				Y1=_max(Y1,y1);
@@ -810,7 +863,8 @@ re_crts:
 				subpixel_order = oinf->subpixel_order;
 				scr_mwidth=oinf->mm_width;
 				scr_mheight=oinf->mm_height;
-				if (scr_mwidth > scr_mheight && x2-x1 < y2-y1 && scr_mheight) {
+				//if (scr_mwidth > scr_mheight && x2-x1 < y2-y1 && scr_mheight) {
+				if (cinf->rotation & (RR_Rotate_90|RR_Rotate_270)) {
 					scr_mwidth=oinf->mm_height;
 					scr_mheight=oinf->mm_width;
 				}
@@ -1012,10 +1066,7 @@ re_crts:
 	XISetMask(mask.mask, XI_TouchBegin);
 	XISetMask(mask.mask, XI_TouchUpdate);
 	XISetMask(mask.mask, XI_TouchEnd);
-#ifndef COUNT_TOUCHES
-	if (use_pressure>0) 
-#endif
-		XISetMask(mask.mask, XI_DeviceChanged);
+	if (info2) XISetMask(mask.mask, XI_DeviceChanged);
 #if defined(XI_GestureSwipeBegin) && defined(GESTURES_USE)
 	if (ximinor > 3 || ximajor > 2) {
 		XISetMask(mask.mask, XI_GestureSwipeBegin);
@@ -1054,15 +1105,6 @@ _remapped:
       }
       XFlush(display);
 #ifdef USE_XI
-hierarchy:
-#ifndef COUNT_TOUCHES
-      if (use_pressure>0)
-#endif
-      {
-	if (info2) XIFreeDeviceInfo(info2);
-	d2_last = info2 = XIQueryDevice(display, XIAllDevices, &ndevs2);
-	if (ndevs2) d2_last = &info2[ndevs2];
-      }
       lastid = -1;
 #endif
 
@@ -1168,8 +1210,9 @@ hierarchy:
 #define e ((XIDeviceChangedEvent*)ev.xcookie.data)
 			    case XI_DeviceChanged:
 				if (e->reason == XISlaveSwitch) break;
-				XFreeEventData(display, &ev.xcookie);
-				goto hierarchy;
+				if (info2) getHierarchy(XIAllDevices);
+				lastid = -1;
+				break;
 			}
 evfree:
 			XFreeEventData(display, &ev.xcookie);
