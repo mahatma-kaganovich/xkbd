@@ -481,9 +481,11 @@ ret:
 	return ret;
 }
 
+_ushort good_abs;
 static _ushort findAbsXY(unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2){
 	_ushort m;
 	unsigned int x,y;
+	good_abs = 0;
 	XIINF(lastid < 0 || lastid == d2->deviceid) {
 		m = 0;
 		CLINF() switch (cl->type) {
@@ -507,7 +509,11 @@ static _ushort findAbsXY(unsigned int x1, unsigned int y1, unsigned int x2, unsi
 //			if (e->mode == XIDirectTouch) m |= 4;
 //			break;
 		}
-		if ((m&3)==3 && x >= x1 && y >= y1 && x <= x2 && x <= y2) return 1;
+		if ((m&3)==3) {
+			good_abs = 1;
+			if (x >= x1 && y >= y1 && x <= x2 && x <= y2) return 1;
+			if (!(x >= 0 && y >= 0 && x <= scr_width && x <= scr_height)) good_abs = 0;
+		}
 		if (lastid > 0) break;
 	}
 	return 0;
@@ -846,13 +852,15 @@ re_crts:
 					if ((output ?
 						strcmp(oinf->name,output):
 #ifdef USE_XI
-					    info2 ? !findAbsXY(x1,y1,x2,y2):
+						!findAbsXY(x1,y1,x2,y2) || (!good_abs &&
+#else
+						(
 #endif
 						(
 						!strncasecmp(oinf->name,"HDMI",4)||
 						!strncasecmp(oinf->name,"DP",2)||
 						!strncasecmp(oinf->name,"DVI",3)
-						))) continue;
+						)))) continue;
 					break;
 				}
 				found++;
