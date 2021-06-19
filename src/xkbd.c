@@ -510,9 +510,8 @@ static _ushort findAbsXY(unsigned int x1, unsigned int y1, unsigned int x2, unsi
 //			break;
 		}
 		if ((m&3)==3) {
-			good_abs = 1;
+			if (x >= 0 && y >= 0 && x <= scr_width && x <= scr_height) good_abs++;
 			if (x >= x1 && y >= y1 && x <= x2 && x <= y2) return 1;
-			if (!(x >= 0 && y >= 0 && x <= scr_width && x <= scr_height)) good_abs = 0;
 		}
 		if (lastid > 0) break;
 	}
@@ -1074,7 +1073,8 @@ re_crts:
 	XISetMask(mask.mask, XI_TouchBegin);
 	XISetMask(mask.mask, XI_TouchUpdate);
 	XISetMask(mask.mask, XI_TouchEnd);
-	if (info2) XISetMask(mask.mask, XI_DeviceChanged);
+
+	XISetMask(mask.mask, XI_DeviceChanged);
 #if defined(XI_GestureSwipeBegin) && defined(GESTURES_USE)
 	if (ximinor > 3 || ximajor > 2) {
 		XISetMask(mask.mask, XI_GestureSwipeBegin);
@@ -1218,7 +1218,7 @@ _remapped:
 #define e ((XIDeviceChangedEvent*)ev.xcookie.data)
 			    case XI_DeviceChanged:
 				if (e->reason == XISlaveSwitch) break;
-				if (info2) getHierarchy(XIAllDevices);
+				getHierarchy(XIAllDevices);
 				lastid = -1;
 				break;
 			}
