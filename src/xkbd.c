@@ -501,6 +501,7 @@ static _ushort findAbsXY(unsigned int x1, unsigned int y1, unsigned int x2, unsi
 				break;
 			}
 			break;
+#undef e
 #define e ((XITouchClassInfo*)cl)
 //		    case XITouchClass:
 //			if (e->mode == XIDirectTouch) m |= 4;
