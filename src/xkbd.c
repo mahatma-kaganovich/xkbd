@@ -67,7 +67,6 @@ int screen;
 XWindowAttributes wa0;
 char *display_name = NULL;
 
-CARD32 prop[12] = {2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 int crts=0, X1,Y1,X2,Y2, top, left;
 //unsigned int dock = 1974;
 unsigned int dock = 4018;
@@ -285,10 +284,12 @@ static void transCoord(){
 	XTranslateCoordinates(display,win,rootWin,0,0,&kb->X,&kb->Y,&win1);
 }
 
-int sig[8] = {};
+int sig[8];
 Atom aStrut,aStrutPartial;
 static void setSize(int x, int y, int width, int height, int resize){
 	resize*=UNSIZE;
+	CARD32 prop[12];
+	memset(&prop,0,sizeof(prop));
 	if (dock & 2) {
 		if (top) {
 			if (resize) {
@@ -1022,8 +1023,8 @@ re_crts:
 	_propAtom32(astate,"_NET_WM_STATE_SKIP_PAGER");
 
       Atom mwm_atom = _atom("_MOTIF_WM_HINTS");
-      XChangeProperty(display,win, mwm_atom, mwm_atom,32,PropModeReplace,(unsigned char *)&prop,5);
-      prop[0] = 0;
+      static CARD32 prop5[5] = {2, 0, 0, 0, 0};
+      XChangeProperty(display,win, mwm_atom, mwm_atom,32,PropModeReplace,(unsigned char *)&prop5,5);
 
       static XWMHints wm_hints = { .input = False, .flags = InputHint };
       if (dock & 1) {
