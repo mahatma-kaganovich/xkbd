@@ -775,12 +775,8 @@ stop_argv:
 	xi = !(fake_touch&1)
 		&& XQueryExtension(display, "XInputExtension", &xiopcode, &xievent, &xierror)
 		&& XIQueryVersion(display, &ximajor, &ximinor) != BadRequest;
-#ifndef COUNT_TOUCHES
-//	if (use_pressure>0
-//	    || !(dock&(2|64))
-//		)
-#endif
-		getHierarchy(XIAllDevices);
+	// always. reduce brainfuck
+	if (xi) getHierarchy(XIAllDevices);
 #endif
 #ifndef MINIMAL
 	// not found how to get keymap change on XInput, so keep Xkb events
@@ -849,7 +845,10 @@ re_crts:
 				    case 1:
 					if ((output ?
 						strcmp(oinf->name,output):
-					    info2 ? !findAbsXY(x1,y1,x2,y2):(
+#ifdef USE_XI
+					    info2 ? !findAbsXY(x1,y1,x2,y2):
+#endif
+						(
 						!strncasecmp(oinf->name,"HDMI",4)||
 						!strncasecmp(oinf->name,"DP",2)||
 						!strncasecmp(oinf->name,"DVI",3)
