@@ -851,7 +851,8 @@ re_crts:
 				    case 1:
 					if ((output ?
 						strcmp(oinf->name,output):
-#ifdef USE_XI
+//#ifdef USE_XI
+#if 0
 						!findAbsXY(x1,y1,x2,y2) || (!good_abs &&
 #else
 						(
