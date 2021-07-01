@@ -973,6 +973,7 @@ static _short setProp(Atom prop, Atom type, int mode, void *data, long cnt, _sho
 		ERR("BUG!");
 		return 0;
 	}
+	XFlush(dpy);
 	if ((chk&0x10) && !_error) {
 //		XFlush(dpy);
 		XSync(dpy,False);
@@ -1773,10 +1774,11 @@ ret: {}
 //    _ungrabX(); // forceUngrab() instead
 }
 
-static _short setScrSize(double dpmx,double dpmy,_short preset){
+// mode=1 - preset, mode=2 - force
+static _short setScrSize(double dpmx,double dpmy,_short mode){
 	unsigned long px=0, py=0, py1=0, mpx = 0, mpy = 0;
 	MINF_T(o_active) {
-		if (preset) {
+		if (mode==1) {
 			px = _max(minf->x + minf->width, px);
 			px = _max(minf->x + minf->width1, px);
 			py += _max(minf->height,minf->height1);
@@ -1801,7 +1803,7 @@ static _short setScrSize(double dpmx,double dpmy,_short preset){
 		else if (py > maxH) py = maxH;
 	}
 #endif
-	if (preset && minf0.width >= px && minf0.height >= py) return 0;
+	if (mode == 1 && minf0.width >= px && minf0.height >= py) return 0;
 	if (dpmx > 0 && dpmy > 0) {
 		double dy1 = (.0+minf0.height)/minf0.mheight, dx1 = (.0+minf0.width)/minf0.mwidth;
 		mpx = px/dpmx + .5;
@@ -1809,11 +1811,11 @@ static _short setScrSize(double dpmx,double dpmy,_short preset){
 		if (abs((dx1-dpmx)*254)>1 || abs((dy1-dpmy)*254)>1) goto set;
 	}
 	py = max(py,py1);
-	if (minf0.width != px || minf0.height != py || xrevent1 < 0) {
+	if (mode == 2 || minf0.width != px || minf0.height != py || xrevent1 < 0) {
 set:
 #ifndef MINIMAL
 		static unsigned long w1 = 0, h1 = 0, mpx1 = 0, mpy1 = 0;
-		if (!preset || w1 != px || h1 != py || mpx != mpx1 || mpy != mpy1)
+		if (preset != 1 || w1 != px || h1 != py || mpx != mpx1 || mpy != mpy1)
 #endif
 			DBG("set screen size %lux%lu / %lux%lumm - %.1f %.1fdpi",px,py,mpx,mpy,25.4*px/mpx,25.4*py/mpy);
 #ifndef MINIMAL
@@ -1940,25 +1942,30 @@ find1:
 	_short do_dpi = minf1 && minf1->mheight && minf1->mwidth && !(pi[p_safe]&16);
 	if ((do_dpi || !(pi[p_safe]&64))) {
 		double dpmh = (.0 + minf1->height) / minf1->mheight, dpmw = (.0 + minf1->width) / minf1->mwidth;
+		pan_x = pan_y = pan_cnt = 0;
+		if (do_dpi) MINF_T(o_active) {
+			if (minf1 && minf1->crt == minf->crt) continue;
+			if (minf2 && minf2->crt == minf->crt) continue;
+			if (minf->mwidth && minf->mheight) {
+				if ( !(minf1 && minf->width == minf1->width && minf->height == minf1->height && minf->mwidth == minf1->mwidth && minf->mheight == minf1->mheight) &&
+				     !(minf2 && minf->width == minf2->width && minf->height == minf2->height && minf->mwidth == minf2->mwidth && minf->mheight == minf2->mheight))
+					fixMonSize(minf, &dpmw, &dpmh);
+			}
+		}
+
 //		if (!(pi[p_safe]&64) && setScrSize(dpmw,dpmh,1)) goto ex;
 		if (!(pi[p_safe]&64)) {
 			if (setScrSize(dpmw,dpmh,1)) goto ex1;
 			_grabX();
-		}
-		pan_x = pan_y = pan_cnt = 0;
-		if (minf1 && minf1->crt != minf2->crt) _pan(minf1);
-		if (nm != ((minf1 && minf1->crt != minf2->crt) + (!!minf2->crt)))
-		    MINF_T(o_active) {
-			if (minf->crt != minf1->crt && minf->crt != minf2->crt) {
-				if (do_dpi && minf->mwidth && minf->mheight) {
-					if ( !(minf1 && minf->width == minf1->width && minf->height == minf1->height && minf->mwidth == minf1->mwidth && minf->mheight == minf1->mheight) &&
-					     !(minf2 && minf->width == minf2->width && minf->height == minf2->height && minf->mwidth == minf2->mwidth && minf->mheight == minf2->mheight))
-						fixMonSize(minf, &dpmw, &dpmh);
-				}
+
+			if (minf1 && minf1->crt != minf2->crt) _pan(minf1);
+			MINF_T(o_active) {
+				if (minf1 && minf1->crt == minf->crt) continue;
+				if (minf2 && minf2->crt == minf->crt) continue;
 				_pan(minf);
 			}
+			_pan(minf2);
 		}
-		_pan(minf2);
 
 //		xrPropFlush();
 
@@ -1968,10 +1975,11 @@ find1:
 		if (do_dpi) {
 			if (minf2->crt && minf1->crt != minf2->crt && minf2->crt) fixMonSize(minf2, &dpmw, &dpmh);
 			fixMonSize(minf1, &dpmw, &dpmh);
-			if (!(pi[p_safe]&512))
+			if (!(pi[p_safe]&512)) {
 				if (dpmh > dpmw) dpmw = dpmh;
 				else dpmh = dpmw;
-			//	if (setScrSize(dpmw,dpmh,0)) goto ex1;
+			}
+			if (setScrSize(dpmw,dpmh,pan_cnt?2:0)) goto ex1;
 		} else if (pan_cnt) goto ex1;
 //		setScrSize(0,0,0);
 ex1:
