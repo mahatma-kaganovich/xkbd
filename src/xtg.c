@@ -1815,7 +1815,7 @@ static _short setScrSize(double dpmx,double dpmy,_short mode){
 set:
 #ifndef MINIMAL
 		static unsigned long w1 = 0, h1 = 0, mpx1 = 0, mpy1 = 0;
-		if (preset != 1 || w1 != px || h1 != py || mpx != mpx1 || mpy != mpy1)
+		if (mode != 1 || w1 != px || h1 != py || mpx != mpx1 || mpy != mpy1)
 #endif
 			DBG("set screen size %lux%lu / %lux%lumm - %.1f %.1fdpi",px,py,mpx,mpy,25.4*px/mpx,25.4*py/mpy);
 #ifndef MINIMAL
