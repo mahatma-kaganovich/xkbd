@@ -80,7 +80,7 @@ button *active_but = NULL;
 
 char **exec_cmd;
 
-int Xkb_sync = 3;
+int Xkb_sync = 2;
 int no_lock = 0;
 int swipe_fingers = 2;
 #ifdef CACHE_PIX
@@ -622,7 +622,7 @@ int main(int argc, char **argv)
 	
 	{ 'X', IAM ".sync", 2, 0, &Xkb_sync, 
 #ifndef MINIMAL
-		"Xkb state interaction: 0=none, 1=sync, 2-semi-sync, 3=relaxed"
+		"Xkb state interaction: 0=none, 1=sync, 2-semi-sync"
 #endif
 	},
 	{ 'l', IAM ".no_lock", 2, 0, &no_lock, "disable modifiers lock" },
@@ -1275,15 +1275,6 @@ evfree:
 		}
 		break;
 	    case ConfigureNotify:
-		if (ev.xconfigure.window == rootWin) {
-			if (wa0.width != ev.xconfigure.width || wa0.height != ev.xconfigure.height) {
-				unmapOrRestart();
-				XRRUpdateConfiguration(&ev);
-				goto chScreen;
-			}
-			break;
-		}
-		if (ev.xconfigure.window != win) break;
 		kb->act_width = ev.xconfigure.width;
 		kb->act_height = ev.xconfigure.height;
 		if (resized) break;
