@@ -174,7 +174,8 @@ _short useRawTouch = 0, useRawButton = 0;
 unsigned long w_width, w_height, w_mwidth, w_mheight;
 #define _w_none (_short)(1)
 #define _w_screen (_short)(1<<1)
-_short _wait_mask = _w_none;
+#define _w_init (_short)(1<<2)
+_short _wait_mask = _w_none|_w_init;
 
 #define prop_int int32_t
 int intFmt = sizeof(prop_int) << 3;
@@ -2688,7 +2689,10 @@ repeat:
 		devid = 0;
 		fixGeometry();
 		xrPropFlush();
-		__init = 0;
+		if (__init) {
+			__init = 0;
+			_wait_mask &= ~_w_init;
+		}
 	}
 	// "Hide" must be first!
 	// but prefer to filter error to invisible start
