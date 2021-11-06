@@ -1,5 +1,5 @@
 /*
-	xtg v1.39 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.40 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -172,6 +172,7 @@ int winFmt = sizeof(Window) << 3;
 _short useRawTouch = 0, useRawButton = 0;
 
 unsigned long w_width, w_height, w_mwidth, w_mheight;
+double w_dpmh = 96., w_dpmw = 96.;
 #define _w_none (_short)(1)
 #define _w_screen (_short)(1<<1)
 #define _w_init (_short)(1<<2)
@@ -374,6 +375,7 @@ char *ph[MAX_PAR] = {
 #ifdef XSS
 	"		13(+8192) skip fullscreen windows without ClientMessage (XTerm)\n"
 #endif
+	"		14(+16384) XRRSetCrtcConfig() move before panning\n"
 	"		(auto-panning for openbox+tint2: \"xrandr --noprimary\" on early init && \"-s 135\" (7+128))\n",
 #ifdef XSS
 	"fullscreen \"content type\" prop.: see \"xrandr --props\" (I want \"Cinema\")",
@@ -739,6 +741,7 @@ typedef struct _minf {
 	unsigned long mwidth,mheight,mwidth1,mheight1;
 	RROutput out;
 	RRCrtc crt;
+	RRMode mode;
 	Rotation rotation;
 	_short r90;
 	Atom name;
@@ -1527,6 +1530,7 @@ static void clEvents(int event){
 	}
 }
 
+static _short setScrSize(double dpmx,double dpmy,_short mode,unsigned long px,unsigned long py1);
 static void fixGeometry();
 static void xrMons0(){
     if (!xrr) {
@@ -1650,6 +1654,7 @@ static void xrMons0(){
 			if (!cinf->noutput && !cinf->mode)
 			    for (j=0; j<cinf->npossible; j++) {
 				if (cinf->possible[j] == minf->out) {
+					setScrSize(0,0,3,m->width,_y+m->height);
 					DBG("output %s off -> auto crtc %ix%i",oinf->name,m->width,m->height);
 					if (XRRSetCrtcConfig(dpy,xrrr,oinf->crtcs[i],CurrentTime,0,_y,m->id,RR_Rotate_0,&minf->out,1)==Success) {
 						XRRFreeOutputInfo(oinf);
@@ -1710,7 +1715,7 @@ _on:
 		minf->rotation = cinf->rotation;
 		minf->type |= o_changed;
 	}
-	id = cinf->mode;
+	minf->mode = id = cinf->mode;
 	// find precise current mode
 	for (i=0; i<xrrr->nmode; i++) {
 		m = &xrrr->modes[i];
@@ -1780,24 +1785,30 @@ ret: {}
 //    _ungrabX(); // forceUngrab() instead
 }
 
-// mode=1 - preset, mode=2 - force
-static _short setScrSize(double dpmx,double dpmy,_short mode){
-	unsigned long px=0, py=0, py1=0, mpx = 0, mpy = 0;
-	MINF_T(o_active) {
-		if (mode==1) {
-			px = _max(minf->x + minf->width, px);
-			px = _max(minf->x + minf->width1, px);
-			py += _max(minf->height,minf->height1);
-			py1 = _max(minf->y + _max(minf->height,minf->height1),py1);
-			mpx = _max(minf->mwidth,mpx);
-			mpy += minf->mheight;
-			continue;
+// mode=1 - preset, mode=2 - force, 3 - before mon init
+static _short setScrSize(double dpmx,double dpmy,_short mode,unsigned long px,unsigned long py1){
+	unsigned long py=0, mpx = 0, mpy = 0;
+	if (mode == 3) {
+		px = _max(px,w_width);
+		py = w_height;
+		if (w_mwidth && w_mheight) {
+			mpx = w_width;
+			mpy = w_height;
 		}
+		mpx = _max(minf->mwidth,mpx);
+		mpy = _max(minf->mheight,mpy);
+	} else MINF_T(o_active) {
 		px = _max(minf->x + minf->width, px);
-		py += minf->height;
 		py1 = _max(minf->y + minf->height, py1);
 		mpx = _max(minf->mwidth,mpx);
 		mpy += minf->mheight;
+		if (mode==1) {
+			px = _max(minf->x + minf->width1, px);
+			py += _max(minf->height,minf->height1);
+			py1 = _max(minf->y + minf->height1, py1);
+		} else {
+			py += minf->height;
+		}
 	}
 	py = _max(py,py1);
 #ifndef MINIMAL
@@ -1810,11 +1821,23 @@ static _short setScrSize(double dpmx,double dpmy,_short mode){
 	}
 #endif
 	if (mode == 1 && minf0.width >= px && minf0.height >= py) return 0;
+	if (!(pi[p_safe]&512)) {
+		if (dpmy > dpmx) dpmx = dpmy;
+		else dpmy = dpmx;
+	}
+	if ((dpmx == 0 || dpmy == 0) && (!(pi[p_safe]&16) || !mpx || !mpy)) {
+		dpmx = w_dpmw;
+		dpmy = w_dpmh;
+		if (!(pi[p_safe]&512)) {
+			if (dpmy > dpmx) dpmx = dpmy;
+			else dpmy = dpmx;
+		}
+	}
 	if (dpmx > 0 && dpmy > 0) {
-		double dy1 = (.0+minf0.height)/minf0.mheight, dx1 = (.0+minf0.width)/minf0.mwidth;
 		mpx = px/dpmx + .5;
 		mpy = py/dpmy + .5;
-		if (abs((dx1-dpmx)*254)>1 || abs((dy1-dpmy)*254)>1) goto set;
+		//if (abs((w_dpmw-dpmx)*254)>1 || abs((w_dpmh-dpmy)*254)>1) goto set;
+		if (abs(((.0+minf0.width)/minf0.mwidth-dpmx)*254)>1 || abs(((.0+minf0.height)/minf0.mheight-dpmy)*254)>1) goto set;
 	}
 	py = max(py,py1);
 	if (mode == 2 || minf0.width != px || minf0.height != py || xrevent1 < 0) {
@@ -1839,6 +1862,13 @@ set:
 		w_height = py;
 		w_mwidth = mpx;
 		w_mheight = mpy;
+		if (dpmx > 0 && dpmy > 0) {
+			w_dpmw = dpmx;
+			w_dpmh = dpmy;
+		} else {
+			w_dpmw = (.0+w_width)/w_mwidth;
+			w_dpmh = (.0+w_height)/w_mheight;
+		}
 	}
 	return 1;
 }
@@ -1846,26 +1876,47 @@ set:
 unsigned int pan_x,pan_y,pan_cnt;
 static void _pan(minf_t *m) {
 	if (pi[p_safe]&64 || !m || !m->crt) return;
+	_short ch = 0;
+	if (pi[p_safe]&16384) {
+		if (m->x != 0 || m->y != pan_y) {
+			DBG("XRRSetCrtcConfig() move crtc %lu %u,%u -> %u,%u",m->crt,m->x,m->y,0,pan_y);
+			if (XRRSetCrtcConfig(dpy,xrrr,m->crt,CurrentTime,0,pan_y,m->mode,m->rotation,&m->out,1)==Success) {
+				ch = 1;
+				//XFlush(dpy);
+			}
+			//else goto pan0;
+		}
+//		goto pan1;
+	}
+pan0:
 	XRRPanning *p = XRRGetPanning(dpy,xrrr,m->crt), p1;
 	if (!p) return;
 	memset(&p1,0,sizeof(p1));
 	p1.top = pan_y;
 	p1.width = m->width1;
 	p1.height = m->height1;
+#if 1
+	p1.timestamp = p->timestamp;
+	if (memcmp(&p1,p,sizeof(p1))) {
+		p1.timestamp = CurrentTime;
+#else
 	if (p1.width != p->width || p1.height != p->height || p1.top != p->top || (p->left|p->track_width|p->track_height|p->track_left|p->track_top|p->border_left|p->border_top|p->border_right|p->border_bottom)) {
+#endif
 		DBG("crtc %lu panning %ix%i+%i+%i/track:%ix%i+%i+%i/border:%i/%i/%i/%i -> %ix%i+%i+%i/{0}",
 			m->crt,p->width,p->height,p->left,p->top,  p->track_width,p->track_height,p->track_left,p->track_top,  p->border_left,p->border_top,p->border_right,p->border_bottom,
 			p1.width,p1.height,p1.left,p1.top);
-		if (XRRSetPanning(dpy,xrrr,m->crt,&p1)==Success) {
-			pan_cnt++;
-			m->type |= o_changed;
-			XFlush(dpy);
-			XSync(dpy,False);
-		}
+		if (XRRSetPanning(dpy,xrrr,m->crt,&p1)==Success) ch = 1;
 	}
 	XRRFreePanning(p);
+pan1:
 	pan_x = _max(pan_x, m->width);
 	pan_y += m->height;
+	if (ch) {
+		pan_cnt++;
+		m->type |= o_changed;
+		XFlush(dpy);
+		XSync(dpy,False);
+	}
 }
 
 
@@ -1958,9 +2009,9 @@ find1:
 			}
 		}
 
-//		if (!(pi[p_safe]&64) && setScrSize(dpmw,dpmh,1)) goto ex;
+//		if (!(pi[p_safe]&64) && setScrSize(dpmw,dpmh,1,0,0)) goto ex;
 		if (!(pi[p_safe]&64)) {
-			if (setScrSize(dpmw,dpmh,1)) goto ex1;
+			if (setScrSize(dpmw,dpmh,1,0,0)) goto ex1;
 			_grabX();
 
 			if (minf1 && minf1->crt != minf2->crt) _pan(minf1);
@@ -1980,13 +2031,9 @@ find1:
 		if (do_dpi) {
 			if (minf2->crt && minf1->crt != minf2->crt && minf2->crt) fixMonSize(minf2, &dpmw, &dpmh);
 			fixMonSize(minf1, &dpmw, &dpmh);
-			if (!(pi[p_safe]&512)) {
-				if (dpmh > dpmw) dpmw = dpmh;
-				else dpmh = dpmw;
-			}
-			if (setScrSize(dpmw,dpmh,pan_cnt?2:0)) goto ex1;
+			if (setScrSize(dpmw,dpmh,pan_cnt?2:0,0,0)) goto ex1;
 		} else if (pan_cnt) goto ex1;
-//		setScrSize(0,0,0);
+//		setScrSize(0,0,0,0,0);
 ex1:
 		if (!(pi[p_safe]&64)) _ungrabX();
 	}
@@ -2758,12 +2805,15 @@ static void _scr_size(){
 	minf0.height1 = minf0.height = DisplayHeight(dpy,screen);
 	minf0.mwidth1 = minf0.mwidth = DisplayWidthMM(dpy,screen);
 	minf0.mheight1 = minf0.mheight = DisplayHeightMM(dpy,screen);
-	if (minf0.width == w_width && minf0.height == w_height && minf0.mwidth == w_mwidth && minf0.mheight == w_mheight) {
-		_wait_mask &= ~_w_screen;
-		//DBG("width/heigh equal");
-	} else {
+	if ( minf0.width != w_width || minf0.height != w_height
+//	    || minf0.mwidth != w_mwidth || minf0.mheight != w_mheight
+	    || abs(((.0+minf0.width)/minf0.mwidth-w_dpmw)*254)>1 || abs(((.0+minf0.height)/minf0.mheight-w_dpmh)*254)>1
+		) {
 		_wait_mask |= _w_screen;
 		//DBG("width/heigh changed");
+	} else {
+		_wait_mask &= ~_w_screen;
+		//DBG("width/heigh equal");
 	}
 	if (!xrr && minf0.mwidth > minf0.mheight && minf0.width < minf0.height && minf0.mheight) {
 		minf0.rotation = RR_Rotate_90;
@@ -3058,6 +3108,10 @@ static void init(){
 	w_height = DisplayHeight(dpy,screen);
 	w_mwidth = DisplayWidthMM(dpy,screen);
 	w_mheight = DisplayHeightMM(dpy,screen);
+	if (w_width && w_height && w_mwidth && w_mheight) {
+		w_dpmh = (.0+w_height)/w_mheight;
+		w_dpmw = (.0+w_width)/w_mwidth;
+	}
 	_scr_size();
 	//forceUngrab();
 #ifdef XSS
