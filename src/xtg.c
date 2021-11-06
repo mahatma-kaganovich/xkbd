@@ -3198,7 +3198,7 @@ int i;
 
 int main(int argc, char **argv){
 #ifdef XTG
-	_int i;
+	_short i;
 	int opt;
 	_short tt,g,bx,by;
 	_int k;
