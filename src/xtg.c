@@ -1,5 +1,5 @@
 /*
-	xtg v1.38 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.39 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -165,12 +165,17 @@ int xiopcode=0, xfopcode=0, xfevent=-100;
 Atom aFloat,aMatrix,aABS,aDevMon;
 XRRScreenResources *xrrr = NULL;
 _short showPtr, oldShowPtr = 0, curShow;
-_short _quit = 0;
 _short __init = 1;
 int floatFmt = sizeof(float) << 3;
 int atomFmt = sizeof(Atom) << 3;
 int winFmt = sizeof(Window) << 3;
 _short useRawTouch = 0, useRawButton = 0;
+
+unsigned long w_width, w_height, w_mwidth, w_mheight;
+#define _w_none (_short)(1)
+#define _w_screen (_short)(1<<1)
+_short _wait_mask = _w_none;
+
 #define prop_int int32_t
 int intFmt = sizeof(prop_int) << 3;
 #ifdef USE_EVDEV
@@ -298,13 +303,14 @@ static void _print_bmap(_int x, _short n, TouchTree *m) {
 #define p_safe 14
 #define p_content_type 15
 #define p_colorspace 16
-#define MAX_PAR 17
+#define p_1 17
+#define MAX_PAR 18
 char *pa[MAX_PAR] = {};
 // android: 125ms tap, 500ms long
-#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0,  14, 32, 72, 0, DEF_SAFE, 0, 0 }
+#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0,  14, 32, 72, 0, DEF_SAFE, 0, 0, 0 }
 int pi[] = PAR_DEFS;
 double pf[] = PAR_DEFS;
-char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:s:c:C:h";
+char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:s:c:C:1h";
 char *ph[MAX_PAR] = {
 	"touch device 0=auto", //d
 
@@ -347,33 +353,32 @@ char *ph[MAX_PAR] = {
 	"min dpi (monitor)",
 	"max ...",
 	"safe mode bits\n"
-	"		1 don't change hierarchy of device busy/pressed (for -f 2)\n"
+	"		0(+1) don't change hierarchy of device busy/pressed (for -f 2)\n"
 #ifdef USE_EVDEV
-	"		2 XUngrabServer() for libevdev call\n"
+	"		1(+2) XUngrabServer() for libevdev call\n"
 #endif
-	"		3(+4) XGrabServer() cumulative\n"
-	"		4(+8) cursor recheck (tricky)\n"
-	"		5(+16) no mon dpi\n"
-	"		6(+32) no mon primary\n"
-	"		7(+64) no vertical panning && auto-on && ondemand XI2 prop 'scaling mode' = Full\n"
-	"		8(+128) auto bits 6,7 on primary present - enable primary & disable panning\n"
-	"		9(+256) use mode sizes for panning (errors in xrandr tool!)\n"
-	"		10(+512) keep dpi different x & y (image panned non-aspected)\n"
-	"		11(+1024) don't use cached input ABS\n"
-	"		12(+2048) try delete or not create unused (saved) property\n"
+	"		2(+4) XGrabServer() cumulative\n"
+	"		3(+8) cursor recheck (tricky)\n"
+	"		4(+16) no mon dpi\n"
+	"		5(+32) no mon primary\n"
+	"		6(+64) no vertical panning && auto-on && ondemand XI2 prop 'scaling mode' = Full\n"
+	"		7(+128) auto bits 6,7 on primary present - enable primary & disable panning\n"
+	"		8(+256) use mode sizes for panning (errors in xrandr tool!)\n"
+	"		9(+512) keep dpi different x & y (image panned non-aspected)\n"
+	"		10(+1024) don't use cached input ABS\n"
+	"		11(+2048) try delete or not create unused (saved) property\n"
 #ifdef _BACKLIGHT
-	"		13(+4096) track backlight-controlled monitors and off when empty (under construction)\n"
+	"		12(+4096) track backlight-controlled monitors and off when empty (under construction)\n"
 #endif	
 #ifdef XSS
-	"		14(+8192) skip fullscreen windows without ClientMessage (XTerm)\n"
+	"		13(+8192) skip fullscreen windows without ClientMessage (XTerm)\n"
 #endif
 	"		(auto-panning for openbox+tint2: \"xrandr --noprimary\" on early init && \"-s 135\" (7+128))\n",
 #ifdef XSS
 	"fullscreen \"content type\" prop.: see \"xrandr --props\" (I want \"Cinema\")",
-#endif
-#ifdef XSS
 	"fullscreen \"Colorspace\" prop.: see \"xrandr --props\"  (I want \"DCI-P3_RGB_Theater\")\n",
 #endif
+	" oneshot (implies set DPI, panning, etc) - to run & exit before WM",
 };
 #else
 #define TIME(T,t)
@@ -645,7 +650,7 @@ static inline void forceUngrab(){
 	}
 }
 static inline void _ungrabX(){
-	if ((pi[p_safe]&4) && !--grabcnt) {
+	if (!(pi[p_safe]&4) && !--grabcnt) {
 		XFlush(dpy);
 		_Xungrab();
 	}
@@ -1814,8 +1819,7 @@ static _short setScrSize(double dpmx,double dpmy,_short mode){
 	if (mode == 2 || minf0.width != px || minf0.height != py || xrevent1 < 0) {
 set:
 #ifndef MINIMAL
-		static unsigned long w1 = 0, h1 = 0, mpx1 = 0, mpy1 = 0;
-		if (mode != 1 || w1 != px || h1 != py || mpx != mpx1 || mpy != mpy1)
+		if (mode != 1 || w_width != px || w_height != py || mpx != w_mwidth || mpy != w_mheight)
 #endif
 			DBG("set screen size %lux%lu / %lux%lumm - %.1f %.1fdpi",px,py,mpx,mpy,25.4*px/mpx,25.4*py/mpy);
 #ifndef MINIMAL
@@ -1829,11 +1833,11 @@ set:
 		XFlush(dpy);
 		XSync(dpy,False);
 		if (_error) return 0;
-		w1 = px;
-		h1 = py;
-		mpx1 = mpx;
-		mpy1 = mpy;
 #endif
+		w_width = px;
+		w_height = py;
+		w_mwidth = mpx;
+		w_mheight = mpy;
 	}
 	return 1;
 }
@@ -2632,11 +2636,11 @@ static void _eXit(int sig){
 			if (!pr->en) continue;
 			if (!XRP_EQ(pr->v,pr->vs[0])) {
 				_pr_set(0);
-				_quit = 1;
+				_wait_mask = 0;
 			}
 			if (!(pi[p_safe]&2048)) {
 				XRRDeleteOutputProperty(dpy,minf->out,a_xrp_save[prI]);
-				_quit = 1;
+				_wait_mask = 0;
 			}
 		}
 	}
@@ -2647,15 +2651,15 @@ static void _eXit(int sig){
 		cr.return_mode = XIAttachToMaster;
 		if (XIChangeHierarchy(dpy, (void*)&cr, 1) == Success) {
 			m = ca.new_master;
-			_quit = 1;
+			_wait_mask = 0;
 		}
 	}
 	DINF(dinf->attach0) {
 		ca.new_master = dinf->attach0;
 		ca.deviceid = dinf->devid;
-		if (XIChangeHierarchy(dpy, (void*)&ca, 1) == Success) _quit = 1;
+		if (XIChangeHierarchy(dpy, (void*)&ca, 1) == Success) _wait_mask = 0;
 	}
-	if (!_quit) exit(0);
+	if (_wait_mask) exit(0);
 	XFlush(dpy);
 	win = win1 = root;
 	noXSS = noXSS1 = 0;
@@ -2750,6 +2754,13 @@ static void _scr_size(){
 	minf0.height1 = minf0.height = DisplayHeight(dpy,screen);
 	minf0.mwidth1 = minf0.mwidth = DisplayWidthMM(dpy,screen);
 	minf0.mheight1 = minf0.mheight = DisplayHeightMM(dpy,screen);
+	if (minf0.width == w_width && minf0.height == w_height && minf0.mwidth == w_mwidth && minf0.mheight == w_mheight) {
+		_wait_mask &= ~_w_screen;
+		//DBG("width/heigh equal");
+	} else {
+		_wait_mask |= _w_screen;
+		//DBG("width/heigh changed");
+	}
 	if (!xrr && minf0.mwidth > minf0.mheight && minf0.width < minf0.height && minf0.mheight) {
 		minf0.rotation = RR_Rotate_90;
 		minf0.mwidth = minf0.mheight1;
@@ -3039,6 +3050,10 @@ static void init(){
 			XRRSelectInput(dpy, root, m);
 		};
 	}
+	w_width = DisplayWidth(dpy,screen);
+	w_height = DisplayHeight(dpy,screen);
+	w_mwidth = DisplayWidthMM(dpy,screen);
+	w_mheight = DisplayHeightMM(dpy,screen);
 	_scr_size();
 	//forceUngrab();
 #ifdef XSS
@@ -3183,7 +3198,7 @@ int i;
 
 int main(int argc, char **argv){
 #ifdef XTG
-	_short i;
+	_int i;
 	int opt;
 	_short tt,g,bx,by;
 	_int k;
@@ -3200,11 +3215,13 @@ int main(int argc, char **argv){
 			printf("Usage: %s {<option>} {<value>:<button>[:<key>]}\n",argv[0]);
 			for(i=0; i<MAX_PAR; i++) {
 				printf("	-%c ",pc[i<<1]);
-				if (pf[i] == pi[i]) printf("%i",pi[i]);
-				else printf("%.1f",pf[i]);
+				if (i<p_1) {
+					if (pf[i] == pi[i]) printf("%i",pi[i]);
+					else printf("%.1f",pf[i]);
+				}
 				printf(" %s\n",ph[i]);
 			}
-			printf("<value> is octal combination, starting from x>0, where x is last event type:\n"
+			printf("\n<value> is octal combination, starting from x>0, where x is last event type:\n"
 				"	1=begin, 2=update, 3=end\n"
 				"	bit 3(+4)=border\n"
 				"	(standard scroll buttons: up/down/left/right = 5/4/7/6)\n"
@@ -3223,10 +3240,12 @@ int main(int argc, char **argv){
 				);
 			return 0;
 		}
-		if (!optarg) continue;
-		pa[i] = optarg;
-		pf[i] = atof(optarg);
-		pi[i] = atoi(optarg);
+		if (i>=p_1) pi[i] = 1;
+		else if (optarg) {
+			pa[i] = optarg;
+			pf[i] = atof(optarg);
+			pi[i] = atoi(optarg);
+		}
 	}
 	initmap();
 #endif
@@ -3246,6 +3265,10 @@ int main(int argc, char **argv){
 		}
 		ERR("invalid map item '%s', -h to help",*a);
 		return 1;
+	}
+	if (pi[p_1]) {
+		_wait_mask &= ~_w_none;
+		pi[p_safe] &= ~(int)(32+64);
 	}
 	resX = resY = pf[p_res] < 0 ? 1 : pf[p_res];
 	strict = pa[p_mon] &&  pa[p_mon][0] == '-' && !pa[p_mon][1];
@@ -3268,7 +3291,7 @@ int main(int argc, char **argv){
 	printGrp();
 	getPropWin1();
 #ifdef XTG
-	while (!_quit) {
+	while (_wait_mask) {
 #else
 	while (1) {
 #endif
