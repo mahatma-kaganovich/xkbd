@@ -1,5 +1,5 @@
 /*
-	xtg v1.40 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.41 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -171,12 +171,23 @@ int atomFmt = sizeof(Atom) << 3;
 int winFmt = sizeof(Window) << 3;
 _short useRawTouch = 0, useRawButton = 0;
 
+#undef _DPI_DIFF
+// enable to make configurable & remove extra pixels
+#if 0
+// <0 or undef - add extra pixels to screen to precise rounding DPI
+short _dpi_diff = 0;
+#define _DPI_DIFF _dpi_diff
+#endif
+
 unsigned long w_width, w_height, w_mwidth, w_mheight;
-double w_dpmh = 96., w_dpmw = 96.;
+double w_dpmh, w_dpmw;
 #define _w_none (_short)(1)
 #define _w_screen (_short)(1<<1)
 #define _w_init (_short)(1<<2)
 _short _wait_mask = _w_none|_w_init;
+
+#define INCH 25.4
+#define DPI_EQ(w,h) {if (!(pi[p_safe]&512)) { if (h > w) w = h; else h = w; }}
 
 #define prop_int int32_t
 int intFmt = sizeof(prop_int) << 3;
@@ -1169,8 +1180,8 @@ static void fixMonSize(minf_t *minf, double *dpmw, double *dpmh) {
 
 	// diagonal -> 4:3 height
 	if (
-	    (pi[p_min_native_mon] && mh < (m = (m = pf[p_min_native_mon]) < 0 ? -m : (m * (25.4 * 3 / 5)))) ||
-	    (pi[p_max_native_mon] && mh > (m = (m = pf[p_max_native_mon]) < 0 ? -m : (m * (25.4 * 3 / 5))))
+	    (pi[p_min_native_mon] && mh < (m = (m = pf[p_min_native_mon]) < 0 ? -m : (m * (INCH * 3 / 5)))) ||
+	    (pi[p_max_native_mon] && mh > (m = (m = pf[p_max_native_mon]) < 0 ? -m : (m * (INCH * 3 / 5))))
 		) {
 		m /= mh;
 		*dpmw /= m;
@@ -1178,7 +1189,7 @@ static void fixMonSize(minf_t *minf, double *dpmw, double *dpmh) {
 	}
 
 	if (pi[p_max_dpi]) {
-		_max = pf[p_max_dpi] / 25.4;
+		_max = pf[p_max_dpi] / INCH;
 		if (*dpmw > _max) {
 			m = _max / *dpmw;
 			*dpmw = _max;
@@ -1191,7 +1202,7 @@ static void fixMonSize(minf_t *minf, double *dpmw, double *dpmh) {
 		}
 	}
 	if (pi[p_max_dpi]) {
-		_min = pf[p_min_dpi] / 25.4;
+		_min = pf[p_min_dpi] / INCH;
 		if (*dpmw < _min) {
 			m = _min / *dpmw;
 			*dpmw = _min;
@@ -1786,17 +1797,19 @@ ret: {}
 }
 
 // mode=1 - preset, mode=2 - force, 3 - before mon init
-static _short setScrSize(double dpmx,double dpmy,_short mode,unsigned long px,unsigned long py1){
+static _short setScrSize(double dpmw,double dpmh,_short mode,unsigned long px,unsigned long py1){
 	unsigned long py=0, mpx = 0, mpy = 0;
 	if (mode == 3) {
 		px = _max(px,w_width);
 		py = w_height;
 		if (w_mwidth && w_mheight) {
-			mpx = w_width;
-			mpy = w_height;
+			mpx = w_mwidth;
+			mpy = w_mheight;
 		}
-		mpx = _max(minf->mwidth,mpx);
-		mpy = _max(minf->mheight,mpy);
+		if (minf->mwidth || minf->mheight) {
+			mpx = _max(minf->mwidth?:(minf->mheight*px/py1),mpx);
+			mpy = _max(minf->mheight?:(minf->mwidth*py1/px),mpy);
+		}
 	} else MINF_T(o_active) {
 		px = _max(minf->x + minf->width, px);
 		py1 = _max(minf->y + minf->height, py1);
@@ -1820,34 +1833,47 @@ static _short setScrSize(double dpmx,double dpmy,_short mode,unsigned long px,un
 		else if (py > maxH) py = maxH;
 	}
 #endif
-	if (mode == 1 && minf0.width >= px && minf0.height >= py) return 0;
-	if (!(pi[p_safe]&512)) {
-		if (dpmy > dpmx) dpmx = dpmy;
-		else dpmy = dpmx;
-	}
-	if ((dpmx == 0 || dpmy == 0) && (!(pi[p_safe]&16) || !mpx || !mpy)) {
-		dpmx = w_dpmw;
-		dpmy = w_dpmh;
-		if (!(pi[p_safe]&512)) {
-			if (dpmy > dpmx) dpmx = dpmy;
-			else dpmy = dpmx;
+	if (mode == 1 && minf0.width >= px && minf0.height >= py && w_width >= px && w_height >= py) return 0;
+	if ((dpmw == 0 || dpmh == 0) && (!(pi[p_safe]&16) || !mpx || !mpy)) {
+		dpmw = w_dpmw;
+		dpmh = w_dpmh;
+	} else DPI_EQ(dpmh,dpmw); // keep w_dpmw, w_dpmh always compared
+	if (dpmw > 0 && dpmh > 0) {
+		mpx = px/dpmw + .5;
+		mpy = py/dpmh + .5;
+#ifdef _DPI_DIFF
+		// screen with extra pixels may be wrong. configurable
+#define _DPI_CH__(w0,h0,w,h,alt) ((_DPI_DIFF<0) ? (alt) : (abs((w0-w)*254+.5)>_DPI_DIFF || abs((h0-h)*254+.5)>_DPI_DIFF))
+		if (_DPI_DIFF < 0)
+#else
+		// cleaned precise code with extra pixels
+		if (!(pi[p_safe]&16))
+#define _DPI_CH__(w0,h0,w,h,alt) (alt)
+#endif
+		{
+			// adding some virtual pixels make DPI rounding better
+			long x;
+			if ((x = dpmw*mpx + .5) > px) mpx = (px = x)/dpmw + .5;
+			if ((x = dpmh*mpy + .5) > py) mpy = (py = x)/dpmh + .5;
 		}
 	}
-	if (dpmx > 0 && dpmy > 0) {
-		mpx = px/dpmx + .5;
-		mpy = py/dpmy + .5;
-		//if (abs((w_dpmw-dpmx)*254)>1 || abs((w_dpmh-dpmy)*254)>1) goto set;
-		if (abs(((.0+minf0.width)/minf0.mwidth-dpmx)*254)>1 || abs(((.0+minf0.height)/minf0.mheight-dpmy)*254)>1) goto set;
-	}
-	py = max(py,py1);
-	if (mode == 2 || minf0.width != px || minf0.height != py || xrevent1 < 0) {
-set:
+
+#define _DPI_CH_(w1,h1)  _DPI_CH__(w_dpmw,w_dpmh,dpmw,dpmh,(w1 != w_mwidth || h1 != w_mheight))
+#define _DPI_CH(w,h,w1,h1) _DPI_CH__((.0+minf0.width)/minf0.mwidth, (.0+minf0.height)/minf0.mheight, w, h, (w1 != minf0.mwidth || h1 != minf0.mheight))
+
+	// check both - event-confirmed (vs. last) and last (vs. silent failure) sizes
+	// set twice if unsure
+	if (px != w_width || py != w_height
+	    || xrevent1 < 0
+	    || (mode != 1 && (px != minf0.width || py != minf0.height
+		    || mode == 2
+		    || mode == 3
+		    || _DPI_CH_(mpx,mpy)
+		    || _DPI_CH(dpmw,dpmh,mpx,mpy)
+		))
+		) {
+		DBG("set screen size(%i) %lux%lu / %lux%lumm - %.1f %.1fdpi",mode,px,py,mpx,mpy,INCH*px/mpx,INCH*py/mpy);
 #ifndef MINIMAL
-		if (mode != 1 || w_width != px || w_height != py || mpx != w_mwidth || mpy != w_mheight)
-#endif
-			DBG("set screen size %lux%lu / %lux%lumm - %.1f %.1fdpi",px,py,mpx,mpy,25.4*px/mpx,25.4*py/mpy);
-#ifndef MINIMAL
-		else return 1; // reduce blinking, may be bad
 		XFlush(dpy);
 		XSync(dpy,False);
 		_error = 0;
@@ -1862,9 +1888,9 @@ set:
 		w_height = py;
 		w_mwidth = mpx;
 		w_mheight = mpy;
-		if (dpmx > 0 && dpmy > 0) {
-			w_dpmw = dpmx;
-			w_dpmh = dpmy;
+		if (dpmw > 0 && dpmh > 0) {
+			w_dpmw = dpmw;
+			w_dpmh = dpmh;
 		} else {
 			w_dpmw = (.0+w_width)/w_mwidth;
 			w_dpmh = (.0+w_height)/w_mheight;
@@ -2806,8 +2832,7 @@ static void _scr_size(){
 	minf0.mwidth1 = minf0.mwidth = DisplayWidthMM(dpy,screen);
 	minf0.mheight1 = minf0.mheight = DisplayHeightMM(dpy,screen);
 	if ( minf0.width != w_width || minf0.height != w_height
-//	    || minf0.mwidth != w_mwidth || minf0.mheight != w_mheight
-	    || abs(((.0+minf0.width)/minf0.mwidth-w_dpmw)*254)>1 || abs(((.0+minf0.height)/minf0.mheight-w_dpmh)*254)>1
+	    || _DPI_CH(w_dpmw,w_dpmh,w_mwidth,w_mheight)
 		) {
 		_wait_mask |= _w_screen;
 		//DBG("width/heigh changed");
@@ -3094,9 +3119,13 @@ static void init(){
 #ifdef RROutputPropertyNotifyMask
 			int v1 = 0, v2 = 0;
 			XRRQueryVersion(dpy,&v1,&v2);
-			if (v1 > 1 || (v1 == 1 && v2 > 1)) {
+			v2 += (v1 << 10) - 1024;
+			if (v2 > 1) {
 				xrevent1 = xrevent + RRNotify;
 				m |= RRCrtcChangeNotifyMask|RROutputChangeNotifyMask|RROutputPropertyNotifyMask;
+#ifdef RRLeaseNotifyMask
+				if (v2 > 5) m |= RRLeaseNotifyMask;
+#endif
 			}
 #endif
 
@@ -3108,10 +3137,12 @@ static void init(){
 	w_height = DisplayHeight(dpy,screen);
 	w_mwidth = DisplayWidthMM(dpy,screen);
 	w_mheight = DisplayHeightMM(dpy,screen);
-	if (w_width && w_height && w_mwidth && w_mheight) {
-		w_dpmh = (.0+w_height)/w_mheight;
+	w_dpmh = (w_height && w_mheight) ? (.0+w_height)/w_mheight : 3.7;
+	if (w_width && w_mwidth) {
 		w_dpmw = (.0+w_width)/w_mwidth;
-	}
+		if (w_height && w_mheight) { DPI_EQ(w_dpmw,w_dpmh); }
+		else w_dpmh = w_dpmw;
+	} else w_dpmw = w_dpmh;
 	_scr_size();
 	//forceUngrab();
 #ifdef XSS
