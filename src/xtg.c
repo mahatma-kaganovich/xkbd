@@ -1,5 +1,5 @@
 /*
-	xtg v1.41 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.42 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -171,16 +171,13 @@ int atomFmt = sizeof(Atom) << 3;
 int winFmt = sizeof(Window) << 3;
 _short useRawTouch = 0, useRawButton = 0;
 
-#undef _DPI_DIFF
-// enable to make configurable & remove extra pixels
-#if 0
-// <0 or undef - add extra pixels to screen to precise rounding DPI
-short _dpi_diff = 0;
-#define _DPI_DIFF _dpi_diff
-#endif
+// >=0 remove extra pixels, add extra mode compare
+// <0 to add extra pixels to screen to precise rounding DPI, relaxed compare
+#define _DPI_DIFF -1
+#define _DPI_CH(w0,h0,w,h,alt) ((alt) && (_DPI_DIFF<0 || (abs((w)-(w0))*254+.5>_DPI_DIFF || abs((h)-(h0))*254+.5>_DPI_DIFF)))
 
-unsigned long w_width, w_height, w_mwidth, w_mheight;
-double w_dpmh, w_dpmw;
+unsigned long w_width = 0, w_height = 0, w_mwidth = 0, w_mheight = 0;
+double w_dpmh = 0, w_dpmw = 0;
 #define _w_none (_short)(1)
 #define _w_screen (_short)(1<<1)
 #define _w_init (_short)(1<<2)
@@ -387,7 +384,6 @@ char *ph[MAX_PAR] = {
 	"		13(+8192) skip fullscreen windows without ClientMessage (XTerm)\n"
 #endif
 	"		14(+16384) XRRSetCrtcConfig() move before panning\n"
-	"		(auto-panning for openbox+tint2: \"xrandr --noprimary\" on early init && \"-s 135\" (7+128))\n",
 #ifdef XSS
 	"fullscreen \"content type\" prop.: see \"xrandr --props\" (I want \"Cinema\")",
 	"fullscreen \"Colorspace\" prop.: see \"xrandr --props\"  (I want \"DCI-P3_RGB_Theater\")\n",
@@ -773,6 +769,7 @@ typedef struct _minf {
 #define o_backlight 64
 #define o_primary 128
 
+double dpm0w,dpm0h;
 minf_t minf0, *minf = NULL, *minf_last = NULL, *minf1 = NULL, *minf2 = NULL;
 #define MINF1(x) for(minf=outputs; (minf!=minf_last) x; minf++)
 #define MINF2(x,y) for(minf=outputs; (minf!=minf_last) x; minf++) if (y)
@@ -1841,35 +1838,24 @@ static _short setScrSize(double dpmw,double dpmh,_short mode,unsigned long px,un
 	if (dpmw > 0 && dpmh > 0) {
 		mpx = px/dpmw + .5;
 		mpy = py/dpmh + .5;
-#ifdef _DPI_DIFF
 		// screen with extra pixels may be wrong. configurable
-#define _DPI_CH__(w0,h0,w,h,alt) ((_DPI_DIFF<0) ? (alt) : (abs((w0-w)*254+.5)>_DPI_DIFF || abs((h0-h)*254+.5)>_DPI_DIFF))
-		if (_DPI_DIFF < 0)
-#else
-		// cleaned precise code with extra pixels
-		if (!(pi[p_safe]&16))
-#define _DPI_CH__(w0,h0,w,h,alt) (alt)
-#endif
-		{
+		if (_DPI_DIFF < 0 && !(pi[p_safe]&(16|512))) {
 			// adding some virtual pixels make DPI rounding better
 			long x;
 			if ((x = dpmw*mpx + .5) > px) mpx = (px = x)/dpmw + .5;
 			if ((x = dpmh*mpy + .5) > py) mpy = (py = x)/dpmh + .5;
 		}
 	}
-
-#define _DPI_CH_(w1,h1)  _DPI_CH__(w_dpmw,w_dpmh,dpmw,dpmh,(w1 != w_mwidth || h1 != w_mheight))
-#define _DPI_CH(w,h,w1,h1) _DPI_CH__((.0+minf0.width)/minf0.mwidth, (.0+minf0.height)/minf0.mheight, w, h, (w1 != minf0.mwidth || h1 != minf0.mheight))
-
 	// check both - event-confirmed (vs. last) and last (vs. silent failure) sizes
 	// set twice if unsure
 	if (px != w_width || py != w_height
 	    || xrevent1 < 0
-	    || (mode != 1 && (px != minf0.width || py != minf0.height
+	    || (mode != 1 && (
+		    px != minf0.width || py != minf0.height
 		    || mode == 2
 		    || mode == 3
-		    || _DPI_CH_(mpx,mpy)
-		    || _DPI_CH(dpmw,dpmh,mpx,mpy)
+		    || _DPI_CH(dpm0w,dpm0h,dpmw,dpmh,mpx != minf0.mwidth || mpy != minf0.mheight)
+		    || _DPI_CH(dpmw,dpmh,w_dpmw,w_dpmh,mpx != w_mwidth || mpy != w_mheight)
 		))
 		) {
 		DBG("set screen size(%i) %lux%lu / %lux%lumm - %.1f %.1fdpi",mode,px,py,mpx,mpy,INCH*px/mpx,INCH*py/mpy);
@@ -1888,6 +1874,7 @@ static _short setScrSize(double dpmw,double dpmh,_short mode,unsigned long px,un
 		w_height = py;
 		w_mwidth = mpx;
 		w_mheight = mpy;
+		_wait_mask |= _w_screen;
 		if (dpmw > 0 && dpmh > 0) {
 			w_dpmw = dpmw;
 			w_dpmh = dpmh;
@@ -2831,15 +2818,7 @@ static void _scr_size(){
 	minf0.height1 = minf0.height = DisplayHeight(dpy,screen);
 	minf0.mwidth1 = minf0.mwidth = DisplayWidthMM(dpy,screen);
 	minf0.mheight1 = minf0.mheight = DisplayHeightMM(dpy,screen);
-	if ( minf0.width != w_width || minf0.height != w_height
-	    || _DPI_CH(w_dpmw,w_dpmh,w_mwidth,w_mheight)
-		) {
-		_wait_mask |= _w_screen;
-		//DBG("width/heigh changed");
-	} else {
-		_wait_mask &= ~_w_screen;
-		//DBG("width/heigh equal");
-	}
+
 	if (!xrr && minf0.mwidth > minf0.mheight && minf0.width < minf0.height && minf0.mheight) {
 		minf0.rotation = RR_Rotate_90;
 		minf0.mwidth = minf0.mheight1;
@@ -2855,6 +2834,17 @@ static void _scr_size(){
 	if (xrevent1 < 0 || memcmp(&minf0,&m,sizeof(m))) {
 		DINF(1) dinf->type |= o_changed;
 		oldShowPtr |= 8|16;
+	}
+
+	if (w_width == minf0.width && w_height == minf0.height && w_mwidth == minf0.mwidth && w_mheight == minf0.mheight) {
+		_wait_mask &= ~_w_screen;
+		dpm0w = w_dpmw;
+		dpm0h = w_dpmh;
+	} else {
+		dpm0w = minf0.mwidth ? (.0+minf0.width)/minf0.mwidth : 0;
+		dpm0h = minf0.mheight ? (.0+minf0.height)/minf0.mheight : 0;
+		DPI_EQ(dpm0w,dpm0h);
+		if ((_wait_mask & _w_screen) && w_width == minf0.width && w_height == minf0.height && !_DPI_CH(dpm0w, dpm0h, w_dpmw, w_dpmh, 0)) _wait_mask &= ~_w_screen;
 	}
 }
 #endif
@@ -3133,17 +3123,14 @@ static void init(){
 			XRRSelectInput(dpy, root, m);
 		};
 	}
-	w_width = DisplayWidth(dpy,screen);
-	w_height = DisplayHeight(dpy,screen);
-	w_mwidth = DisplayWidthMM(dpy,screen);
-	w_mheight = DisplayHeightMM(dpy,screen);
-	w_dpmh = (w_height && w_mheight) ? (.0+w_height)/w_mheight : 3.7;
-	if (w_width && w_mwidth) {
-		w_dpmw = (.0+w_width)/w_mwidth;
-		if (w_height && w_mheight) { DPI_EQ(w_dpmw,w_dpmh); }
-		else w_dpmh = w_dpmw;
-	} else w_dpmw = w_dpmh;
+	_wait_mask &= ~_w_screen;
 	_scr_size();
+	w_width = minf0.width;
+	w_height = minf0.height;
+	w_mwidth = minf0.mwidth;
+	w_mheight = minf0.mheight;
+	w_dpmw = dpm0w;
+	w_dpmh = dpm0h;
 	//forceUngrab();
 #ifdef XSS
 #ifdef USE_XSS
