@@ -1,5 +1,5 @@
 /*
-	xtg v1.42 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.43 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -310,17 +310,21 @@ static void _print_bmap(_int x, _short n, TouchTree *m) {
 #define p_max_native_mon 11
 #define p_min_dpi 12
 #define p_max_dpi 13
-#define p_safe 14
-#define p_content_type 15
-#define p_colorspace 16
-#define p_1 17
-#define MAX_PAR 18
+#define p_dpi 14
+#define p_safe 15
+#define p_content_type 16
+#define p_colorspace 17
+#define p_1 18
+#define p_y 19
+#define p_Y 20
+#define p_help 21
+#define MAX_PAR 22
 char *pa[MAX_PAR] = {};
 // android: 125ms tap, 500ms long
-#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0,  14, 32, 72, 0, DEF_SAFE, 0, 0, 0 }
-int pi[] = PAR_DEFS;
+#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0,  14, 32, 72, 0, 0, DEF_SAFE, 0, 0, 0 }
+int pi[MAX_PAR] = PAR_DEFS;
 double pf[] = PAR_DEFS;
-char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:s:c:C:1h";
+char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:i:s:c:C:1yYh";
 char *ph[MAX_PAR] = {
 	"touch device 0=auto", //d
 
@@ -361,7 +365,8 @@ char *ph[MAX_PAR] = {
 	"min native dpi monitor (<0 - -horizontal mm, >0 -  diagonal \")",
 	"max ...",
 	"min dpi (monitor)",
-	"max ...",
+	"max dpi",
+	"default dpi - basic dpi, some apps use hardcoded 96, not real dots/inch (0)",
 	"safe mode bits\n"
 	"		0(+1) don't change hierarchy of device busy/pressed (for -f 2)\n"
 #ifdef USE_EVDEV
@@ -383,12 +388,15 @@ char *ph[MAX_PAR] = {
 #ifdef XSS
 	"		13(+8192) skip fullscreen windows without ClientMessage (XTerm)\n"
 #endif
-	"		14(+16384) XRRSetCrtcConfig() move before panning\n"
+	"		14(+16384) XRRSetCrtcConfig() move before panning\n",
 #ifdef XSS
 	"fullscreen \"content type\" prop.: see \"xrandr --props\" (I want \"Cinema\")",
 	"fullscreen \"Colorspace\" prop.: see \"xrandr --props\"  (I want \"DCI-P3_RGB_Theater\")\n",
 #endif
 	" oneshot (implies set DPI, panning, etc) - to run & exit before WM",
+	" preset max-conservative",
+	" preset max-experimental",
+	" help",
 };
 #else
 #define TIME(T,t)
@@ -2010,7 +2018,7 @@ find1:
 	}
 	_short do_dpi = minf1 && minf1->mheight && minf1->mwidth && !(pi[p_safe]&16);
 	if ((do_dpi || !(pi[p_safe]&64))) {
-		double dpmh = (.0 + minf1->height) / minf1->mheight, dpmw = (.0 + minf1->width) / minf1->mwidth;
+		double dpmh = pi[p_dpi] ? pf[p_dpi] : (.0 + minf1->height) / minf1->mheight, dpmw = pi[p_dpi] ? pf[p_dpi] : (.0 + minf1->width) / minf1->mwidth;
 		pan_x = pan_y = pan_cnt = 0;
 		if (do_dpi) MINF_T(o_active) {
 			if (minf1 && minf1->crt == minf->crt) continue;
@@ -3284,38 +3292,10 @@ int main(int argc, char **argv){
 	TouchTree *m;
 	Touch *to;
 
-
 	while((opt=getopt(argc, argv, pc))>=0){
-		for (i=0; i<MAX_PAR && pc[i<<1] != opt; i++);
-		if (i>=MAX_PAR) {
-			printf("Usage: %s {<option>} {<value>:<button>[:<key>]}\n",argv[0]);
-			for(i=0; i<MAX_PAR; i++) {
-				printf("	-%c ",pc[i<<1]);
-				if (i<p_1) {
-					if (pf[i] == pi[i]) printf("%i",pi[i]);
-					else printf("%.1f",pf[i]);
-				}
-				printf(" %s\n",ph[i]);
-			}
-			printf("\n<value> is octal combination, starting from x>0, where x is last event type:\n"
-				"	1=begin, 2=update, 3=end\n"
-				"	bit 3(+4)=border\n"
-				"	(standard scroll buttons: up/down/left/right = 5/4/7/6)\n"
-				"<button> 0..%i (X use 1-9)\n"
-				"	button 0xf is special: this is key"
-				"\ndefault map:",MAX_BUTTON);
-			initmap();
-			_print_bmap(0, 0, &bmap);
-			printf("\n\nRoute 'hold' button 3 to 'd-n-d' button 2: 013:2\n"
-				"Use default on-TouchEnd bit - oneshot buttons:\n"
-				"  2-fingers swipe right to 8 button: 0277:0 0377:0x88\n"
-				"  Audio prev/next keys to 2-left/right: 0277:0x8f:XF86AudioNext 0377:0x8f:XF86AudioNext 0266:0x8f:XF86AudioPrev 0366:0x8f:XF86AudioPrev\n"
-				"   - same for 1-left/right from screeen border: 057:0x8f:XF86AudioNext 056:0x8f:XF86AudioPrev\n"
-				"\nMonitor per touch device (if not '-R <name>'):\n"
-				"  xinput set-prop <device> --type=atom 'xtg output' <monitor>\n"
-				);
-			return 0;
-		}
+		_short j;
+		for (j=i=0; pc[j] && pc[j] != opt; j++) if (pc[j] != ':') i++;
+		if (i>=MAX_PAR) goto help;
 		if (i>=p_1) pi[i] = 1;
 		else if (optarg) {
 			pa[i] = optarg;
@@ -3344,7 +3324,19 @@ int main(int argc, char **argv){
 	}
 	if (pi[p_1]) {
 		_wait_mask &= ~_w_none;
-		pi[p_safe] &= ~(int)(32+64);
+		pi[p_safe] &= ~(32+64);
+	}
+	if (pi[p_y]) {
+		pf[p_dpi] = pi[p_dpi] = 96;
+		pi[p_safe] &= ~64;
+		pi[p_safe] |= 1+4+8+32;
+	}
+	if (pi[p_Y]) {
+		pi[p_safe] &= ~(32+64);
+		pi[p_safe] |= (1+4+8+4096);
+		pa[p_content_type] = "Cinema";
+		pa[p_colorspace] = "DCI-P3_RGB_Theater";
+
 	}
 	resX = resY = pf[p_res] < 0 ? 1 : pf[p_res];
 	strict = pa[p_mon] &&  pa[p_mon][0] == '-' && !pa[p_mon][1];
@@ -3361,6 +3353,42 @@ int main(int argc, char **argv){
 		useRawButton = 1;
 		pi[p_floating] ^= 8;
 	}
+	if (pi[p_help]) {
+help:
+		_short j;
+		pf[p_safe] = pi[p_safe];
+		printf("Usage: %s {<option>} {<value>:<button>[:<key>]}\n",argv[0]);
+		for(i=j=0; i<MAX_PAR; i++) {
+			if (pc[j] == ':') j++;
+			printf("	-%c ",pc[j++]);
+			if (i<p_1) {
+				if (pf[i] != pi[i]) printf("%.1f",pf[i]);
+				else if (!pf[i] && pa[i]) printf("'%s'",pa[i]);
+				else printf("%i",pi[i]);
+			}
+			printf(" %s\n",ph[i]);
+		}
+		printf("\n<value> is octal combination, starting from x>0, where x is last event type:\n"
+			"	1=begin, 2=update, 3=end\n"
+			"	bit 3(+4)=border\n"
+			"	(standard scroll buttons: up/down/left/right = 5/4/7/6)\n"
+			"<button> 0..%i (X use 1-9)\n"
+			"	button 0xf is special: this is key"
+			"\ndefault map:",MAX_BUTTON);
+		initmap();
+		_print_bmap(0, 0, &bmap);
+		printf("\n\nRoute 'hold' button 3 to 'd-n-d' button 2: 013:2\n"
+			"Use default on-TouchEnd bit - oneshot buttons:\n"
+			"  2-fingers swipe right to 8 button: 0277:0 0377:0x88\n"
+			"  Audio prev/next keys to 2-left/right: 0277:0x8f:XF86AudioNext 0377:0x8f:XF86AudioNext 0266:0x8f:XF86AudioPrev 0366:0x8f:XF86AudioPrev\n"
+			"   - same for 1-left/right from screeen border: 057:0x8f:XF86AudioNext 056:0x8f:XF86AudioPrev\n"
+			"\nMonitor per touch device (if not '-R <name>'):\n"
+			"  xinput set-prop <device> --type=atom 'xtg output' <monitor>\n"
+			);
+		return 0;
+	}
+//	if (pi[p_dpi]) 
+		pf[p_dpi] /= INCH;
 #endif
 	if (!dpy) return 1;
 	init();
