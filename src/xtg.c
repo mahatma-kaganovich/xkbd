@@ -377,7 +377,7 @@ char *ph[MAX_PAR] = {
 	"		4(+16) no mon dpi\n"
 	"		5(+32) no mon primary\n"
 	"		6(+64) no vertical panning && auto-on && ondemand XI2 prop 'scaling mode' = Full\n"
-	"		7(+128) auto bits 6,7 on primary present - enable primary & disable panning\n"
+	"		7(+128) auto bits 5,6 on primary present - enable primary & disable panning\n"
 	"		8(+256) use mode sizes for panning (errors in xrandr tool!)\n"
 	"		9(+512) keep dpi different x & y (image panned non-aspected)\n"
 	"		10(+1024) don't use cached input ABS\n"
@@ -3328,12 +3328,10 @@ int main(int argc, char **argv){
 	}
 	if (pi[p_y]) {
 		pf[p_dpi] = pi[p_dpi] = 96;
-		pi[p_safe] &= ~64;
-		pi[p_safe] |= 1+4+8+32;
+		pi[p_safe] = 1+16+32;
 	}
 	if (pi[p_Y]) {
-		pi[p_safe] &= ~(32+64);
-		pi[p_safe] |= (1+4+8+4096);
+		pi[p_safe] = 1+4+128+4096;
 		pa[p_content_type] = "Cinema";
 		pa[p_colorspace] = "DCI-P3_RGB_Theater";
 
