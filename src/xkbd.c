@@ -1237,6 +1237,8 @@ evfree:
 		}
 		break;
 #endif
+#undef e
+#define e (ev.xbutton)
 	    case ButtonRelease: type=2;
 	    case ButtonPress:
 //#define ButtonScrollMask 0x7800u
@@ -1244,30 +1246,32 @@ evfree:
 #ifndef GESTURES_USE
 		{
 #else
-		switch (ev.xbutton.button) {
+		switch (e.button) {
 		    case 7: //XkbLockModifiers(display,XkbUseCoreKbd,STATE(KBIT_CAPS),kb->state ^ STATE(KBIT_CAPS));break;
 		    case 6: //XkbLockGroup(display,XkbUseCoreKbd,kb->group+1); break;
 		    case 5:
 		    case 4:
-			_hide(sig[ev.xbutton.button]);
+			_hide(sig[e.button]);
 			break;
 		    default: if (!resized)
 #endif
 #ifdef BUTTONS_TO1
 			// now THIS mask unused directly
-			//st1 = !!(ev.xbutton.state & ~ButtonScrollMask);
-			active_but = kb_handle_events(kb, type, ev.xbutton.x, ev.xbutton.y, 0, ev.xbutton.button, 0, ev.xbutton.time, &st1, sizeof(st1));
+			//st1 = !!(e.state & ~ButtonScrollMask);
+			active_but = kb_handle_events(kb, type, e.x, e.y, 0, e.button, 0, e.time, &st1, sizeof(st1));
 #else
-			active_but = kb_handle_events(kb, type, ev.xbutton.x, ev.xbutton.y, 0, ev.xbutton.button, 0, ev.xbutton.time, &ev.xbutton.state, sizeof(ev.xbutton.state));
+			active_but = kb_handle_events(kb, type, e.x, e.y, 0, e.button, 0, e.time, &e.state, sizeof(e.state));
 #endif
 		}
 		break;
+#undef e
+#define e (ev.xmotion)
 	    case MotionNotify:
 #ifdef BUTTONS_TO1
-		st1 = !!(ev.xmotion.state & ~ButtonScrollMask);
-		active_but = kb_handle_events(kb, 1, ev.xmotion.x, ev.xmotion.y, 0, 0, 0, ev.xmotion.time, &st1, sizeof(st1));
+		st1 = !!(e.state & ~ButtonScrollMask);
+		active_but = kb_handle_events(kb, 1, e.x, e.y, 0, 0, 0, e.time, &st1, sizeof(st1));
 #else
-		active_but = kb_handle_events(kb, 1, ev.xmotion.x, ev.xmotion.y, 0, 0, 0, ev.xmotion.time, &ev.xmotion.state, sizeof(ev.xmotion.state));
+		active_but = kb_handle_events(kb, 1, e.x, e.y, 0, 0, 0, e.time, &e.state, sizeof(e.state));
 #endif
 		break;
 	    case ClientMessage:
@@ -1279,25 +1283,32 @@ evfree:
 			exit(0);
 		}
 		break;
+#undef e
+#define e (ev.xconfigure)
 	    case ConfigureNotify:
-		if (ev.xconfigure.window == rootWin) {
-			if (wa0.width != ev.xconfigure.width || wa0.height != ev.xconfigure.height) {
+		if (e.window == rootWin) {
+			if (wa0.width != e.width || wa0.height != e.height) {
 				unmapOrRestart();
+#ifdef USE_XR
 				XRRUpdateConfiguration(&ev);
+#else
+				dpy->screens[screen].width = e.width;
+				dpy->screens[screen].height  = e.height;
+#endif
 				goto chScreen;
 			}
 			break;
 		}
-		if (ev.xconfigure.window != win) break;
-		kb->act_width = ev.xconfigure.width;
-		kb->act_height = ev.xconfigure.height;
+		if (e.window != win) break;
+		kb->act_width = e.width;
+		kb->act_height = e.height;
 		if (resized) break;
-		if (ev.xconfigure.width != kb->vbox->act_width
-		    || ev.xconfigure.height != kb->vbox->act_height)
+		if (e.width != kb->vbox->act_width
+		    || e.height != kb->vbox->act_height)
 		{
 			kb_resize(kb,
-				 ev.xconfigure.width,
-				 ev.xconfigure.height );
+				 e.width,
+				 e.height );
 		}
 		break;
 	    case Expose:
@@ -1315,14 +1326,16 @@ evfree:
 //	    case UnmapNotify:
 //		if (rootChanged(&wa)) goto chScreen;
 //		break;
+#undef e
+#define e (ev.xvisibility)
 	    case VisibilityNotify: if (dock & 32) {
 		Window rw, pw, *wins, *ww;
 		unsigned int nw,re = 0;
 		static int lock_cnt = 0;
 
-		if (ev.xvisibility.state!=VisibilityFullyObscured ||
-			display!=ev.xvisibility.display ||
-			win!=ev.xvisibility.window ||
+		if (e.state!=VisibilityFullyObscured ||
+			display!=e.display ||
+			win!=e.window ||
 			!XQueryTree(display, rootWin, &rw, &pw, &wins, &nw)
 			) break;
 		ww = wins;
@@ -1339,7 +1352,7 @@ evfree:
 		// first lock: fork (to realize init-lock safe wait)
 		if (re && !lock_cnt++ && fork()) exit(0);
 	    }
-	    if ((dock & 256) && ev.xvisibility.state!=VisibilityUnobscured) {
+	    if ((dock & 256) && e.state!=VisibilityUnobscured) {
 			if (rootChanged(&wa)) goto chScreen;
 			XRaiseWindow(display, win);
 	    }
