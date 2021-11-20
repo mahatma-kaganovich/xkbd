@@ -1562,10 +1562,11 @@ static void xrMons0(){
     unsigned long i;
     xrrFree();
     _grabX();
-    xrrSet();
+//    xrrSet();
     XSync(dpy,False);
     clEvents(xrevent);
     clEvents(xrevent1);
+    xrrSet();
     oldShowPtr &= ~8;
     int nout = -1, active = 0, non_desktop = 0, non_desktop0 = 0, non_desktop1 = 0;
     XRRCrtcInfo *cinf = NULL;
@@ -3129,7 +3130,7 @@ static void init(){
 
 			xrevent += RRScreenChangeNotify;
 			XRRSelectInput(dpy, root, m);
-		};
+		} else evmask |= StructureNotifyMask; // ConfigureNotify
 	}
 	_wait_mask &= ~_w_screen;
 	_scr_size();
@@ -3988,17 +3989,18 @@ evfree1:
 #define e (ev.xconfigure)
 		    case ConfigureNotify:
 			if (e.window == root) {
+				//if (xrr) break;
+				oldShowPtr |= 8|16;
 #ifndef MINIMAL
-				if (!xrr) {
-					oldShowPtr |= 8|16;
-					minf0.width = e.width;
-					minf0.height = e.height;
 #if 1
-					dpy->screens[screen].width = e.width;
-					dpy->screens[screen].height  = e.height;
-					_scr_size();
+				if (XRRUpdateConfiguration(&ev)) _scr_size();
+#else
+				//minf0.width = e.width;
+				//minf0.height = e.height;
+				dpy->screens[screen].width = e.width;
+				dpy->screens[screen].height  = e.height;
+				_scr_size();
 #endif
-				}
 #endif
 				break;
 			}

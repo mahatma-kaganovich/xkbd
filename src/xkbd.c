@@ -1077,12 +1077,14 @@ re_crts:
 	XISetMask(mask.mask, XI_TouchEnd);
 
 	XISetMask(mask.mask, XI_DeviceChanged);
-#if defined(XI_GestureSwipeBegin) && defined(GESTURES_USE)
+#if 0 && defined(XI_GestureSwipeBegin) && defined(GESTURES_USE)
 	if (ximinor > 3 || ximajor > 2) {
 		XISetMask(mask.mask, XI_GestureSwipeBegin);
 		XISetMask(mask.mask, XI_GestureSwipeUpdate);
 		XISetMask(mask.mask, XI_GestureSwipeEnd);
 	}
+#else
+#undef XI_GestureSwipeBegin
 #endif
 	XISelectEvents(display, win, &mask, 1);
       } else
@@ -1101,7 +1103,10 @@ re_crts:
       XChangeWindowAttributes(display, win, CWOverrideRedirect|CWEventMask, &setWA);
 
       // no check from devel - may be too many events
-      XSelectInput(display, rootWin, StructureNotifyMask);
+#ifdef USE_XR
+      if (xrr)
+#endif
+	XSelectInput(display, rootWin, StructureNotifyMask);
 
       signal(SIGUSR1, handle_sig); /* for extenal mapping / unmapping */
       signal(SIG_HIDE, _hide);
@@ -1197,10 +1202,10 @@ _remapped:
 #define e ((XIGestureSwipeEvent*)ev.xcookie.data)
 			    case XI_GestureSwipeBegin:
 			    case XI_GestureSwipeUpdate:
-				//fprintf(stderr,"XI_GestureSwipe*\n");
+				fprintf(stderr,"XI_GestureSwipe*\n");
 				break;
 			    case XI_GestureSwipeEnd:
-				//fprintf(stderr,"XI_GestureSwipeEnd\n");
+				fprintf(stderr,"XI_GestureSwipeEnd\n");
 #if 0
 			    {
 				if (e->flags&XIGestureSwipeEventCancelled) break;
