@@ -181,6 +181,7 @@ double w_dpmh = 0, w_dpmw = 0;
 #define _w_none (_short)(1)
 #define _w_screen (_short)(1<<1)
 #define _w_init (_short)(1<<2)
+#define _w_pan (_short)(1<<3)
 _short _wait_mask = _w_none|_w_init;
 
 #define INCH 25.4
@@ -2029,7 +2030,9 @@ find1:
 
 //		if (!(pi[p_safe]&64) && setScrSize(dpmw,dpmh,1,0,0)) goto ex;
 		if (!(pi[p_safe]&64)) {
+			_wait_mask |= _w_pan;
 			if (setScrSize(dpmw,dpmh,1,0,0)) goto ex1;
+			_wait_mask &= ~_w_pan;
 			_grabX();
 
 			if (minf1 && minf1->crt != minf2->crt) _pan(minf1);
