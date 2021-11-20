@@ -1,5 +1,5 @@
 /*
-	xtg v1.43 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.44 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -1546,7 +1546,6 @@ static void clEvents(int event){
 	}
 }
 
-static _short setScrSize(double dpmx,double dpmy,_short mode,unsigned long px,unsigned long py1);
 static void fixGeometry();
 static void xrMons0(){
     if (!xrr) {
@@ -1568,7 +1567,6 @@ static void xrMons0(){
     clEvents(xrevent1);
     oldShowPtr &= ~8;
     int nout = -1, active = 0, non_desktop = 0, non_desktop0 = 0, non_desktop1 = 0;
-    unsigned int _y = minf0.height;
     XRRCrtcInfo *cinf = NULL;
     XRROutputInfo *oinf = NULL;
     i = xrrr ? xrrr->noutput : 0;
@@ -1670,16 +1668,13 @@ static void xrMons0(){
 			if (!cinf->noutput && !cinf->mode)
 			    for (j=0; j<cinf->npossible; j++) {
 				if (cinf->possible[j] == minf->out) {
-					setScrSize(0,0,3,m->width,_y+m->height);
+					// scr size unbalanced here. start on top
 					DBG("output %s off -> auto crtc %ix%i",oinf->name,m->width,m->height);
-					if (XRRSetCrtcConfig(dpy,xrrr,oinf->crtcs[i],CurrentTime,0,_y,m->id,RR_Rotate_0,&minf->out,1)==Success) {
+					if (XRRSetCrtcConfig(dpy,xrrr,oinf->crtcs[i],CurrentTime,0,0,m->id,RR_Rotate_0,&minf->out,1)==Success) {
 						XRRFreeOutputInfo(oinf);
-						oinf = XRRGetOutputInfo(dpy, xrrr, minf->out);
 						minf->type |= o_changed;
-						if (!oinf || oinf->crtc) {
-							_y += m->height;
-							break;
-						}
+						oinf = XRRGetOutputInfo(dpy, xrrr, minf->out);
+						if (!oinf || oinf->crtc) break;
 					}
 				}
 			}
@@ -1858,13 +1853,14 @@ static _short setScrSize(double dpmw,double dpmh,_short mode,unsigned long px,un
 	// set twice if unsure
 	if (px != w_width || py != w_height
 	    || xrevent1 < 0
-	    || (mode != 1 && (
+	    || mode == 1 // checked
+	    || (
 		    px != minf0.width || py != minf0.height
 		    || mode == 2
 		    || mode == 3
 		    || _DPI_CH(dpm0w,dpm0h,dpmw,dpmh,mpx != minf0.mwidth || mpy != minf0.mheight)
 		    || _DPI_CH(dpmw,dpmh,w_dpmw,w_dpmh,mpx != w_mwidth || mpy != w_mheight)
-		))
+		)
 		) {
 		DBG("set screen size(%i) %lux%lu / %lux%lumm - %.1f %.1fdpi",mode,px,py,mpx,mpy,INCH*px/mpx,INCH*py/mpy);
 #ifndef MINIMAL
@@ -1890,8 +1886,9 @@ static _short setScrSize(double dpmw,double dpmh,_short mode,unsigned long px,un
 			w_dpmw = (.0+w_width)/w_mwidth;
 			w_dpmh = (.0+w_height)/w_mheight;
 		}
+		return 1;
 	}
-	return 1;
+	return 0;
 }
 
 unsigned int pan_x,pan_y,pan_cnt;
