@@ -1104,7 +1104,7 @@ re_crts:
 
       // no check from devel - may be too many events
 #ifdef USE_XR
-      if (xrr)
+      if (!xrr)
 #endif
 	XSelectInput(display, rootWin, StructureNotifyMask);
 
