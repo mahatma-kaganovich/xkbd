@@ -1798,6 +1798,53 @@ ret: {}
 //    _ungrabX(); // forceUngrab() instead
 }
 
+//#define __MIN_PIXELS
+static inline void _round_dpi(unsigned long *w,unsigned long *m,double dpm) {
+	if (!(dpm > 0)) return;
+#ifdef MINIMAL
+	*m = (*w)/dpm + .5;
+	if (_DPI_DIFF < 0 && !(pi[p_safe]&(16|512))) {
+		// adding some virtual pixels make DPI rounding better
+		unsigned long x;
+#ifdef __MIN_PIXELS
+		if ((x = dpm*(*m)) > *w || ++x > *w) *m = (*w = x)/dpm + .5;
+#else
+		if ((x = dpm*(*m) + .5) > *w) *m = (*w = x)/dpm + .5;
+#endif
+	}
+#else
+	*m = (*w)/dpm;
+	unsigned long w1 = *w, m1 = *m+1;
+	double d = w1/(*m+0.) - dpm, d1 = dpm - w1/(*m+1.);
+	if (_DPI_DIFF < 0 && !(pi[p_safe]&(16|512))) {
+		// adding some virtual pixels make DPI rounding better
+		unsigned long w2 = dpm*m1;
+		double d2 = dpm - (w2+0.)/m1;
+		if (d2 < 0) d2 = -d2;
+		if (d2 < d1) {
+			d1 = d2;
+			w1 = w2;
+		} 
+#ifdef __MIN_PIXELS
+		    else
+#endif
+		{
+			d2 = dpm - (++w2+0.)/m1;
+			if (d2 < 0) d2 = -d2;
+			if (d2 < d1) {
+				d1 = d2;
+				w1 = w2;
+			}
+		}
+	}
+	if (d1 < d) {
+		*m = m1;
+		*w = w1;
+		// d = d1;
+	}
+#endif
+}
+
 // mode=1 - preset, mode=2 - force, 3 - before mon init
 static _short setScrSize(double dpmw,double dpmh,_short mode,unsigned long px,unsigned long py1){
 	unsigned long py=0, mpx = 0, mpy = 0;
@@ -1840,17 +1887,8 @@ static _short setScrSize(double dpmw,double dpmh,_short mode,unsigned long px,un
 		dpmw = w_dpmw;
 		dpmh = w_dpmh;
 	} else DPI_EQ(dpmh,dpmw); // keep w_dpmw, w_dpmh always compared
-	if (dpmw > 0 && dpmh > 0) {
-		mpx = px/dpmw + .5;
-		mpy = py/dpmh + .5;
-		// screen with extra pixels may be wrong. configurable
-		if (_DPI_DIFF < 0 && !(pi[p_safe]&(16|512))) {
-			// adding some virtual pixels make DPI rounding better
-			long x;
-			if ((x = dpmw*mpx + .5) > px) mpx = (px = x)/dpmw + .5;
-			if ((x = dpmh*mpy + .5) > py) mpy = (py = x)/dpmh + .5;
-		}
-	}
+	_round_dpi(&px,&mpx,dpmw);
+	_round_dpi(&py,&mpy,dpmh);
 	// check both - event-confirmed (vs. last) and last (vs. silent failure) sizes
 	// set twice if unsure
 	if (px != w_width || py != w_height
