@@ -40,6 +40,9 @@
 #include <X11/extensions/Xrandr.h>
 #endif
 
+// untested. disable
+#undef XI_GestureSwipeBegin
+
 #include "../config.h"
 
 #include "structs.h"
@@ -82,7 +85,8 @@ char **exec_cmd;
 
 int Xkb_sync = 3;
 int no_lock = 0;
-int swipe_fingers = 2;
+int swipe_fingers0 = 2;
+int swipe_fingers;
 #ifdef CACHE_PIX
 int cache_pix = 1;
 #endif
@@ -482,6 +486,25 @@ ret:
 	return ret;
 }
 
+// disable gestures emulation if present in XI
+static void gest(int devid){
+#if defined(XI_GestureSwipeBegin) && defined(XIGestureClass) && defined(GESTURES_USE)
+	static int devid_gest_chk = 0;
+	if (devid == devid_gest_chk) return;
+	devid_gest_chk = devid;
+	if (!swipe_fingers0) return;
+	swipe_fingers = 0;
+#undef e
+#define e ((XIGestureClassInfo*)cl)
+	XIINF_D(devid) {
+		CLINF() if (cl->type == XIGestureClass
+		    && e->num_touches == swipe_fingers0
+		    ) return;
+	}
+	swipe_fingers = swipe_fingers0;
+#endif
+}
+
 _ushort good_abs;
 static _ushort findAbsXY(unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2){
 	_ushort m;
@@ -610,7 +633,7 @@ int main(int argc, char **argv)
 #endif
 		"4-disable motion events"
 	},
-	{ 'G', IAM ".gestures", 1, 0, &swipe_fingers, ""
+	{ 'G', IAM ".gestures", 1, 0, &swipe_fingers0, ""
 #ifdef GESTURES_EMULATE
 	"swipe fingers (0=disabled)"
 #ifdef MULTITOUCH
@@ -755,6 +778,7 @@ stop_argv:
     XrmDestroyDatabase(xrm);
   }
   XFree(rs);
+  swipe_fingers = swipe_fingers0;
 
       Atom wm_protocols[]={
 	_atom("WM_DELETE_WINDOW"),
@@ -1077,14 +1101,12 @@ re_crts:
 	XISetMask(mask.mask, XI_TouchEnd);
 
 	XISetMask(mask.mask, XI_DeviceChanged);
-#if 0 && defined(XI_GestureSwipeBegin) && defined(GESTURES_USE)
+#if defined(XI_GestureSwipeBegin) && defined(GESTURES_USE)
 	if (ximinor > 3 || ximajor > 2) {
 		XISetMask(mask.mask, XI_GestureSwipeBegin);
 		XISetMask(mask.mask, XI_GestureSwipeUpdate);
 		XISetMask(mask.mask, XI_GestureSwipeEnd);
 	}
-#else
-#undef XI_GestureSwipeBegin
 #endif
 	XISelectEvents(display, win, &mask, 1);
       } else
@@ -1144,6 +1166,9 @@ _remapped:
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
 				if (e->sourceid != e->deviceid && DeviceIdMask == XIAllDevices) goto evfree;
+#if defined(XI_GestureSwipeBegin) && defined(GESTURES_USE)
+				gest(e->sourceid);
+#endif
 				if (use_pressure)
 				    ez = (abs3(e->sourceid)
 					&& e->valuators.mask_len > z_byte
@@ -1206,7 +1231,7 @@ _remapped:
 				break;
 			    case XI_GestureSwipeEnd:
 				fprintf(stderr,"XI_GestureSwipeEnd\n");
-#if 0
+#if 1
 			    {
 				if (e->flags&XIGestureSwipeEventCancelled) break;
 				int x = e->delta_x, y = e->delta_y, x1;
@@ -1216,7 +1241,7 @@ _remapped:
 				else if (x > 0) bx=6;
 				if (y < 0) {y=-y; by=5;}
 				else if (y > 0) by=4;
-				if (x < y) {bx = by;x1=x;x=y;y=x1}
+				if (x < y) {bx = by;x1=x;x=y;y=x1;}
 				//else if (x == y) break;
 				if ((y<<2) > x) break;
 				if (!bx) _hide(sig[bx]);
