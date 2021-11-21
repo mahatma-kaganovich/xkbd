@@ -2880,7 +2880,6 @@ static void _scr_size(){
 		oldShowPtr |= 8|16;
 	}
 
-#if _w_screen
 	if (w_width == minf0.width && w_height == minf0.height && w_mwidth == minf0.mwidth && w_mheight == minf0.mheight) {
 		_wait_mask &= ~_w_screen;
 		dpm0w = w_dpmw;
@@ -2891,11 +2890,6 @@ static void _scr_size(){
 		DPI_EQ(dpm0w,dpm0h);
 		if ((_wait_mask & _w_screen) && w_width == minf0.width && w_height == minf0.height && !_DPI_CH(dpm0w, dpm0h, w_dpmw, w_dpmh, 0)) _wait_mask &= ~_w_screen;
 	}
-#else
-	dpm0w = minf0.mwidth ? (.0+minf0.width)/minf0.mwidth : 0;
-	dpm0h = minf0.mheight ? (.0+minf0.height)/minf0.mheight : 0;
-	DPI_EQ(dpm0w,dpm0h);
-#endif
 }
 #endif
 
