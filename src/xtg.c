@@ -165,7 +165,6 @@ int xiopcode=0, xfopcode=0, xfevent=-100;
 Atom aFloat,aMatrix,aABS,aDevMon;
 XRRScreenResources *xrrr = NULL;
 _short showPtr, oldShowPtr = 0, curShow;
-_short __init = 1;
 int floatFmt = sizeof(float) << 3;
 int atomFmt = sizeof(Atom) << 3;
 int winFmt = sizeof(Window) << 3;
@@ -179,7 +178,8 @@ _short useRawTouch = 0, useRawButton = 0;
 unsigned long w_width = 0, w_height = 0, w_mwidth = 0, w_mheight = 0;
 double w_dpmh = 0, w_dpmw = 0;
 #define _w_none (_short)(1)
-#define _w_screen (_short)(1<<1)
+//#define _w_screen (_short)(1<<1)
+#define _w_screen 0
 #define _w_init (_short)(1<<2)
 #define _w_pan (_short)(1<<3)
 _short _wait_mask = _w_none|_w_init;
@@ -1414,7 +1414,7 @@ static void _pr_get(_short r){
 	Atom save = a_xrp_save[prI];
 	Atom type = type_xrp[prI];
 	_short _save = !(pi[p_safe]&2048);
-	_short _init = __init && !pr->en;
+	_short _init = (_wait_mask&_w_init) && !pr->en;
 	_xrp_t v;
 	if (!xrGetProp(prop,type,&v,1,0)) goto err;
 //	if (type == XA_ATOM) DBG("get %s %s = %s",natom(0,minf->name),natom(1,prop),natom(2,v.a));
@@ -2460,7 +2460,7 @@ static void getHierarchy(){
 		mTouch = useRawTouch ? ximaskRaw : ximaskTouch;
 		mButton = useRawButton ? ximaskRaw : ximaskButton;
 
-		if (__init) {
+		if ((_wait_mask&_w_init)) {
 			XIDeleteProperty(dpy,devid,aABS);
 		}
 		switch (d2->use) {
@@ -2497,7 +2497,7 @@ static void getHierarchy(){
 		}
 		type1 |= xiClasses(d2->classes,d2->num_classes);
 #ifdef USE_EVDEV
-		if (_classes_unsafe && (type1&o_absolute) && !__init) {
+		if (_classes_unsafe && (type1&o_absolute) && !(_wait_mask&_w_init)) {
 			_add_input(type|=type1);
 			// repeat with evdev ABS
 			xiClasses(d2->classes,d2->num_classes);
@@ -2685,7 +2685,7 @@ busy:
 		XIChangeHierarchy(dpy, (void*)&cm, 1);
 	}
 	//_ungrabX();
-	if (!__init) forceUngrab();
+	if (!(_wait_mask&_w_init)) forceUngrab();
 	XIFreeDeviceInfo(info2);
 	if (pi[p_safe]&8) XFixesShowCursor(dpy,root);
 	tdevs -= tdevs2;
@@ -2796,10 +2796,7 @@ repeat:
 		devid = 0;
 		fixGeometry();
 		xrPropFlush();
-		if (__init) {
-			__init = 0;
-			_wait_mask &= ~_w_init;
-		}
+		_wait_mask &= ~_w_init;
 	}
 	// "Hide" must be first!
 	// but prefer to filter error to invisible start
@@ -2883,6 +2880,7 @@ static void _scr_size(){
 		oldShowPtr |= 8|16;
 	}
 
+#if _w_screen
 	if (w_width == minf0.width && w_height == minf0.height && w_mwidth == minf0.mwidth && w_mheight == minf0.mheight) {
 		_wait_mask &= ~_w_screen;
 		dpm0w = w_dpmw;
@@ -2893,6 +2891,11 @@ static void _scr_size(){
 		DPI_EQ(dpm0w,dpm0h);
 		if ((_wait_mask & _w_screen) && w_width == minf0.width && w_height == minf0.height && !_DPI_CH(dpm0w, dpm0h, w_dpmw, w_dpmh, 0)) _wait_mask &= ~_w_screen;
 	}
+#else
+	dpm0w = minf0.mwidth ? (.0+minf0.width)/minf0.mwidth : 0;
+	dpm0h = minf0.mheight ? (.0+minf0.height)/minf0.mheight : 0;
+	DPI_EQ(dpm0w,dpm0h);
+#endif
 }
 #endif
 
@@ -3431,11 +3434,7 @@ help:
 	init();
 	printGrp();
 	getPropWin1();
-#ifdef XTG
-	while (_wait_mask) {
-#else
 	while (1) {
-#endif
 		do {
 			if (win1 != win) getWinGrp();
 			else if (grp1 != grp) setWinGrp();
@@ -3453,6 +3452,7 @@ ev:
 		}
 ev2:
 		if (showPtr != oldShowPtr) setShowCursor();
+		if (!_wait_mask) break;
 		forceUngrab();
 #endif
 		XNextEvent(dpy, &ev);
