@@ -1366,6 +1366,7 @@ evfree:
 		ww = wins;
 		while (nw--) {
 			if (XGetWindowAttributes(display, *ww,&wa) &&
+				wa.map_state == IsViewable &&
 				wa.screen == wa0.screen &&
 				wa.x<=x && wa.y<y && wa.width>=width && wa.height>height &&
 				wa.x+wa.width>x && wa.y+wa.height>y

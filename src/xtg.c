@@ -1,5 +1,5 @@
 /*
-	xtg v1.44 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.45 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -38,8 +38,7 @@
 //#define USE_EVDEV
 //#undef USE_EVDEV
 // todo
-#define _BACKLIGHT
-//#undef _BACKLIGHT
+#define _BACKLIGHT 2
 #define PROP_FMT
 #undef PROP_FMT
 //#define TRACK_MATRIX
@@ -111,9 +110,15 @@
 #endif
 
 typedef uint_fast8_t _short;
-typedef uint_fast32_t _int;
+typedef uint_fast32_t _uint;
 
-
+#if 0
+typedef int _int;
+#define fint "%i"
+#else
+typedef long _int;
+#define fint "%li"
+#endif
 
 
 Display *dpy = 0;
@@ -156,8 +161,8 @@ XEvent ev;
 unsigned char *ret;
 
 // min/max: X11/Xlibint.h
-static inline long _min(long x,long y){ return x<y?x:y; }
-static inline long _max(long x,long y){ return x>y?x:y; }
+static inline _int _min(_int x,_int y){ return x<y?x:y; }
+static inline _int _max(_int x,_int y){ return x>y?x:y; }
 
 #ifdef XTG
 int devid = 0;
@@ -175,7 +180,7 @@ _short useRawTouch = 0, useRawButton = 0;
 #define _DPI_DIFF -1
 #define _DPI_CH(w0,h0,w,h,alt) ((alt) && (_DPI_DIFF<0 || (abs((w)-(w0))*254+.5>_DPI_DIFF || abs((h)-(h0))*254+.5>_DPI_DIFF)))
 
-unsigned long w_width = 0, w_height = 0, w_mwidth = 0, w_mheight = 0;
+_int w_width = 0, w_height = 0, w_mwidth = 0, w_mheight = 0;
 double w_dpmh = 0, w_dpmw = 0;
 #define _w_none (_short)(1)
 //#define _w_screen (_short)(1<<1)
@@ -206,7 +211,7 @@ XIEventMask ximask[] = {{ .deviceid = XIAllDevices, .mask_len = MASK_LEN, .mask 
 //			 { .deviceid = XIAllMasterDevices, .mask_len = MASK_LEN, .mask = ximaskRoot }
 			};
 //#define MASK(m) ((void*)ximask[0].mask=m)
-#ifdef _BACKLIGHT
+#if _BACKLIGHT == 1
 xiMask ximaskWin0 = {};
 XIEventMask ximaskWin[] = {{ .deviceid = XIAllMasterDevices, .mask_len = MASK_LEN, .mask = ximaskWin0 },
 //			 { .deviceid = XIAllDevices, .mask_len = MASK_LEN, .mask = ximaskWin0 }
@@ -256,11 +261,11 @@ Time timeSkip = 0, timeHold = 0;
 #define BAD_BUTTON END_BIT
 typedef struct _TouchTree {
 	void *gg[8];
-	_int k;
+	_uint k;
 	_short g;
 } TouchTree;
 TouchTree bmap = {};
-static void SET_BMAP(_int i, _short x, _int key){
+static void SET_BMAP(_uint i, _short x, _uint key){
 	static TouchTree *bmap_ = &bmap;;
 	TouchTree **m = &bmap_;
 	for(; i; i>>=3) {
@@ -272,7 +277,7 @@ static void SET_BMAP(_int i, _short x, _int key){
 }
 
 static void opendpy();
-static void _print_bmap(_int x, _short n, TouchTree *m) {
+static void _print_bmap(_uint x, _short n, TouchTree *m) {
 	_short i;
 	unsigned int l = m->g;
 	if (l) printf(" 0%o:%s%x",x,l>9?"0x":"",l);
@@ -383,7 +388,7 @@ char *ph[MAX_PAR] = {
 	"		9(+512) keep dpi different x & y (image panned non-aspected)\n"
 	"		10(+1024) don't use cached input ABS\n"
 	"		11(+2048) try delete or not create unused (saved) property\n"
-#ifdef _BACKLIGHT
+#if _BACKLIGHT
 	"		12(+4096) track backlight-controlled monitors and off when empty (under construction)\n"
 #endif	
 #ifdef XSS
@@ -540,7 +545,7 @@ typedef union _xrp_ {
 typedef enum {
 	xrp_non_desktop,
 	xrp_sm,
-#ifdef _BACKLIGHT
+#if _BACKLIGHT
 	xrp_bl,
 #endif
 #ifdef XSS
@@ -553,7 +558,7 @@ typedef enum {
 char *an_xrp[xrp_cnt] = {
 	RR_PROPERTY_NON_DESKTOP,
 	"scaling mode",
-#ifdef _BACKLIGHT
+#if _BACKLIGHT
 	RR_PROPERTY_BACKLIGHT,
 #endif
 #ifdef XSS
@@ -565,7 +570,7 @@ char *an_xrp[xrp_cnt] = {
 Atom type_xrp[xrp_cnt] = {
 	XA_INTEGER,
 	XA_ATOM,
-#ifdef _BACKLIGHT
+#if _BACKLIGHT
 	XA_INTEGER,
 #endif
 #ifdef XSS
@@ -644,7 +649,7 @@ static void winWMState(){
 #ifdef XTG
 
 _short grabcnt = 0;
-//_int grabserial = -1;
+//_uint grabserial = -1;
 static void _Xgrab(){
 //		grabserial=(grabserial+1)&0xffff;
 		XGrabServer(dpy);
@@ -717,7 +722,7 @@ typedef struct _dinf {
 #define z_start 3
 
 
-static inline double _valuate(double val, abs_t *a, unsigned long width) {
+static inline double _valuate(double val, abs_t *a, _int width) {
 	return (a->max_min > 0) ? (val - a->min)*width/a->max_min : val;
 }
 
@@ -736,7 +741,7 @@ static inline double _valuate(double val, abs_t *a, unsigned long width) {
 
 #define NINPUT_STEP 4
 dinf_t *inputs = NULL, *inputs1, *dinf, *dinf1, *dinf2, *dinf_last = NULL;
-_int ninput = 0, ninput1 = 0;
+_uint ninput = 0, ninput1 = 0;
 #define DINF(x) for(dinf=inputs; (dinf!=dinf_last); dinf++) if (x)
 
 typedef struct _pinf {
@@ -753,8 +758,8 @@ xrp_t prI;
 // width1/height1: -||- not rotated (for panning)
 typedef struct _minf {
 	_short type;
-	unsigned int x,y,x2,y2,width,height,width0,height0,width1,height1;
-	unsigned long mwidth,mheight,mwidth1,mheight1;
+	_int x,y,x2,y2,width,height,width0,height0,width1,height1;
+	_int mwidth,mheight,mwidth1,mheight1;
 	RROutput out;
 	RRCrtc crt;
 	RRMode mode;
@@ -763,9 +768,13 @@ typedef struct _minf {
 	Atom name;
 	_short connection;
 	pinf_t prop[xrp_cnt];
-#ifdef _BACKLIGHT
-	Window win;
+#if _BACKLIGHT == 1
 	_short obscured,entered;
+	Window win;
+#endif
+#if _BACKLIGHT == 2
+	unsigned long obscured;
+	_short entered;
 #endif
 } minf_t;
 
@@ -1172,7 +1181,7 @@ static void map_to(){
 	if (xiSetProp(aMatrix,aFloat,&matrix,9,2)!=1) return;
 	memcpy(dinf->matrix,matrix,sizeof(matrix));
 	// wacom touch + pen sometimes changed paired, confused me
-	DBG("input %i map_to %ux%u %ux%u rotation 0x%x from %ux%u -> m=%i w=%f h=%f",devid,minf->x,minf->y,minf->height1,minf->height1,minf->rotation,minf0.width1,minf0.height1,m,w,h);
+	DBG("input %i map_to "fint"x"fint" "fint"x"fint" rotation 0x%x from "fint"x"fint" -> m=%i w=%f h=%f",devid,minf->x,minf->y,minf->height1,minf->height1,minf->rotation,minf0.width1,minf0.height1,m,w,h);
 	//XFlush(dpy);
 	//XSync(dpy,False);
 #else
@@ -1230,7 +1239,122 @@ int noutput = 0;
 
 static void pr_set(xrp_t prop,_short state);
 
-#ifdef _BACKLIGHT
+#if _BACKLIGHT
+
+#if _BACKLIGHT == 2
+
+Window *wins = NULL, *winf, *wins_last = NULL;
+unsigned int nwins;
+XWindowAttributes wa1;
+#define WINS(x) for(winf=wins; winf!=wins_last; winf++) if (*winf != root && (x))
+
+// less difference to keep array or create/delete every time. keep!
+static void freeWins(){
+	_free(wins);
+	wins_last = NULL;
+	nwins = 0;
+}
+static void getWins(){
+	if (wins) goto OK;
+	Window rw, pw;
+	if (!XQueryTree(dpy, root, &rw, &pw, &wins, &nwins)) _free(wins);
+	if (!wins) {
+		freeWins();
+		return;
+	}
+OK:
+	wins_last = &wins[nwins];
+}
+#define WINS_ATTR() freeWins(); getWins(); while (wins_attr())
+
+static _short chWin(Window w){
+	if (ev.xany.window == root && (pi[p_safe]&4096)) {
+		getWins();
+		WINS(*winf == w) return 1;
+	}
+	return 0;
+}
+
+XConfigureEvent evconf = {};
+
+static void chBL(Window win,_int x,_int y,_int w,_int h, _short mode) {
+	if (!(pi[p_safe]&4096)) return;
+	minf_t *minf1; // recursive
+#define minf minf1
+	MINF_T2(o_active|o_backlight,o_active|o_backlight) {
+#undef minf
+		_short r = !(minf1->y >= y+h || minf1->y2 < y || minf1->x2 < x || minf1->x >= x+w);
+		switch (mode&0xf) {
+		    case 0: // add pointer
+			minf1->entered = r;
+			break;
+		    case 1: // del (?) pointer
+			minf1->entered = 0;
+			break;
+		    case 2: // add rectangle(s)
+			if (r) minf1->obscured++;
+			break;
+		    case 3: // del/rescan window(s)
+			if (!win) {
+#undef e
+#define e (ev.xconfigure)
+				if (e.type == ConfigureNotify && e.window != root && e.event == root) {
+					if (evconf.window == e.window) {
+						chBL(evconf.window,evconf.x,evconf.y,evconf.width,evconf.height,0x13);
+						chBL(e.window,e.x,e.y,e.width,e.height,0x12);
+						evconf = e;
+						break;
+					}
+					evconf = e;
+				}
+			} else {
+				if (r) minf1->obscured--;
+				evconf.window = None;
+				break;
+			}
+
+			// reset/rescan all
+			win = None;
+			MINF(1) minf->entered = minf->obscured = 0;
+			getWins();
+#if 1
+			_short ec = 0;
+			WINS(XGetWindowAttributes(dpy,*winf,&wa1) && wa1.map_state == IsViewable) {
+				if (evconf.window == *winf && evconf.x == wa1.x && evconf.y == wa1.y && evconf.width == wa1.width && evconf.height == wa1.height) ec=1;
+				chBL(*winf,wa1.x,wa1.y,wa1.width,wa1.height,0x12);
+			}
+			if (!ec) evconf.window = None;
+#else
+			WINS(*winf == evconf.window) {
+				chBL(e.window,e.x,e.y,e.width,e.height,0x12);
+			} else XGetWindowAttributes(dpy,*winf,&wa1) && wa1.map_state == IsViewable) {
+				chBL(*winf,wa1.x,wa1.y,wa1.width,wa1.height,0x12);
+			}
+#endif
+			if (wins) {
+				mode = 5;
+				break;
+			}
+			mode = 4;
+		    case 4: // fallback
+			minf1->entered = 0;
+			minf1->obscured = 1;
+			break;
+		}
+		minf = minf1;
+		if (!(mode&0x10)) pr_set(xrp_bl,!(minf->obscured || minf->entered));
+	}
+}
+
+//static void chBL2() {
+//	MINF_T2(o_active|o_backlight,o_active|o_backlight) {
+//		chBL1(2,2);
+//		DBG("==++ obscured %i entered %i",minf->obscured,minf->entered);
+//	}
+//}
+#endif
+
+#if _BACKLIGHT == 1
 static void chBL1(_short obscured, _short entered) {
 	if (obscured != 2) minf->obscured = obscured;
 	if (entered != 2) minf->entered = entered;
@@ -1238,12 +1362,14 @@ static void chBL1(_short obscured, _short entered) {
 }
 
 static void chBL(Window w, _short obscured, _short entered) {
+	if (w == root) return;
 //	MINF(minf->win == w && (minf->type&o_backlight)) {
 	MINF(minf->win == w) {
 		chBL1(obscured,entered);
 		break;
 	}
 }
+#endif
 
 #if 0
 #define __check_entered
@@ -1264,7 +1390,8 @@ static void checkEntered(){
 #endif
 
 
-static _short fixWin(Window win,unsigned long x,unsigned long y,unsigned long w,unsigned long h){
+#if _BACKLIGHT == 1
+static _short fixWin(Window win,_int x,_int y,_int w,_int h){
 	MINF(minf->win == win) goto found;
 	return 0;
 found:
@@ -1318,6 +1445,7 @@ static void simpleWin(_short mode) {
 }
 
 #endif
+#endif //_BACKLIGHT == 1
 
 RROutput prim0, prim;
 
@@ -1332,7 +1460,7 @@ static void _pr_free(_short err){
 }
 
 static void _minf_free(){
-#ifdef _BACKLIGHT
+#if _BACKLIGHT == 1
 	if (minf->win) {
 		XDestroyWindow(dpy,minf->win);
 		minf->win = 0;
@@ -1345,7 +1473,7 @@ static void _minf_free(){
 }
 
 static _short _pr_chk(_xrp_t *v){
-#ifdef _BACKLIGHT
+#if _BACKLIGHT
 	if (prI == xrp_bl && v->i == 0) return 1;
 #endif
 	XRRPropertyInfo *p = pr->p;
@@ -1401,7 +1529,7 @@ static void pr_set(xrp_t prop,_short state){
 static void _pr_get(_short r){
 	switch (prI) {
 	    case xrp_non_desktop: break;
-#ifdef _BACKLIGHT
+#if _BACKLIGHT
 	    case xrp_bl:
 		if (!(pi[p_safe]&4096)) return;
 		break;
@@ -1437,7 +1565,7 @@ static void _pr_get(_short r){
 		pr->vs[0] = pr->v1 = v;
 		pr->vs[1] = val_xrp[prI];
 		switch (prI) {
-#ifdef _BACKLIGHT
+#if _BACKLIGHT
 		    case xrp_bl:
 			pr->vs[1].i = pr->p->values[0];
 			break;
@@ -1457,7 +1585,7 @@ static void _pr_get(_short r){
 		saved = 1;
 	}
 	switch (prI) {
-#ifdef _BACKLIGHT
+#if _BACKLIGHT
 	    case xrp_bl: // prevent to saved Backlight 0
 		if (pr->vs[0].i == pr->p->values[0]) pr->vs[0].i = pr->p->values[1];
 		break;
@@ -1632,7 +1760,7 @@ static void xrMons0(){
 		minf->mwidth1 = minf->mwidth = oinf->mm_width;
 		minf->mheight1 = minf->mheight = oinf->mm_height;
 	}
-	unsigned long mwh25 = 0;
+	_int mwh25 = 0;
 	if (minf->mwidth && minf->mheight) {
 		minf->type |= o_msize;
 		mwh25 = minf->mwidth*25/minf->mheight;
@@ -1659,7 +1787,7 @@ static void xrMons0(){
 	m = m0x;
 	if (!m0x) m = m0;
 	else if (mwh25 && mwh25 != m0x->width*25/m0x->height)
-		DBG("WARNING: output %s has maximum [preferred] mode %ix%i not proportional to size in mm",oinf->name,m0x->width,m0x->height);
+		DBG("WARNING: output %s has maximum [preferred] mode %ux%u not proportional to size in mm",oinf->name,m0x->width,m0x->height);
 	if (!(pi[p_safe]&64)
 	    && !oinf->crtc
 	    && m
@@ -1715,7 +1843,7 @@ _on:
 			if (!minf->prop[xrp_non_desktop].v.i) non_desktop1++;
 		}
 	}
-#ifdef _BACKLIGHT
+#if _BACKLIGHT
 	if (minf->prop[xrp_bl].en) minf->type |= o_backlight;
 #endif
 
@@ -1762,8 +1890,8 @@ _on:
 		minf->mwidth = minf->mheight;
 		minf->mheight = i;
 	}
-	unsigned int x2 = minf->x + minf->width - 1;
-	unsigned int y2 = minf->y + minf->height - 1;
+	_int x2 = minf->x + minf->width - 1;
+	_int y2 = minf->y + minf->height - 1;
 	if (x2 != minf->x2 || y2 != minf->y2) {
 		minf->x2 = x2;
 		minf->y2 = y2;
@@ -1772,7 +1900,7 @@ _on:
 	if (minf->width && minf->height) minf->type |= o_size;
     }
     MINF_T(o_changed) {
-	oldShowPtr |= 16;
+	oldShowPtr |= 16|32;
 	DINF(dinf->mon && dinf->mon == minf->name) dinf->type |= o_changed;
     }
     if (!active && non_desktop)
@@ -1780,7 +1908,7 @@ _on:
     if (active && non_desktop1)
 	MINF(minf->prop[xrp_non_desktop].en && minf->prop[xrp_non_desktop].vs[0].i == 1)
 	    pr_set(xrp_non_desktop,0);
-#ifdef _BACKLIGHT
+#if _BACKLIGHT == 1
     if ((pi[p_safe]&4096)) {
 	MINF((minf->type & (o_active|o_backlight)) == (o_active|o_backlight) && minf->width && minf->height) {
 		if (!minf->win || (minf->type|o_changed)) {
@@ -1793,19 +1921,22 @@ _on:
 		oldShowPtr |= 16;
     }}
 #endif
+#if _BACKLIGHT == 2
+    if ((pi[p_safe]&4096))
+#endif
 ret: {}
 //    if (_y > minf0.height) fixGeometry();
 //    _ungrabX(); // forceUngrab() instead
 }
 
 //#define __MIN_PIXELS
-static inline void _round_dpi(unsigned long *w,unsigned long *m,double dpm) {
+static inline void _round_dpi(_int *w,_int *m,double dpm) {
 	if (!(dpm > 0)) return;
 #ifdef MINIMAL
 	*m = (*w)/dpm + .5;
 	if (_DPI_DIFF < 0 && !(pi[p_safe]&(16|512))) {
 		// adding some virtual pixels make DPI rounding better
-		unsigned long x;
+		_int x;
 #ifdef __MIN_PIXELS
 		if ((x = dpm*(*m)) > *w || ++x > *w) *m = (*w = x)/dpm + .5;
 #else
@@ -1814,11 +1945,11 @@ static inline void _round_dpi(unsigned long *w,unsigned long *m,double dpm) {
 	}
 #else
 	*m = (*w)/dpm;
-	unsigned long w1 = *w, m1 = *m+1;
+	_int w1 = *w, m1 = *m+1;
 	double d = w1/(*m+0.) - dpm, d1 = dpm - w1/(*m+1.);
 	if (_DPI_DIFF < 0 && !(pi[p_safe]&(16|512))) {
 		// adding some virtual pixels make DPI rounding better
-		unsigned long w2 = dpm*m1;
+		_int w2 = dpm*m1;
 		double d2 = dpm - (w2+0.)/m1;
 		if (d2 < 0) d2 = -d2;
 		if (d2 < d1) {
@@ -1846,8 +1977,8 @@ static inline void _round_dpi(unsigned long *w,unsigned long *m,double dpm) {
 }
 
 // mode=1 - preset, mode=2 - force, 3 - before mon init
-static _short setScrSize(double dpmw,double dpmh,_short mode,unsigned long px,unsigned long py1){
-	unsigned long py=0, mpx = 0, mpy = 0;
+static _short setScrSize(double dpmw,double dpmh,_short mode,_int px,_int py1){
+	_int py=0, mpx = 0, mpy = 0;
 	if (mode == 3) {
 		px = _max(px,w_width);
 		py = w_height;
@@ -1902,7 +2033,7 @@ static _short setScrSize(double dpmw,double dpmh,_short mode,unsigned long px,un
 		    || _DPI_CH(dpmw,dpmh,w_dpmw,w_dpmh,mpx != w_mwidth || mpy != w_mheight)
 		)
 		) {
-		DBG("set screen size(%i) %lux%lu / %lux%lumm - %.1f %.1fdpi",mode,px,py,mpx,mpy,INCH*px/mpx,INCH*py/mpy);
+		DBG("set screen size(%i) "fint"x"fint" / "fint"x"fint"mm - %.1f %.1fdpi",mode,px,py,mpx,mpy,INCH*px/mpx,INCH*py/mpy);
 #ifndef MINIMAL
 		XFlush(dpy);
 		XSync(dpy,False);
@@ -1931,13 +2062,13 @@ static _short setScrSize(double dpmw,double dpmh,_short mode,unsigned long px,un
 	return 0;
 }
 
-unsigned int pan_x,pan_y,pan_cnt;
+_int pan_x,pan_y,pan_cnt;
 static void _pan(minf_t *m) {
 	if (pi[p_safe]&64 || !m || !m->crt) return;
 	_short ch = 0;
 	if (pi[p_safe]&16384) {
 		if (m->x != 0 || m->y != pan_y) {
-			DBG("XRRSetCrtcConfig() move crtc %lu %u,%u -> %u,%u",m->crt,m->x,m->y,0,pan_y);
+			DBG("XRRSetCrtcConfig() move crtc %lu "fint","fint" -> "fint","fint"",m->crt,m->x,m->y,(_int)0,pan_y);
 			if (XRRSetCrtcConfig(dpy,xrrr,m->crt,CurrentTime,0,pan_y,m->mode,m->rotation,&m->out,1)==Success) {
 				ch = 1;
 				//XFlush(dpy);
@@ -2027,7 +2158,7 @@ static void fixGeometry(){
 	}
 find1:
 	minf1 = NULL;
-	_int nm = 0;
+	_uint nm = 0;
 	MINF_T(o_active) {
 		nm++;
 		if (!minf2) DINF(dinf->mon == minf->name){
@@ -2124,18 +2255,18 @@ static Bool filterTouch(Display *dpy1, XEvent *ev1, XPointer arg){
 }
 
 int xtestPtr, xtestPtr0;
-_int tdevs = 0, tdevs2=0;
+_uint tdevs = 0, tdevs2=0;
 //#define floating (pi[p_floating]==1)
 
 
-_int ninput1_;
+_uint ninput1_;
 XIDeviceInfo *d2;
 // remember only devices on demand
 static void _add_input(_short t){
 	if (dinf1) goto ex;
-	_int i = ninput1_++;
+	_uint i = ninput1_++;
 	if (ninput1_ > ninput1 || !inputs1) {
-		_int n = i + NINPUT_STEP;
+		_uint n = i + NINPUT_STEP;
 		dinf_t *p = malloc(n*sizeof(dinf_t));
 		if (inputs1) {
 			memcpy(p,inputs1,i*sizeof(dinf_t));
@@ -2798,6 +2929,19 @@ repeat:
 		xrPropFlush();
 		_wait_mask &= ~_w_init;
 	}
+	if (oldShowPtr&64) {
+		// reload windows list. sometimes
+		oldShowPtr ^= 64;
+#if _BACKLIGHT == 2 && defined(XTG)
+		freeWins();
+#endif
+	}
+	if (oldShowPtr&32) {
+		oldShowPtr ^= 32;
+#if _BACKLIGHT == 2 && defined(XTG)
+		chBL(0,0,0,0,0,3);
+#endif
+	}
 	// "Hide" must be first!
 	// but prefer to filter error to invisible start
 	if ((oldShowPtr^showPtr)&1) {
@@ -2819,7 +2963,7 @@ repeat:
 	goto repeat0;
 }
 
-static void _set_bmap(_int g, _short i, _int j){
+static void _set_bmap(_uint g, _short i, _uint j){
 	switch (i) {
 	    case 1:
 		SET_BMAP(g|(3<<j),i,0);
@@ -2835,10 +2979,10 @@ static void _set_bmap(_int g, _short i, _int j){
 }
 
 static void initmap(){
-	_int i,j;
+	_uint i,j;
 	for(i=1; i<8; i++){
-		_int g = 0;
-		_int j3 = 0;
+		_uint g = 0;
+		_uint j3 = 0;
 		for (j=1; j<=pi[p_maxfingers]; j++) {
 			j3 += 3;
 			g = (g<<3)|i;
@@ -2846,7 +2990,7 @@ static void initmap(){
 			if (j==1) continue;
 			if (i==BUTTON_DND) continue;
 			if (i<4 ? (j>2) : ((j-1)<pi[p_minfingers])) continue;
-//			_int g1 = BUTTON_DND, g2 = 7, k;
+//			_uint g1 = BUTTON_DND, g2 = 7, k;
 //			for (k=0; k<j; k++) {
 //				_set_bmap((g & ~g2)|g1,i,j3);
 //				g1 <<= 3;
@@ -3073,7 +3217,22 @@ static void init(){
 		strcpy(&s[10],an_xrp[prI]);
 		a_xrp_save[prI] = XInternAtom(dpy, s, False);
 	}
-#ifdef _BACKLIGHT
+#if _BACKLIGHT == 2
+	if (pi[p_safe]&4096) {
+//		evmask |= ExposureMask;
+		XISetMask(ximask0, XI_Leave);
+		XISetMask(ximask0, XI_Enter);
+#if 0
+		XGCValues gcval;
+		//Bool gexp = 1;
+		//GC gc = XCreateGC(dpy, root, GCGraphicsExposures, &gcval);
+		//XChangeGC(dpy,gc,GCGraphicsExposures,&gexp);
+		//XSetGraphicsExposures(dpy, gc, True);
+		XSetGraphicsExposures(dpy, XCreateGC(dpy, root, 0, &gcval), True);
+#endif
+	}
+#endif
+#if _BACKLIGHT == 1
 	XISetMask(ximaskWin0, XI_Leave);
 	XISetMask(ximaskWin0, XI_Enter);
 //	XISetMask(ximaskWin0, XI_ButtonPress);
@@ -3321,8 +3480,8 @@ int main(int argc, char **argv){
 	_short i;
 	int opt;
 	_short tt,g,bx,by;
-	_int k;
-	_int vl;
+	_uint k;
+	_uint vl;
 	int detail;
 	double x1,y1,z1,xx,yy,zz,res;
 	TouchTree *m;
@@ -3687,7 +3846,7 @@ z_noise:
 				    case XI_HierarchyChanged:
 					oldShowPtr |= 2;
 					continue;
-#ifdef _BACKLIGHT
+#if _BACKLIGHT
 #undef e
 #define e ((XIEnterEvent*)ev.xcookie.data)
 				    case XI_FocusIn:
@@ -3708,7 +3867,11 @@ z_noise:
 						    case XINotifyNormal:
 						    case XINotifyWhileGrabbed:
 #endif
+#if _BACKLIGHT == 1
 							chBL(e->event,2,ev.xcookie.evtype==XI_Enter);
+#else
+							chBL(None,e->root_x,e->root_y,1,1,ev.xcookie.evtype!=XI_Enter);
+#endif
 							break;
 						}
 						xiFreeE();
@@ -3736,7 +3899,7 @@ touch_common:
 				res = resX;
 				tt = 0;
 				m = &bmap;
-				g = ((int)x2 <= minf2->x) ? BUTTON_RIGHT : ((int)x2 >= minf2->x2) ? BUTTON_LEFT : ((int)y2 <= minf2->y) ? BUTTON_UP : ((int)y2 >= minf2->y2) ? BUTTON_DOWN : 0;
+				g = ((_int)x2 <= minf2->x) ? BUTTON_RIGHT : ((_int)x2 >= minf2->x2) ? BUTTON_LEFT : ((_int)y2 <= minf2->y) ? BUTTON_UP : ((_int)y2 >= minf2->y2) ? BUTTON_DOWN : 0;
 				if (g) tt |= PH_BORDER;
 				for(i=P; i!=N; i=TOUCH_N(i)){
 					Touch *t1 = &touch[i];
@@ -3978,10 +4141,63 @@ evfree1:
 				rul2 = NULL;
 			}
 			break;
-		    case DestroyNotify:
-			if (win1 == ev.xany.window) win1 = None;
+#if _BACKLIGHT == 2
+#undef e
+#define e (ev.xcreatewindow)
+		    case CreateNotify:
+			if (e.parent == root) oldShowPtr |= 64;
 			break;
+#undef e
+#define e (ev.xdestroywindow)
+		    case DestroyNotify:
+			if (evconf.window == e.window) {
+				evconf.window = None;
+				oldShowPtr |= 32|64;
+			} else if (chWin(e.window)) oldShowPtr |= 64;
+			break;
+		    case UnmapNotify:
+			if (evconf.window == e.window) {
+				evconf.window = None;
+				oldShowPtr |= 32|64;
+			}
+			break;
+#undef e
+#define e (ev.xreparent)
+		    case ReparentNotify:
+			if (e.parent == root || chWin(e.window)) oldShowPtr |= 32;
+			break;
+#if 0
+#undef e
+#define e (ev.xunmap)
+		    case UnmapNotify:
+			// vs. expose
+			//if (chWin(e.window)) oldShowPtr |= 32;
+			break;
+#undef e
+#define e (ev.xmap)
+		    case MapNotify:
+			// vs. Configure
+			//if (chWin(e.window)) oldShowPtr |= 32;
+			break;
+		    case NoExpose:
+		    case GraphicsExpose:
+		    case Expose:
+			if (ev.any.window != root) break;
+			// root redraw: empty area: rescan
+			oldShowPtr |= 32;
+			break;
+#endif // 0
+#endif // _BACKLIGHT == 2
 /*
+#undef e
+#define e (ev.xgraphicsexpose)
+		    case GraphicsExpose:
+			break;
+#undef e
+#define e (ev.xnoexpose)
+		    case NoExpose:
+			DBG("noexpose %i",e.drawable == root);
+			break;
 		    case UnmapNotify:
 		    case MapNotify:
 		    case ReparentNotify:
@@ -3989,19 +4205,25 @@ evfree1:
 			break;
 */
 #ifdef XTG
-#ifdef _BACKLIGHT
+#if _BACKLIGHT == 1
 #undef e
 #define e (ev.xvisibility)
 		    case VisibilityNotify:
 			chBL(e.window,e.state != VisibilityUnobscured,2);
 			goto ev;
+#endif // _BACKLIGHT == 1
+#if _BACKLIGHT
 #if 0
 #undef e
 #define e (ev.xcrossing)
 		    case EnterNotify:
 		    case LeaveNotify:
 			//TIME(T,e.time);
+#if _BACKLIGHT == 1
 			chBL(e.window,2,ev.type == EnterNotify);
+#else
+			chBL(None,e.x_root,e.y_root,1,1,ev.type != EnterNotify);
+#endif
 			goto ev;
 #undef e
 #define e (ev.xbutton)
@@ -4036,11 +4258,19 @@ evfree1:
 #endif
 				break;
 			}
-#ifdef _BACKLIGHT
+#if _BACKLIGHT == 1
 			if (e.override_redirect) {
 			    if (fixWin(e.window,e.x,e.y,e.width,e.height)) break;
 			}
-#endif
+#endif // _BACKLIGHT == 1
+#if _BACKLIGHT == 2
+			// todo: compare with monitors and only if intersect empty
+			if (chWin(e.window)) oldShowPtr |= 32;
+			else if (evconf.window == e.window) {
+				evconf.window = None;
+				oldShowPtr |= 32;
+			}
+#endif // _BACKLIGHT == 2
 #ifdef XSS
 			if (!(pi[p_safe]&8192)) {
 #ifndef MINIMAL
