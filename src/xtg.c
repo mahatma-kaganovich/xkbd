@@ -1419,9 +1419,6 @@ static void setMapped(Window w,_short st) {
 			oldShowPtr |= 64|32;
 		}
 		return;
-	    case ReparentNotify:
-		st = (ev.xreparent.parent == root);
-		break;
 	}
 	_short st1 = wa1Mapped(w);
 	if (!wa1.root) {
