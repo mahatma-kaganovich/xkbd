@@ -109,6 +109,16 @@
 #define DBG(txt, args... ) /* nothing */
 #endif
 
+#if 0
+#define RECT_EQ(a,b) ((a).x == (b).x && (a).y == (b).y && (a).width == (b).width && (a).height == (b).height && (a).border_width == (b).border_width)
+#define RECT_MV(a,b) {(a).x = (b).x; (a).y = (b).y; (a).width = (b).width; (a).height = (b).height; (a).border_width = (b).border_width;}
+#define RECT(a) a.x-(a).border_width,a.y-(a).border_width,a.width+((a).border_width<<1),a.height+((a).border_width<<1)
+#else
+#define RECT_EQ(a,b) ((a).x == (b).x && (a).y == (b).y && (a).width == (b).width && (a).height == (b).height)
+#define RECT_MV(a,b) {(a).x = (b).x; (a).y = (b).y; (a).width = (b).width; (a).height = (b).height;}
+#define RECT(a) a.x,a.y,a.width,a.height
+#endif
+
 typedef uint_fast8_t _short;
 typedef uint_fast32_t _uint;
 
@@ -1260,7 +1270,7 @@ static void freeWins(){
 static void getWins(){
 	if (wins) goto OK;
 	Window rw, pw;
-		DBG("rescan XQueryTree() event %i",ev.type);
+	//DBG("rescan XQueryTree() event %i",ev.type);
 	if (!XQueryTree(dpy, root, &rw, &pw, &wins, &nwins)) _free(wins);
 	if (!wins) {
 		freeWins();
@@ -1286,6 +1296,8 @@ static _short wa1Mapped(Window w){
 };
 
 XConfigureEvent evconf = {};
+Window winMapped = None;
+_short stMapped = 0;
 
 static void chBL0(){
 	pr_set(xrp_bl,!(minf->obscured || minf->entered));
@@ -1319,20 +1331,27 @@ static void chBL(Window win,_int x,_int y,_int w,_int h, _short mode) {
 			win = None;
 			MINF(1) minf->entered = minf->obscured = 0;
 			getWins();
-			DBG("rescan XGetWindowAttributes() event %i",ev.type);
-#if 1
+			//DBG("rescan XGetWindowAttributes() event %i",ev.type);
+#if MINIMAL
+			WINS(wa1Mapped(*winf)) chBL(*winf,RECT(wa1),0x12);
+#else
+			// optimized
 			_short ec = 0;
-			WINS(wa1Mapped(*winf)) {
-				if (evconf.window == *winf && evconf.x == wa1.x && evconf.y == wa1.y && evconf.width == wa1.width && evconf.height == wa1.height) ec=1;
-				chBL(*winf,wa1.x,wa1.y,wa1.width,wa1.height,0x12);
+			WINS(1) {
+#if 1
+				if (*winf == evconf.window && *winf == winMapped) {
+					chBL(evconf.window,RECT(evconf),0x12);
+					ec = 1;
+					continue;
+				}
+#endif
+				_short st1 = wa1Mapped(*winf);
+				if (st1) chBL(*winf,RECT(wa1),0x12);
+				// paranoid check
+				if (evconf.window == *winf && RECT_EQ(evconf,wa1)) ec=1;
+				if (*winf == winMapped && st1 != stMapped) winMapped = None;
 			}
 			if (!ec) evconf.window = None;
-#else
-			WINS(*winf == evconf.window) {
-				chBL(e.window,e.x,e.y,e.width,e.height,0x12);
-			} else wa1Mapped(*winf)) {
-				chBL(*winf,wa1.x,wa1.y,wa1.width,wa1.height,0x12);
-			}
 #endif
 			if (wins) {
 				mode = 5;
@@ -1349,15 +1368,9 @@ static void chBL(Window win,_int x,_int y,_int w,_int h, _short mode) {
 	}
 }
 
-Window winMapped = None;
-_short stMapped = 0;
 static void setMapped(Window w,_short st) {
 	if (!backlight) return;
-	if (ev.xany.window != root) {
-		if (!(ev.type == ReparentNotify && ev.xreparent.parent == root))
-		    return;
-		st = !st;
-	}
+	if (ev.xany.window != root) DBG("ev.xany.window != root: ev %i win %lx",ev.type,ev.xany.window);
 	if (ev.type == DestroyNotify) {
 		oldShowPtr |= 64;
 		if (stMapped) oldShowPtr |= 32;
@@ -1377,10 +1390,10 @@ static void setMapped(Window w,_short st) {
 		if (!stMapped);
 		else if (evconf.window != e.window || (oldShowPtr&64)) oldShowPtr |= 32;
 		else {
-			if (evconf.x != e.x || evconf.y != e.y || evconf.width != e.width || evconf.height != e.height)
+			if (!RECT_EQ(evconf,e))
 			{
-			    chBL(evconf.window,evconf.x,evconf.y,evconf.width,evconf.height,0x13);
-			    chBL(e.window,e.x,e.y,e.width,e.height,2);
+			    chBL(evconf.window,RECT(evconf),0x13);
+			    chBL(e.window,RECT(e),2);
 			}
 		}
 		evconf = e;
@@ -1391,6 +1404,8 @@ static void setMapped(Window w,_short st) {
 #define e (ev.xcreatewindow)
 		oldShowPtr |= 64; // ??
 		memcpy(&evconf,&e,_min(sizeof(evconf),sizeof(e)));
+		//evconf.window = e.window;
+		//RECT_MV(evconf,e);
 
 		if (winMapped != w) {
 #if 1
@@ -1404,6 +1419,9 @@ static void setMapped(Window w,_short st) {
 			oldShowPtr |= 64|32;
 		}
 		return;
+	    case ReparentNotify:
+		st = (ev.xreparent.parent == root);
+		break;
 	}
 	_short st1 = wa1Mapped(w);
 	if (!wa1.root) {
@@ -1416,14 +1434,14 @@ err:
 		stMapped = st1;
 		oldShowPtr |= 32;
 	}
-	if (st != stMapped) chBL(w,wa1.x,wa1.y,wa1.width,wa1.height,st ? 2 : 3);
+	if (st != stMapped) chBL(w,RECT(wa1),st ? 2 : 3);
+#if 0
+	// possible unsync
 	if (evconf.window != w) {
 		evconf.window = w;
-		evconf.x = wa1.x;
-		evconf.y = wa1.y;
-		evconf.width = wa1.width;
-		evconf.height = wa1.height;
+		RECT_MV(evconf,wa1);
 	}
+#endif
 OK:
 	winMapped = w;
 	stMapped = st;
@@ -4234,16 +4252,18 @@ evfree1:
 		    case MapNotify:
 			setMapped(e.window,1);
 			break;
-#undef e
-#define e (ev.xdestroywindow)
-		    case DestroyNotify:
-//			setMapped(e.window,0);
-//			break;
+
 #undef e
 #define e (ev.xreparent)
 		    case ReparentNotify:
-//			setMapped(e.window,0);
-//			break;
+			setMapped(e.window,e.parent == root);
+			break;
+
+#undef e
+#define e (ev.xdestroywindow)
+		    case DestroyNotify:
+			setMapped(e.window,0);
+			break;
 #undef e
 #define e (ev.xunmap)
 		    case UnmapNotify:
@@ -4331,7 +4351,7 @@ evfree1:
 			}
 #if _BACKLIGHT == 1
 			if (e.override_redirect) {
-			    if (fixWin(e.window,e.x,e.y,e.width,e.height)) break;
+			    if (fixWin(e.window,RECT(e))) break;
 			}
 #endif // _BACKLIGHT == 1
 #if _BACKLIGHT == 2
