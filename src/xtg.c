@@ -211,6 +211,9 @@ XIEventMask ximask[] = {{ .deviceid = XIAllDevices, .mask_len = MASK_LEN, .mask 
 //			 { .deviceid = XIAllMasterDevices, .mask_len = MASK_LEN, .mask = ximaskRoot }
 			};
 //#define MASK(m) ((void*)ximask[0].mask=m)
+#if _BACKLIGHT
+_short backlight = 0;
+#endif
 #if _BACKLIGHT == 1
 xiMask ximaskWin0 = {};
 XIEventMask ximaskWin[] = {{ .deviceid = XIAllMasterDevices, .mask_len = MASK_LEN, .mask = ximaskWin0 },
@@ -1257,6 +1260,7 @@ static void freeWins(){
 static void getWins(){
 	if (wins) goto OK;
 	Window rw, pw;
+		DBG("rescan XQueryTree() event %i",ev.type);
 	if (!XQueryTree(dpy, root, &rw, &pw, &wins, &nwins)) _free(wins);
 	if (!wins) {
 		freeWins();
@@ -1268,17 +1272,27 @@ OK:
 #define WINS_ATTR() freeWins(); getWins(); while (wins_attr())
 
 static _short chWin(Window w){
-	if (ev.xany.window == root && (pi[p_safe]&4096)) {
+	if (ev.xany.window == root && backlight) {
 		getWins();
 		WINS(*winf == w) return 1;
 	}
 	return 0;
 }
 
+static _short wa1Mapped(Window w){
+	wa1.map_state = IsUnmapped;
+	wa1.root = None;
+	return XGetWindowAttributes(dpy,w,&wa1) && wa1.map_state == IsViewable && wa1.root == root;
+};
+
 XConfigureEvent evconf = {};
 
+static void chBL0(){
+	pr_set(xrp_bl,!(minf->obscured || minf->entered));
+}
+
 static void chBL(Window win,_int x,_int y,_int w,_int h, _short mode) {
-	if (!(pi[p_safe]&4096)) return;
+	if (!backlight) return;
 	minf_t *minf1; // recursive
 #define minf minf1
 	MINF_T2(o_active|o_backlight,o_active|o_backlight) {
@@ -1295,21 +1309,9 @@ static void chBL(Window win,_int x,_int y,_int w,_int h, _short mode) {
 			if (r) minf1->obscured++;
 			break;
 		    case 3: // del/rescan window(s)
-			if (!win) {
-#undef e
-#define e (ev.xconfigure)
-				if (e.type == ConfigureNotify && e.window != root && e.event == root) {
-					if (evconf.window == e.window) {
-						chBL(evconf.window,evconf.x,evconf.y,evconf.width,evconf.height,0x13);
-						chBL(e.window,e.x,e.y,e.width,e.height,0x12);
-						evconf = e;
-						break;
-					}
-					evconf = e;
-				}
-			} else {
+			if (win) {
 				if (r) minf1->obscured--;
-				evconf.window = None;
+				//evconf.window = None;
 				break;
 			}
 
@@ -1317,9 +1319,10 @@ static void chBL(Window win,_int x,_int y,_int w,_int h, _short mode) {
 			win = None;
 			MINF(1) minf->entered = minf->obscured = 0;
 			getWins();
+			DBG("rescan XGetWindowAttributes() event %i",ev.type);
 #if 1
 			_short ec = 0;
-			WINS(XGetWindowAttributes(dpy,*winf,&wa1) && wa1.map_state == IsViewable) {
+			WINS(wa1Mapped(*winf)) {
 				if (evconf.window == *winf && evconf.x == wa1.x && evconf.y == wa1.y && evconf.width == wa1.width && evconf.height == wa1.height) ec=1;
 				chBL(*winf,wa1.x,wa1.y,wa1.width,wa1.height,0x12);
 			}
@@ -1327,7 +1330,7 @@ static void chBL(Window win,_int x,_int y,_int w,_int h, _short mode) {
 #else
 			WINS(*winf == evconf.window) {
 				chBL(e.window,e.x,e.y,e.width,e.height,0x12);
-			} else XGetWindowAttributes(dpy,*winf,&wa1) && wa1.map_state == IsViewable) {
+			} else wa1Mapped(*winf)) {
 				chBL(*winf,wa1.x,wa1.y,wa1.width,wa1.height,0x12);
 			}
 #endif
@@ -1342,16 +1345,95 @@ static void chBL(Window win,_int x,_int y,_int w,_int h, _short mode) {
 			break;
 		}
 		minf = minf1;
-		if (!(mode&0x10)) pr_set(xrp_bl,!(minf->obscured || minf->entered));
+		if (!(mode&0x10)) chBL0();
 	}
 }
 
-//static void chBL2() {
-//	MINF_T2(o_active|o_backlight,o_active|o_backlight) {
-//		chBL1(2,2);
-//		DBG("==++ obscured %i entered %i",minf->obscured,minf->entered);
-//	}
-//}
+Window winMapped = None;
+_short stMapped = 0;
+static void setMapped(Window w,_short st) {
+	if (!backlight) return;
+	if (ev.xany.window != root) {
+		if (!(ev.type == ReparentNotify && ev.xreparent.parent == root))
+		    return;
+		st = !st;
+	}
+	if (ev.type == DestroyNotify) {
+		oldShowPtr |= 64;
+		if (stMapped) oldShowPtr |= 32;
+		if (winMapped == w) winMapped = None;
+		return;
+	}
+	switch (ev.type) {
+	    case ConfigureNotify:
+#undef e
+#define e (ev.xconfigure)
+		if (winMapped != w) {
+			st = wa1Mapped(w);
+			if (!wa1.root) goto err;
+		};
+		
+		if (evconf.window != e.window) {
+			oldShowPtr |= 32;
+			evconf = e;
+			goto OK;
+		}
+
+		if (!stMapped);
+		else if (oldShowPtr&64) oldShowPtr |= 32;
+		else {
+			if (evconf.x != e.x || evconf.y != e.y || evconf.width != e.width || evconf.height != e.height)
+			{
+			    chBL(evconf.window,evconf.x,evconf.y,evconf.width,evconf.height,0x13);
+			    chBL(e.window,e.x,e.y,e.width,e.height,2);
+			}
+		}
+		evconf = e;
+
+		return;
+	    case CreateNotify:
+#undef e
+#define e (ev.xcreatewindow)
+		oldShowPtr |= 64; // ??
+		memcpy(&evconf,&e,_min(sizeof(evconf),sizeof(e)));
+
+		if (winMapped != w) {
+#if 1
+			st = wa1Mapped(w);
+			if (!wa1.root) goto err;
+			oldShowPtr |= 64;
+			goto OK;
+#endif
+		} else {
+			winMapped == None;
+			oldShowPtr |= 64|32;
+		}
+		return;
+	}
+	_short st1 = wa1Mapped(w);
+	if (!wa1.root) {
+err:
+		if (chWin(w)) oldShowPtr |= 32|64;
+		if (winMapped == w) winMapped = None;
+		return;
+	}
+	if (winMapped == w && stMapped != st1) {
+		stMapped = st1;
+		oldShowPtr |= 32;
+	}
+	if (st != stMapped) chBL(w,wa1.x,wa1.y,wa1.width,wa1.height,st ? 2 : 3);
+	if (evconf.window != w) {
+		evconf.window = w;
+		evconf.x = wa1.x;
+		evconf.y = wa1.y;
+		evconf.width = wa1.width;
+		evconf.height = wa1.height;
+	}
+OK:
+	winMapped = w;
+	stMapped = st;
+}
+
 #endif
 
 #if _BACKLIGHT == 1
@@ -1697,6 +1779,9 @@ static void xrMons0(){
     xrrSet();
     oldShowPtr &= ~8;
     int nout = -1, active = 0, non_desktop = 0, non_desktop0 = 0, non_desktop1 = 0;
+#if _BACKLIGHT
+    backlight = 0;
+#endif
     XRRCrtcInfo *cinf = NULL;
     XRROutputInfo *oinf = NULL;
     i = xrrr ? xrrr->noutput : 0;
@@ -1844,9 +1929,14 @@ _on:
 		}
 	}
 #if _BACKLIGHT
-	if (minf->prop[xrp_bl].en) minf->type |= o_backlight;
+	if (minf->prop[xrp_bl].en) {
+		minf->type |= o_backlight;
+		if (!backlight && (pi[p_safe]&4096)) {
+			backlight = 1;
+			oldShowPtr |= 32|64;
+		}
+	}
 #endif
-
 	if (!(minf->crt = oinf->crtc) || !(cinf=XRRGetCrtcInfo(dpy, xrrr, minf->crt))) continue;
 	minf->width = minf->width0 = cinf->width;
 	minf->height = minf->height0 = cinf->height;
@@ -1909,7 +1999,7 @@ _on:
 	MINF(minf->prop[xrp_non_desktop].en && minf->prop[xrp_non_desktop].vs[0].i == 1)
 	    pr_set(xrp_non_desktop,0);
 #if _BACKLIGHT == 1
-    if ((pi[p_safe]&4096)) {
+    if ((backlight)) {
 	MINF((minf->type & (o_active|o_backlight)) == (o_active|o_backlight) && minf->width && minf->height) {
 		if (!minf->win || (minf->type|o_changed)) {
 			simpleWin(0);
@@ -1920,9 +2010,6 @@ _on:
 		minf->win = 0;
 		oldShowPtr |= 16;
     }}
-#endif
-#if _BACKLIGHT == 2
-    if ((pi[p_safe]&4096))
 #endif
 ret: {}
 //    if (_y > minf0.height) fixGeometry();
@@ -4145,40 +4232,29 @@ evfree1:
 #undef e
 #define e (ev.xcreatewindow)
 		    case CreateNotify:
-			if (e.parent == root) oldShowPtr |= 64;
+//			setMapped(e.window,1);
+//			break;
+#undef e
+#define e (ev.xmap)
+		    case MapNotify:
+			setMapped(e.window,1);
 			break;
 #undef e
 #define e (ev.xdestroywindow)
 		    case DestroyNotify:
-			if (evconf.window == e.window) {
-				evconf.window = None;
-				oldShowPtr |= 32|64;
-			} else if (chWin(e.window)) oldShowPtr |= 64;
-			break;
-		    case UnmapNotify:
-			if (evconf.window == e.window) {
-				evconf.window = None;
-				oldShowPtr |= 32|64;
-			}
-			break;
+//			setMapped(e.window,0);
+//			break;
 #undef e
 #define e (ev.xreparent)
 		    case ReparentNotify:
-			if (e.parent == root || chWin(e.window)) oldShowPtr |= 32;
-			break;
-#if 0
+//			setMapped(e.window,0);
+//			break;
 #undef e
 #define e (ev.xunmap)
 		    case UnmapNotify:
-			// vs. expose
-			//if (chWin(e.window)) oldShowPtr |= 32;
+			setMapped(e.window,0);
 			break;
-#undef e
-#define e (ev.xmap)
-		    case MapNotify:
-			// vs. Configure
-			//if (chWin(e.window)) oldShowPtr |= 32;
-			break;
+#if 0
 		    case NoExpose:
 		    case GraphicsExpose:
 		    case Expose:
@@ -4264,12 +4340,7 @@ evfree1:
 			}
 #endif // _BACKLIGHT == 1
 #if _BACKLIGHT == 2
-			// todo: compare with monitors and only if intersect empty
-			if (chWin(e.window)) oldShowPtr |= 32;
-			else if (evconf.window == e.window) {
-				evconf.window = None;
-				oldShowPtr |= 32;
-			}
+			setMapped(e.window,0);
 #endif // _BACKLIGHT == 2
 #ifdef XSS
 			if (!(pi[p_safe]&8192)) {
