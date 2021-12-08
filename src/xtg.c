@@ -1371,16 +1371,11 @@ static void setMapped(Window w,_short st) {
 		if (winMapped != w) {
 			st = wa1Mapped(w);
 			if (!wa1.root) goto err;
+			stMapped = st;
+			winMapped = w;
 		};
-		
-		if (evconf.window != e.window) {
-			oldShowPtr |= 32;
-			evconf = e;
-			goto OK;
-		}
-
 		if (!stMapped);
-		else if (oldShowPtr&64) oldShowPtr |= 32;
+		else if (evconf.window != e.window || (oldShowPtr&64)) oldShowPtr |= 32;
 		else {
 			if (evconf.x != e.x || evconf.y != e.y || evconf.width != e.width || evconf.height != e.height)
 			{
