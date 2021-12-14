@@ -40,6 +40,7 @@
 // todo
 #define _BACKLIGHT 2
 #define PROP_FMT
+//#define _UNSAFE_WINMAP
 #undef PROP_FMT
 //#define TRACK_MATRIX
 #define FAST_VALUATORS
@@ -1408,18 +1409,31 @@ static void setMapped(Window w,_short st) {
 		//RECT_MV(evconf,e);
 
 		if (winMapped != w) {
-#if 1
+//#ifdef _UNSAFE_WINMAP
 			st = wa1Mapped(w);
 			if (!wa1.root) goto err;
 			oldShowPtr |= 64;
+			if (st) goto ch;
 			goto OK;
-#endif
+//#endif
 		} else {
 			winMapped == None;
 			oldShowPtr |= 64|32;
 		}
 		return;
+//	    case DestroyNotify:
+//		DBG("Destroy");
+//		break;
 	}
+	if (winMapped == w && stMapped == st) {
+		DBG("remapped? ev=%i %i was=%i",ev.xany.type,st,stMapped);
+		winMapped = None;
+		oldShowPtr |= 32;
+		return;
+	}
+#ifndef _UNSAFE_WINMAP
+	if (w == evconf.window) goto ch;
+#endif
 	_short st1 = wa1Mapped(w);
 	if (!wa1.root) {
 err:
@@ -1427,18 +1441,23 @@ err:
 		if (winMapped == w) winMapped = None;
 		return;
 	}
-	if (winMapped == w && stMapped != st1) {
-		stMapped = st1;
-		oldShowPtr |= 32;
+	if (st != st1) {
+		DBG("mapped? ev=%i %i attr=%i",ev.xany.type,st,st1);
+		winMapped = None;
+		oldShowPtr |= 32|64;
+		return;
 	}
-	if (st != stMapped) chBL(w,RECT(wa1),st ? 2 : 3);
-#if 0
-	// possible unsync
-	if (evconf.window != w) {
-		evconf.window = w;
+#ifdef _UNSAFE_WINMAP
+	if (w == evconf.window && !st) {
+		chBL(w,RECT(evconf),3);
 		RECT_MV(evconf,wa1);
+		goto OK;
 	}
 #endif
+	evconf.window = w;
+	RECT_MV(evconf,wa1);
+ch:
+	chBL(w,RECT(evconf),st ? 2 : 3);
 OK:
 	winMapped = w;
 	stMapped = st;
