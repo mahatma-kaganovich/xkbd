@@ -1382,6 +1382,7 @@ static void setMapped(Window w,_short st) {
 	    case ConfigureNotify:
 #undef e
 #define e (ev.xconfigure)
+		if (evconf.window == e.window && RECT_EQ(evconf,e)) return;
 		if (winMapped != w) {
 			st = wa1Mapped(w);
 			if (!wa1.root) goto err;
@@ -1391,14 +1392,10 @@ static void setMapped(Window w,_short st) {
 		if (!stMapped);
 		else if (evconf.window != e.window || (oldShowPtr&64)) oldShowPtr |= 32;
 		else {
-			if (!RECT_EQ(evconf,e))
-			{
-			    chBL(evconf.window,RECT(evconf),0x13);
-			    chBL(e.window,RECT(e),2);
-			}
+			chBL(evconf.window,RECT(evconf),0x13);
+			chBL(e.window,RECT(e),2);
 		}
 		evconf = e;
-
 		return;
 	    case CreateNotify:
 #undef e
