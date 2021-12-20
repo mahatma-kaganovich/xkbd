@@ -1339,9 +1339,9 @@ static void chBL(Window win,_int x,_int y,_int w,_int h, _short mode) {
 			// optimized
 			_short ec = 0;
 			WINS(1) {
-#if 1
+#if 0
 				if (*winf == evconf.window && *winf == winMapped) {
-					chBL(evconf.window,RECT(evconf),0x12);
+					if (stMapped) MappedhBL(evconf.window,RECT(evconf),0x12);
 					ec = 1;
 					continue;
 				}
