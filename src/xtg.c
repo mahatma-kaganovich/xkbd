@@ -513,12 +513,18 @@ static void _set_same_size(){
 
 	if (!XGetGeometry(dpy,root,&r,&c.x,&c.y,&c.width,&c.height,&c.border_width,&depth) || r != root) r = None;
 #ifdef XTG
-	if (!xrr || (pi[p_safe]&(16|64)) != (16|64)) goto xlib;
+	if (!xrr || (pi[p_safe]&(16|64)) != (16|64)) {
+		oldShowPtr |= 8;
+		goto xlib;
+	}
 	if (!r) {
 		c.width = w_width;
 		c.height = w_height;
 		r = root;
-	} else if (c.width != w_width || c.height != w_height) goto xlib;
+	} else if (c.width != w_width || c.height != w_height) {
+		oldShowPtr |= 8;
+		goto xlib;
+	}
 	// "empty" (same size) event
 	XRRSetScreenSize(dpy,root,w_width,w_height,w_mwidth,w_mheight);
 xlib:
