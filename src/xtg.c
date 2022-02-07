@@ -1,5 +1,5 @@
 /*
-	xtg v1.45 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.46 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -506,18 +506,61 @@ static void printGrp(){
 	fflush(stdout);
 }
 
+static void _set_same_size(){
+	XWindowChanges c;
+	Window r = None;
+	int depth;
+
+	if (!XGetGeometry(dpy,root,&r,&c.x,&c.y,&c.width,&c.height,&c.border_width,&depth) || r != root) r = None;
+#ifdef XTG
+	if (!xrr || (pi[p_safe]&(16|64)) != (16|64)) goto xlib;
+	if (!r) {
+		c.width = w_width;
+		c.height = w_height;
+		r = root;
+	} else if (c.width != w_width || c.height != w_height) goto xlib;
+	// "empty" (same size) event
+	XRRSetScreenSize(dpy,root,w_width,w_height,w_mwidth,w_mheight);
+xlib:
+#endif
+	// no same size event
+	if (r) XReconfigureWMWindow(dpy,root,screen,CWWidth|CWHeight,&c);
+}
 
 #ifdef XSS
 // DPMSInfo() and XScreenSaverQueryInfo() result is boolean (but type is "Status")
 // use transparent values instead
 #ifdef USE_XSS
+#ifdef XTG
+// known2me 2 ways to detect vterm switch:
+// 1) XSS state off -> off
+// 2) inotify /sys/devices/virtual/tty/tty0/active
+// now (1) used
+static void chTerm(){
+	oldShowPtr |= 2;
+	if ((pi[p_safe]&(16|64)) == (16|64)) oldShowPtr |= 8;
+	// screen changed event
+	else _set_same_size();
+}
+#endif
 _short xssState = 3;
 #if ScreenSaverDisabled == 3 && ScreenSaverOn == 1 && ScreenSaverOff == 0
-#define xssStateSet(s) xssState = (s)
+static void xssStateSet(_short s){
+#ifdef XTG
+	if (!(xssState|(xssState = s))) chTerm();
+#else
+	xssState = s;
+#endif
+}
 #else
 static void xssStateSet(_short s){
 	switch (s) {
-	    case ScreenSaverOff: xssState = 0; break;
+	    case ScreenSaverOff: 
+#ifdef XTG
+		if (!xssState) chTerm();
+#endif
+		xssState = 0;
+		break;
 	    case ScreenSaverOn: xssState = 1; break;
 	    case ScreenSaverCycle: xssState = 2; break;
 //	    case ScreenSaverDisabled:
@@ -1063,9 +1106,18 @@ static _short xiSetProp(Atom prop, Atom type, void *data, long cnt, _short chk){
 	return setProp(prop,type,PropModeReplace,data,cnt,chk);
 }
 
+#define __max_wins 0x7fffffff
 static _short wGetProp(Atom prop, Atom type, void *data, long cnt, _short chk){
 	target = pr_win;
 	return getProp(prop,type,data,0,cnt,chk);
+}
+
+static _short wGetProp_(Atom prop, Atom type, void *data, long cnt, Window w){
+	target = pr_win;
+	win = w;
+	_short r = getProp(prop,type,data,0,cnt,0);
+	win = win1;
+	return r;
 }
 
 static _short wSetProp(Atom prop, Atom type, void *data, long cnt, _short chk){
@@ -1269,17 +1321,16 @@ static void freeWins(){
 	nwins = 0;
 }
 static void getWins(){
-	if (wins) goto OK;
+	if (wins) return;
 	Window rw, pw;
 	//DBG("rescan XQueryTree() event %i",ev.type);
-	if (!XQueryTree(dpy, root, &rw, &pw, &wins, &nwins)) _free(wins);
-	if (!wins) {
-		freeWins();
-		return;
+	if (!XQueryTree(dpy, root, &rw, &pw, &wins, &nwins) || !wins) {
+		_free(wins);
+	} else {
+		wins_last = &wins[nwins];
 	}
-OK:
-	wins_last = &wins[nwins];
 }
+
 #define WINS_ATTR() freeWins(); getWins(); while (wins_attr())
 
 static _short chWin(Window w){
@@ -1341,7 +1392,7 @@ static void chBL(Window win,_int x,_int y,_int w,_int h, _short mode) {
 			WINS(1) {
 #if 0
 				if (*winf == evconf.window && *winf == winMapped) {
-					if (stMapped) MappedhBL(evconf.window,RECT(evconf),0x12);
+					chBL(evconf.window,RECT(evconf),0x12);
 					ec = 1;
 					continue;
 				}
@@ -2126,7 +2177,11 @@ static _short setScrSize(double dpmw,double dpmh,_short mode,_int px,_int py1){
 		else if (py > maxH) py = maxH;
 	}
 #endif
-	if (mode == 1 && minf0.width >= px && minf0.height >= py && w_width >= px && w_height >= py) return 0;
+	if (mode == 1 && w_width >= px && w_height >= py) {
+		if (minf0.width >= px && minf0.height >= py) return 0;
+		// reduce preset repeats
+		oldShowPtr |= 8;
+	}
 	if ((dpmw == 0 || dpmh == 0) && (!(pi[p_safe]&16) || !mpx || !mpy)) {
 		dpmw = w_dpmw;
 		dpmh = w_dpmh;
@@ -2335,9 +2390,11 @@ find1:
 		if (do_dpi) {
 			if (minf2->crt && minf1->crt != minf2->crt && minf2->crt) fixMonSize(minf2, &dpmw, &dpmh);
 			fixMonSize(minf1, &dpmw, &dpmh);
-			if (setScrSize(dpmw,dpmh,pan_cnt?2:0,0,0)) goto ex1;
-		} else if (pan_cnt) goto ex1;
-//		setScrSize(0,0,0,0,0);
+			if (setScrSize(dpmw,dpmh,0,0,0)) goto ex1;
+		}
+		if (!pan_cnt) goto ex1;
+		// workaround "panning event": force other apps to change geometry
+		_set_same_size();
 ex1:
 		if (!(pi[p_safe]&64)) _ungrabX();
 	}
@@ -3437,6 +3494,8 @@ static void init(){
 
 			xrevent += RRScreenChangeNotify;
 			XRRSelectInput(dpy, root, m);
+			
+			evmask |= StructureNotifyMask;
 		} else evmask |= StructureNotifyMask; // ConfigureNotify
 	}
 	_wait_mask &= ~_w_screen;
@@ -3722,12 +3781,12 @@ ev2:
 		forceUngrab();
 #endif
 		XNextEvent(dpy, &ev);
-//		DBG("ev %i",ev.type);
+		//DBG("ev %i",ev.type);
 		switch (ev.type) {
 #ifdef XTG
 		    case GenericEvent:
 			if (ev.xcookie.extension == xiopcode) {
-//				DBG("ev xi %i %lu",ev.xcookie.evtype,ev.xcookie.serial);
+				//DBG("ev xi %i %lu",ev.xcookie.evtype,ev.xcookie.serial);
 #undef e
 #define e ((XIDeviceEvent*)ev.xcookie.data)
 				switch (ev.xcookie.evtype) {
@@ -4264,23 +4323,26 @@ evfree1:
 #define e (ev.xmap)
 		    case MapNotify:
 			setMapped(e.window,1);
+//			DBG("map %x",e.window);
 			break;
 
 #undef e
 #define e (ev.xreparent)
 		    case ReparentNotify:
+//			DBG("reparent %i %x",e.parent == root,e.window);
 			setMapped(e.window,e.parent == root);
 			break;
 
 #undef e
 #define e (ev.xdestroywindow)
 		    case DestroyNotify:
-			setMapped(e.window,0);
-			break;
+//			setMapped(e.window,0);
+//			break;
 #undef e
 #define e (ev.xunmap)
 		    case UnmapNotify:
 			setMapped(e.window,0);
+//			DBG("unmap %x",e.window);
 			break;
 #if 0
 		    case NoExpose:
