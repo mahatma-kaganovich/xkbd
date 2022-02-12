@@ -1,5 +1,5 @@
 /*
-	xtg v1.46 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.47 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -314,6 +314,7 @@ static void _print_bmap(_uint x, _short n, TouchTree *m) {
 #endif
 
 #define DEF_SAFE (1+32+64)
+#define DEF_SAFE2 (0)
 
 #define p_device 0
 #define p_minfingers 1
@@ -332,19 +333,20 @@ static void _print_bmap(_uint x, _short n, TouchTree *m) {
 #define p_max_dpi 13
 #define p_dpi 14
 #define p_safe 15
-#define p_content_type 16
-#define p_colorspace 17
-#define p_1 18
-#define p_y 19
-#define p_Y 20
-#define p_help 21
-#define MAX_PAR 22
+#define p_Safe 16
+#define p_content_type 17
+#define p_colorspace 18
+#define p_1 19
+#define p_y 20
+#define p_Y 21
+#define p_help 22
+#define MAX_PAR 23
 char *pa[MAX_PAR] = {};
 // android: 125ms tap, 500ms long
-#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0,  14, 32, 72, 0, 0, DEF_SAFE, 0, 0, 0 }
+#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0,  14, 32, 72, 0, 0, DEF_SAFE, DEF_SAFE2, 0, 0, 0 }
 int pi[MAX_PAR] = PAR_DEFS;
 double pf[] = PAR_DEFS;
-char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:i:s:c:C:1yYh";
+char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:i:s:S:c:C:1yYh";
 char *ph[MAX_PAR] = {
 	"touch device 0=auto", //d
 
@@ -409,6 +411,9 @@ char *ph[MAX_PAR] = {
 	"		13(+8192) skip fullscreen windows without ClientMessage (XTerm)\n"
 #endif
 	"		14(+16384) XRRSetCrtcConfig() move before panning\n",
+	"Safe mode bits 2\n"
+	"		0(+1) minimize screen size changes in pixels (dont reduce, dont round to DPI)\n"
+	"\n	(safe bits tested on xf86-video-intel)\n",
 #ifdef XSS
 	"fullscreen \"content type\" prop.: see \"xrandr --props\" (I want \"Cinema\")",
 	"fullscreen \"Colorspace\" prop.: see \"xrandr --props\"  (I want \"DCI-P3_RGB_Theater\")\n",
@@ -2104,7 +2109,7 @@ static inline void _round_dpi(_int *w,_int *m,double dpm) {
 	if (!(dpm > 0)) return;
 #ifdef MINIMAL
 	*m = (*w)/dpm + .5;
-	if (_DPI_DIFF < 0 && !(pi[p_safe]&(16|512))) {
+	if (_DPI_DIFF < 0 && !(pi[p_safe]&(16|512)) && !(pi[p_Safe]&1)) {
 		// adding some virtual pixels make DPI rounding better
 		_int x;
 #ifdef __MIN_PIXELS
@@ -2117,7 +2122,7 @@ static inline void _round_dpi(_int *w,_int *m,double dpm) {
 	*m = (*w)/dpm;
 	_int w1 = *w, m1 = *m+1;
 	double d = w1/(*m+0.) - dpm, d1 = dpm - w1/(*m+1.);
-	if (_DPI_DIFF < 0 && !(pi[p_safe]&(16|512))) {
+	if (_DPI_DIFF < 0 && !(pi[p_safe]&(16|512)) && !(pi[p_Safe]&1)) {
 		// adding some virtual pixels make DPI rounding better
 		_int w2 = dpm*m1;
 		double d2 = dpm - (w2+0.)/m1;
@@ -2183,6 +2188,10 @@ static _short setScrSize(double dpmw,double dpmh,_short mode,_int px,_int py1){
 		else if (py > maxH) py = maxH;
 	}
 #endif
+	if ((pi[p_Safe]&1)) {
+		if (px < w_width) px = w_width;
+		if (py < w_height) py = w_height;
+	}
 	if (mode == 1 && w_width >= px && w_height >= py) {
 		if (minf0.width >= px && minf0.height >= py) return 0;
 		// reduce preset repeats
@@ -3702,12 +3711,13 @@ int main(int argc, char **argv){
 	if (pi[p_y]) {
 		pf[p_dpi] = pi[p_dpi] = 96;
 		pi[p_safe] = 1+16+32;
+		pi[p_Safe] = 1;
 	}
 	if (pi[p_Y]) {
 		pi[p_safe] = 1+4+128+4096;
+		pi[p_Safe] = 1;
 		pa[p_content_type] = "Cinema";
 		pa[p_colorspace] = "DCI-P3_RGB_Theater";
-
 	}
 	resX = resY = pf[p_res] < 0 ? 1 : pf[p_res];
 	strict = pa[p_mon] &&  pa[p_mon][0] == '-' && !pa[p_mon][1];
