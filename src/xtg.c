@@ -530,7 +530,7 @@ static void _set_same_size(){
 xlib:
 #endif
 	// no same size event
-	if (r) XReconfigureWMWindow(dpy,root,screen,CWWidth|CWHeight,&c);
+//	if (r) XReconfigureWMWindow(dpy,root,screen,CWWidth|CWHeight,&c);
 }
 
 #ifdef XSS
@@ -3783,8 +3783,9 @@ ev:
 		}
 ev2:
 		if (showPtr != oldShowPtr) setShowCursor();
-		if (!_wait_mask) break;
+		//if (!_wait_mask) break;
 		forceUngrab();
+		if (!_wait_mask) break;
 #endif
 		XNextEvent(dpy, &ev);
 		//DBG("ev %i",ev.type);
@@ -4504,6 +4505,7 @@ evfree1:
 #ifdef XTG
 exit:
 	XFixesShowCursor(dpy,root);
+	XFlush(dpy);
 	XCloseDisplay(dpy);
 #endif
 }
