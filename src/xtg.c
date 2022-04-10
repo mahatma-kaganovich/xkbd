@@ -1,5 +1,5 @@
 /*
-	xtg v1.47 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.48 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -676,14 +676,22 @@ static void monFullScreen();
 static void xrPropFlush();
 
 #endif
-static void WMState(Atom *states, short nn){
+static void winWMState();
+static void WMState(Atom state, _short op){
 	short i;
-	noXSS1 = False;
-	for(i=0; i<nn; i++) {
-		if (states[i] == aFullScreen) {
-			noXSS1 = True;
-			break;
-		}
+	i = (state == aFullScreen);
+	switch (op) {
+	    case 0: // delete
+	    case 1: // add
+		if (i) noXSS1 = op;
+		break;
+	    case 2: // toggle
+		noXSS1 = i;
+		break;
+//	    default:
+//		ERR("invalid state op %i",op);
+//		winWMState();
+//		return;
 	}
 	if (noXSS1!=noXSS) {
 		noXSS=noXSS1;
@@ -709,8 +717,17 @@ static void WMState(Atom *states, short nn){
 }
 
 static void winWMState(){
+	int i;
+	_short op = 0;
 	getWProp(win,aWMState,XA_ATOM,sizeof(Atom));
-	WMState(((Atom*)ret),n);
+	Atom *r = (void*)ret;
+	for (i=0; i<n; i++) {
+		if (r[i]==aFullScreen) {
+			op = 2;
+			break;
+		}
+	}
+	WMState(aFullScreen,op);
 }
 #endif
 
@@ -4304,10 +4321,9 @@ evfree1:
 #undef e
 #define e (ev.xclient)
 		    case ClientMessage:
-			// no time
 			if (e.message_type == aWMState){
 				if (e.window==win)
-					WMState(&e.data.l[1],e.data.l[0]);
+					WMState(e.data.l[1],e.data.l[0]);
 			}
 			goto ev;
 #endif
