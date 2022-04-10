@@ -676,10 +676,9 @@ static void monFullScreen();
 static void xrPropFlush();
 
 #endif
-static void winWMState();
 static void WMState(Atom state, _short op){
-	short i;
-	i = (state == aFullScreen);
+	int i = (state == aFullScreen);
+	if (!i && !noXSS) return;
 	switch (op) {
 	    case 0: // delete
 	    case 1: // add
@@ -688,10 +687,13 @@ static void WMState(Atom state, _short op){
 	    case 2: // toggle
 		noXSS1 = i;
 		break;
-//	    default:
-//		ERR("invalid state op %i",op);
-//		winWMState();
-//		return;
+	    default:
+		noXSS1 = 0;
+		getWProp(win,aWMState,XA_ATOM,sizeof(Atom));
+		for (i=0; i<n; i++) if (((Atom*)ret)[i]==aFullScreen) {
+			noXSS1 = 1;
+			break;
+		}
 	}
 	if (noXSS1!=noXSS) {
 		noXSS=noXSS1;
@@ -717,17 +719,7 @@ static void WMState(Atom state, _short op){
 }
 
 static void winWMState(){
-	int i;
-	_short op = 0;
-	getWProp(win,aWMState,XA_ATOM,sizeof(Atom));
-	Atom *r = (void*)ret;
-	for (i=0; i<n; i++) {
-		if (r[i]==aFullScreen) {
-			op = 2;
-			break;
-		}
-	}
-	WMState(aFullScreen,op);
+	WMState(aFullScreen,7);
 }
 #endif
 
