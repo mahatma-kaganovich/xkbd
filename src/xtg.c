@@ -318,7 +318,7 @@ static void _print_bmap(_uint x, _short n, TouchTree *m) {
 #endif
 
 #define DEF_SAFE (1+32+64)
-#define DEF_SAFE2 (0)
+#define DEF_SAFE2 (2+4)
 
 #define p_device 0
 #define p_minfingers 1
@@ -2356,7 +2356,7 @@ static void _monFS(xrp_t p, _short st){
 }
 
 static void monFullScreen(){
-	if (!val_xrp[xrp_ct].a && !val_xrp[xrp_cs].a) return;
+	if (!val_xrp[xrp_ct].a && !val_xrp[xrp_cs].a && !val_xrp[xrp_rgb].a) return;
 	if (noXSS) {
 		wa.x = -1;
 		wa.y = -1;
@@ -3772,7 +3772,7 @@ int main(int argc, char **argv){
 	if (pi[p_y]) {
 		pf[p_dpi] = pi[p_dpi] = 96;
 		pi[p_safe] = 1+16+32;
-		pi[p_Safe] = 1;
+		pi[p_Safe] = 1+4;
 	}
 	if (pi[p_Y]) {
 		pi[p_safe] = 1+4+128+4096;
