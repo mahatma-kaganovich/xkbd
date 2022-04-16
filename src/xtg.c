@@ -1675,7 +1675,7 @@ static _short _pr_chk(_xrp_t *v){
 		if (p->num_values != 2 || type_xrp[prI] != XA_INTEGER) return 0;
 		_short rr = 0;
 		if (v == &val_xrp[xrp_bpc]) {
-			if (!vi) return 0;
+			if (!vi || (pi[p_Safe]&2)) return 0;
 			*(prop_int*)v = vi->bits_per_rgb;
 			rr = 1;
 		}
@@ -1737,7 +1737,7 @@ static void pr_set(xrp_t prop,_short state){
 static void _pr_get(_short r){
 	switch (prI) {
 	    case xrp_bpc:
-		if (!vi) return;
+		if (!vi || (pi[p_Safe]&2)) return;
 	    case xrp_non_desktop:
 		break;
 #if _BACKLIGHT
@@ -1747,7 +1747,7 @@ static void _pr_get(_short r){
 #endif
 #ifdef  XSS
 	    case xrp_rgb:
-		if (pi[p_Safe]&4) return;
+		if (pi[p_Safe]&4 || !vi || vi->bits_per_rgb > 8) return;
 #endif
 
 	    default:
@@ -1892,7 +1892,6 @@ static void clEvents(int event){
 }
 
 static void getVI(){
-	if (pi[p_Safe]&2) return;
 	_free(vi);
 	XVisualInfo v = {
 		.visualid = XVisualIDFromVisual(DefaultVisual(dpy,screen)),
@@ -2137,7 +2136,7 @@ _on:
     MINF_T(o_changed) {
 	oldShowPtr |= 16|32;
 	DINF(dinf->mon && dinf->mon == minf->name) dinf->type |= o_changed;
-	if (vi) pr_set(xrp_bpc,1);
+	if (vi && !(pi[p_Safe]&2)) pr_set(xrp_bpc,1);
     }
     if (!active && non_desktop)
 	MINF_T(o_non_desktop) pr_set(xrp_non_desktop,1);
