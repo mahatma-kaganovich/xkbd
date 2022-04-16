@@ -1,5 +1,5 @@
 /*
-	xtg v1.48 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.49 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -86,6 +86,8 @@
 #include <X11/Xpoll.h>
 // internal extensions list. optional
 #include <X11/Xlibint.h>
+// XGetVisualInfo()
+#include <X11/Xutil.h>
 #endif
 
 #define NO_GRP 99
@@ -185,6 +187,8 @@ int floatFmt = sizeof(float) << 3;
 int atomFmt = sizeof(Atom) << 3;
 int winFmt = sizeof(Window) << 3;
 _short useRawTouch = 0, useRawButton = 0;
+XVisualInfo *vi = NULL;
+int nvi = 0;
 
 // >=0 remove extra pixels, add extra mode compare
 // <0 to add extra pixels to screen to precise rounding DPI, relaxed compare
@@ -413,6 +417,10 @@ char *ph[MAX_PAR] = {
 	"		14(+16384) XRRSetCrtcConfig() move before panning\n",
 	"Safe mode bits 2\n"
 	"		0(+1) minimize screen size changes in pixels (dont reduce, dont round to DPI)\n"
+	"		1(+2) don't ajust values, based on deps ('max bpc')\n"
+#ifdef XSS
+	"		2(+4) don't set fullscreen 'Broadcast RGB: Limited 16:235'\n"
+#endif
 	"\n	(safe bits tested on xf86-video-intel)\n",
 #ifdef XSS
 	"fullscreen \"content type\" prop.: see \"xrandr --props\" (I want \"Cinema\")",
@@ -613,12 +621,14 @@ typedef union _xrp_ {
 typedef enum {
 	xrp_non_desktop,
 	xrp_sm,
+	xrp_bpc,
 #if _BACKLIGHT
 	xrp_bl,
 #endif
 #ifdef XSS
 	xrp_ct,
 	xrp_cs,
+	xrp_rgb,
 #endif
 	xrp_cnt,
 } xrp_t;
@@ -626,22 +636,26 @@ typedef enum {
 char *an_xrp[xrp_cnt] = {
 	RR_PROPERTY_NON_DESKTOP,
 	"scaling mode",
+	"max bpc",
 #if _BACKLIGHT
 	RR_PROPERTY_BACKLIGHT,
 #endif
 #ifdef XSS
 	"content type",
 	"Colorspace",
+	"Broadcast RGB",
 #endif
 };
 
 Atom type_xrp[xrp_cnt] = {
 	XA_INTEGER,
 	XA_ATOM,
+	XA_INTEGER,
 #if _BACKLIGHT
 	XA_INTEGER,
 #endif
 #ifdef XSS
+	XA_ATOM,
 	XA_ATOM,
 	XA_ATOM,
 #endif
@@ -1658,7 +1672,22 @@ static _short _pr_chk(_xrp_t *v){
 	XRRPropertyInfo *p = pr->p;
 	int i;
 	if (p->range) {
-		return (p->num_values == 2 && type_xrp[prI] == XA_INTEGER && *(prop_int*)v >= p->values[0] && *(prop_int*)v <= p->values[1]);
+		if (p->num_values != 2 || type_xrp[prI] != XA_INTEGER) return 0;
+		_short rr = 0;
+		if (v == &val_xrp[xrp_bpc]) {
+			if (!vi) return 0;
+			*(prop_int*)v = vi->bits_per_rgb;
+			rr = 1;
+		}
+		if (*(prop_int*)v < p->values[0]) {
+			if (rr) *(prop_int*)v = p->values[0];
+			else return 0;
+		}
+		if (*(prop_int*)v > p->values[1]) {
+			if (rr) *(prop_int*)v = p->values[1];
+			else return 0;
+		}
+		return 1;
 	} else if (type_xrp[prI] == XA_INTEGER) {
 		for (i=0; i<p->num_values; i++) if (v->i == p->values[i]) return 1;
 	} else  if (type_xrp[prI] == XA_ATOM) {
@@ -1707,12 +1736,20 @@ static void pr_set(xrp_t prop,_short state){
 
 static void _pr_get(_short r){
 	switch (prI) {
-	    case xrp_non_desktop: break;
+	    case xrp_bpc:
+		if (!vi) return;
+	    case xrp_non_desktop:
+		break;
 #if _BACKLIGHT
 	    case xrp_bl:
 		if (!(pi[p_safe]&4096)) return;
 		break;
 #endif
+#ifdef  XSS
+	    case xrp_rgb:
+		if (pi[p_Safe]&4) return;
+#endif
+
 	    default:
 		if (!val_xrp[prI].a) return;
 	    	break;
@@ -1854,6 +1891,16 @@ static void clEvents(int event){
 	}
 }
 
+static void getVI(){
+	if (pi[p_Safe]&2) return;
+	_free(vi);
+	XVisualInfo v = {
+		.visualid = XVisualIDFromVisual(DefaultVisual(dpy,screen)),
+	};
+	vi = XGetVisualInfo(dpy,(long)VisualIDMask,&v,&nvi);
+	if (!vi || !nvi || !vi->bits_per_rgb) _free(vi);
+}
+
 static void fixGeometry();
 static void xrMons0(){
     if (!xrr) {
@@ -1904,6 +1951,7 @@ static void xrMons0(){
 		prim0 = 0;
     }
     if (!(pi[p_safe]&32)) prim0 = 0;
+    // getVI();
     while(1) {
 	if (cinf) {
 		XRRFreeCrtcInfo(cinf);
@@ -2089,6 +2137,7 @@ _on:
     MINF_T(o_changed) {
 	oldShowPtr |= 16|32;
 	DINF(dinf->mon && dinf->mon == minf->name) dinf->type |= o_changed;
+	if (vi) pr_set(xrp_bpc,1);
     }
     if (!active && non_desktop)
 	MINF_T(o_non_desktop) pr_set(xrp_non_desktop,1);
@@ -2317,6 +2366,7 @@ static void monFullScreen(){
 		_short st = noXSS && (minf->type&o_active) && wa.x>=minf->x && wa.x<=minf->x2 && wa.y>=minf->y && wa.y<=minf->y2;
 		_monFS(xrp_ct,st);
 		_monFS(xrp_cs,st);
+		_monFS(xrp_rgb,st);
 	}
 	xrPropFlush();
 }
@@ -3441,6 +3491,7 @@ static void init(){
 #ifdef XSS
 	if (pa[p_content_type]) val_xrp[xrp_ct].a = XInternAtom(dpy, pa[p_content_type], False);
 	if (pa[p_colorspace]) val_xrp[xrp_cs].a = XInternAtom(dpy, pa[p_colorspace], False);
+	val_xrp[xrp_rgb].a = XInternAtom(dpy, "Limited 16:235", False);
 #endif
 	val_xrp[xrp_sm].a = XInternAtom(dpy, "Full", False); // if native aspect
 
@@ -3564,6 +3615,7 @@ static void init(){
 	showPtr = 1;
 	oldShowPtr |= 8|2;
 	XFixesShowCursor(dpy,root);
+	getVI();
 #endif
 	win = root;
 
