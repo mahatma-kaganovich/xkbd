@@ -86,8 +86,6 @@
 #include <X11/Xpoll.h>
 // internal extensions list. optional
 #include <X11/Xlibint.h>
-// XGetVisualInfo()
-#include <X11/Xutil.h>
 #endif
 
 #define NO_GRP 99
@@ -187,8 +185,7 @@ int floatFmt = sizeof(float) << 3;
 int atomFmt = sizeof(Atom) << 3;
 int winFmt = sizeof(Window) << 3;
 _short useRawTouch = 0, useRawButton = 0;
-XVisualInfo *vi = NULL;
-int nvi = 0;
+int bits_per_rgb = 0;
 
 // >=0 remove extra pixels, add extra mode compare
 // <0 to add extra pixels to screen to precise rounding DPI, relaxed compare
@@ -1675,8 +1672,8 @@ static _short _pr_chk(_xrp_t *v){
 		if (p->num_values != 2 || type_xrp[prI] != XA_INTEGER) return 0;
 		_short rr = 0;
 		if (v == &val_xrp[xrp_bpc]) {
-			if (!vi || (pi[p_Safe]&2)) return 0;
-			*(prop_int*)v = vi->bits_per_rgb;
+			if ((pi[p_Safe]&2) || !bits_per_rgb) return 0;
+			*(prop_int*)v = bits_per_rgb;
 			rr = 1;
 		}
 		if (*(prop_int*)v < p->values[0]) {
@@ -1737,7 +1734,7 @@ static void pr_set(xrp_t prop,_short state){
 static void _pr_get(_short r){
 	switch (prI) {
 	    case xrp_bpc:
-		if (!vi || (pi[p_Safe]&2)) return;
+		if ((pi[p_Safe]&2) || !bits_per_rgb) return;
 	    case xrp_non_desktop:
 		break;
 #if _BACKLIGHT
@@ -1747,7 +1744,7 @@ static void _pr_get(_short r){
 #endif
 #ifdef  XSS
 	    case xrp_rgb:
-		if (pi[p_Safe]&4 || !vi || vi->bits_per_rgb > 8) return;
+		if ((pi[p_Safe]&4) || bits_per_rgb > 8) return;
 #endif
 
 	    default:
@@ -1891,13 +1888,9 @@ static void clEvents(int event){
 	}
 }
 
-static void getVI(){
-	_free(vi);
-	XVisualInfo v = {
-		.visualid = XVisualIDFromVisual(DefaultVisual(dpy,screen)),
-	};
-	vi = XGetVisualInfo(dpy,(long)VisualIDMask,&v,&nvi);
-	if (!vi || !nvi || !vi->bits_per_rgb) _free(vi);
+static void getBPC(){
+	Visual *v = DefaultVisual(dpy,screen);
+	bits_per_rgb = v ? v->bits_per_rgb : 0;
 }
 
 static void fixGeometry();
@@ -1950,7 +1943,7 @@ static void xrMons0(){
 		prim0 = 0;
     }
     if (!(pi[p_safe]&32)) prim0 = 0;
-    // getVI();
+    // getBPC();
     while(1) {
 	if (cinf) {
 		XRRFreeCrtcInfo(cinf);
@@ -2136,7 +2129,7 @@ _on:
     MINF_T(o_changed) {
 	oldShowPtr |= 16|32;
 	DINF(dinf->mon && dinf->mon == minf->name) dinf->type |= o_changed;
-	if (vi && !(pi[p_Safe]&2)) pr_set(xrp_bpc,1);
+	if (!(pi[p_Safe]&2) && bits_per_rgb) pr_set(xrp_bpc,1);
     }
     if (!active && non_desktop)
 	MINF_T(o_non_desktop) pr_set(xrp_non_desktop,1);
@@ -2351,7 +2344,10 @@ pan1:
 
 #ifdef XSS
 static void _monFS(xrp_t p, _short st){
-	if (val_xrp[p].a) pr_set(p,st);
+	if (val_xrp[p].a) {
+		pr_set(p,st);
+		xrPropFlush();
+	}
 }
 
 static void monFullScreen(){
@@ -2367,7 +2363,7 @@ static void monFullScreen(){
 		_monFS(xrp_cs,st);
 		_monFS(xrp_rgb,st);
 	}
-	xrPropFlush();
+//	xrPropFlush();
 }
 #endif
 
@@ -3449,6 +3445,7 @@ static void init(){
 	XkbSelectEventDetails(dpy,XkbUseCoreKbd,XkbStateNotify,
 		XkbAllStateComponentsMask,XkbGroupStateMask);
 #ifdef XTG
+	getBPC();
 	aFloat = XInternAtom(dpy, "FLOAT", False);
 	aMatrix = XInternAtom(dpy, "Coordinate Transformation Matrix", False);
 	aDevMon = XInternAtom(dpy, "xtg output", False);
@@ -3614,7 +3611,6 @@ static void init(){
 	showPtr = 1;
 	oldShowPtr |= 8|2;
 	XFixesShowCursor(dpy,root);
-	getVI();
 #endif
 	win = root;
 
