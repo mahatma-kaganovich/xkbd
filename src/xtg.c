@@ -3794,6 +3794,7 @@ int main(int argc, char **argv){
 help:
 		_short j;
 		pf[p_safe] = pi[p_safe];
+		pf[p_Safe] = pi[p_Safe];
 		printf("Usage: %s {<option>} {<value>:<button>[:<key>]}\n",argv[0]);
 		for(i=j=0; i<MAX_PAR; i++) {
 			if (pc[j] == ':') j++;
