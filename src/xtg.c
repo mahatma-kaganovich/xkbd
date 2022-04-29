@@ -1,5 +1,5 @@
 /*
-	xtg v1.49 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.50 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -86,6 +86,10 @@
 #include <X11/Xpoll.h>
 // internal extensions list. optional
 #include <X11/Xlibint.h>
+
+#include <sys/types.h>
+#include <dirent.h>
+
 #endif
 
 #define NO_GRP 99
@@ -407,6 +411,8 @@ char *ph[MAX_PAR] = {
 	"		11(+2048) try delete or not create unused (saved) property\n"
 #if _BACKLIGHT
 	"		12(+4096) track backlight-controlled monitors and off when empty (under construction)\n"
+	"			modesetting: chmod o+w /sys/class/drm/card0-*/*backlight*/brightness\n"
+	"			- to emulate XR 'Backlight' prop\n"
 #endif	
 #ifdef XSS
 	"		13(+8192) skip fullscreen windows without ClientMessage (XTerm)\n"
@@ -1338,6 +1344,140 @@ static void pr_set(xrp_t prop,_short state);
 
 #if _BACKLIGHT
 
+char *_mon_sysfs_name;
+unsigned _sysfs_val;
+static char *_dir_d(char *s){
+	s = &s[strlen(s)];
+	*(s++) = '/';
+	*s = 0;
+	return s;
+}
+static int _sysfs_open(_short mode) {
+	// [intel_]backlite normally embedded = card0
+	// simple hardcode or ignore or 2do
+	char bn[10];
+	int fd = -1;
+
+#if 0
+	char buf[128];
+	static char *nn[] = {
+		"/intel_backlight/brightness",
+		"/intel_backlight/max_brightness",
+	};
+	strcpy(buf,"/sys/class/drm/card0-");
+	strncpy(&buf[21],_mon_sysfs_name,64);
+	strcat(&buf[21],nn[mode]);
+	fd = open(buf,mode?(O_RDONLY|O_NONBLOCK):(O_RDWR|O_NONBLOCK));
+#else
+	static char *buf = NULL;
+	buf = buf?:malloc(128+256);
+	static char *nn[] = {
+		"brightness",
+		"max_brightness",
+	};
+	static char *buf0;
+	if (!mode) {
+		buf0 = strcpy(buf,"/sys/class/drm/card0-");
+		buf0 += 21;
+		// modesetting naming
+		strncpy(buf0,_mon_sysfs_name,64);
+		buf0 = _dir_d(buf);
+		DIR *dir = opendir(buf);
+		if (!dir) goto ex;
+		struct dirent *d;
+		char *buf1;
+		while((d = readdir(dir))){
+			if (!strstr(d->d_name,"backlight")) continue;
+			strncpy(buf0,d->d_name,256);
+			buf1 = _dir_d(buf0);
+			strcpy(buf1,nn[0]);
+			fd = open(buf,O_RDWR|O_NONBLOCK);
+			if (fd >= 0) {
+				buf0 = buf1;
+				break;
+			}
+		}
+		closedir(dir);
+	}
+	if (fd < 0) {
+		strcpy(buf0,nn[mode]);
+		fd = open(buf,mode?(O_RDONLY|O_NONBLOCK):(O_RDWR|O_NONBLOCK));
+	}	
+#endif
+
+	if (fd < 0) goto ex;
+	ssize_t n = read(fd,&bn,sizeof(bn));
+	if (n < 1 || n == sizeof(bn) || bn[--n] != '\n') goto err;
+	_sysfs_val = 0;
+	for(_short i = 0; i < n; i++) {
+		if (bn[i] < '0' || bn[i] > '9') goto err;
+		_sysfs_val = _sysfs_val*10 + (bn[i] - '0');
+	}
+	goto ex;
+err:
+	close(fd);
+	fd = -1;
+ex:
+	return fd;
+}
+
+static _short bl_sysfs(int val){
+	_short ret = 0;
+	_xrp_t cur;
+	int new;
+	XRRPropertyInfo *pinf;
+	static long values[] = {0, 0};
+	int fd = _sysfs_open(0);
+	if (fd < 0) goto ex;
+	cur.i = new = _sysfs_val;
+	int fd1 = _sysfs_open(1);
+	if (fd1 < 0) goto ex1;
+	values[1] = _sysfs_val;
+	close(fd1);
+#if 1
+	pinf = minf->prop[xrp_bl].p;
+	if (pinf && !minf->prop[xrp_bl].en) goto ex1;
+#else
+	pinf = XRRQueryOutputProperty(dpy,minf->out,a_xrp[xrp_bl]);
+#endif
+	if (pinf && (!pinf->range || pinf->values[0] != values[0] || pinf->values[1] != values[1])) goto ex1;
+	ret = 1;
+	if (!minf->prop[xrp_bl].en)
+		DBG("backlite over sysfs: %s val=%i cur=%i max=%li",_mon_sysfs_name,val,cur.i,values[1]);
+set:
+	// sysfs first [future delete ready]
+	if (cur.i != new) {
+		if (new < 0 || new > _sysfs_val) new = _sysfs_val;
+		dprintf(fd,"%u",new);
+		close(fd);
+		fd = -1;
+	}
+	switch (val) {
+	    case -1:
+		if (!pinf) XRRConfigureOutputProperty(dpy,minf->out,a_xrp[xrp_bl],False,True,2,(long*)&values);
+		xrSetProp(a_xrp[xrp_bl],XA_INTEGER,&cur,1,!!pinf);
+		break;
+#if 0
+	    // no delete to avoid control foreign/our (use "pending"?)
+	    case -2:
+		val = -3;
+		goto set;
+	    case -3:
+		XRRDeleteOutputProperty(dpy,minf->out,a_xrp[xrp_bl]);
+#endif
+	    case -4:
+		break;
+	    default:
+		new = val;
+		val = -4;
+		goto set;
+	}
+ex1:
+	if (fd >= 0) close(fd);
+ex:
+	return ret;
+}
+
 #if _BACKLIGHT == 2
 
 Window *wins = NULL, *winf, *wins_last = NULL;
@@ -1709,6 +1849,17 @@ static _short _pr_inf(Atom prop){
 	return 0;
 }
 
+static void _pr_sync(_xrp_t *v) {
+	switch (prI) {
+#if _BACKLIGHT
+	    case xrp_bl:
+		_mon_sysfs_name = natom(0,minf->name);
+		bl_sysfs(v->i);
+		break;
+#endif
+	}
+}
+
 static void _pr_get(_short r);
 static void _pr_set(_short state){
 	_xrp_t v;
@@ -1722,6 +1873,7 @@ static void _pr_set(_short state){
 //	if (type_xrp[prI] == XA_ATOM) DBG("set %s %s -> %s",natom(0,minf->name),natom(1,pr->v.a),natom(2,v.a));
 	pr->v1 = pr->v;
 	pr->v = v;
+	_pr_sync(&v);
 	xrSetProp(a_xrp[prI],type_xrp[prI],&v,1,0);
 }
 
@@ -1763,9 +1915,14 @@ static void _pr_get(_short r){
 	_short inf = _pr_inf(prop);
 	if (inf && pr->en && r != 2) {
 		// new default/saved or nothing new
-		if (XRP_EQ(v,pr->v)) return;
-		if (XRP_EQ(v,pr->v1)) return;
-		pr->v = v;
+		if (XRP_EQ(v,pr->v)) {
+			pr->v1 = v;
+			return;
+		}
+		_pr_sync(&v);
+		// old?
+		if (XRP_EQ(v,pr->v1)) return; 
+		pr->v1 = pr->v = v;
 		if (!_pr_chk(&v)) goto err;
 		pr->vs[0] = v;
 		if (_save)
@@ -1855,13 +2012,22 @@ static _short xrEvent() {
 			pr = NULL;
 			MINF(minf->out == e->output) {
 				for (prI = 0; prI<xrp_cnt; prI++) {
+					if (!minf->prop[prI].en) {
+						if (e->property != a_xrp[prI]) continue;
+						DBG("new xr prop %s",natom(0,minf->name),natom(1,e->property));
+						oldShowPtr |= 8;
+					}
 					if (e->property == a_xrp_save[prI]) return 1;
 					if (e->property != a_xrp[prI]) continue;
 					if (prI == xrp_non_desktop) oldShowPtr |= 8;
 					pr = &minf->prop[prI];
-					if (XRP_EQ(pr->v,pr->v1)) break;
-					pr->v1 = pr->v;
-					return 1;
+#if 1
+					if (!XRP_EQ(pr->v,pr->v1)) {
+						pr->v1 = pr->v;
+						return 1;
+					}
+#endif
+					break;
 				}
 				break;
 			}
@@ -2072,6 +2238,11 @@ _on:
 			backlight = 1;
 			oldShowPtr |= 32|64;
 		}
+
+	}
+	if ((pi[p_safe]&4096)) {
+		_mon_sysfs_name = oinf->name;
+		bl_sysfs(-1);
 	}
 #endif
 	if (!(minf->crt = oinf->crtc) || !(cinf=XRRGetCrtcInfo(dpy, xrrr, minf->crt))) continue;
