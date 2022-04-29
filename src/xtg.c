@@ -1387,6 +1387,7 @@ static int _sysfs_open(_short mode) {
 		struct dirent *d;
 		char *buf1;
 		while((d = readdir(dir))){
+			if (d->d_type == 8 || d->d_name[0] == '.') continue;
 			if (!strstr(d->d_name,"backlight")) continue;
 			strncpy(buf0,d->d_name,256);
 			buf1 = _dir_d(buf0);
