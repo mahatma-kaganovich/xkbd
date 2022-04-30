@@ -1,5 +1,5 @@
 /*
-	xtg v1.50 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.51 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -38,6 +38,7 @@
 //#define USE_EVDEV
 //#undef USE_EVDEV
 // todo
+//#define SYSFS_CACHE
 #define _BACKLIGHT 2
 #define PROP_FMT
 //#define _UNSAFE_WINMAP
@@ -89,6 +90,8 @@
 
 #include <sys/types.h>
 #include <dirent.h>
+
+#include <glob.h>
 
 #endif
 
@@ -839,7 +842,10 @@ _uint ninput = 0, ninput1 = 0;
 #define DINF(x) for(dinf=inputs; (dinf!=dinf_last); dinf++) if (x)
 
 typedef struct _pinf {
-	_short en;
+	struct {
+		_short en : 1;
+		_short my : 1;
+	};
 	XRRPropertyInfo *p;
 	_xrp_t v,v1,vs[2];
 } pinf_t;
@@ -869,6 +875,9 @@ typedef struct _minf {
 #if _BACKLIGHT == 2
 	unsigned long obscured;
 	_short entered;
+#endif
+#ifdef SYSFS_CACHE
+	int blfd; // sysfs file + 1
 #endif
 } minf_t;
 
@@ -1344,17 +1353,15 @@ static void pr_set(xrp_t prop,_short state);
 
 #if _BACKLIGHT
 
+#ifdef O_DATASYNC
+#define _o_sync (O_DATASYNC|O_DSYNC)
+#else
+#define _o_sync (O_DSYNC)
+#endif
+
 char *_mon_sysfs_name;
 unsigned _sysfs_val;
-static char *_dir_d(char *s){
-	s = &s[strlen(s)];
-	*(s++) = '/';
-	*s = 0;
-	return s;
-}
 static int _sysfs_open(_short mode) {
-	// [intel_]backlite normally embedded = card0
-	// simple hardcode or ignore or 2do
 	char bn[10];
 	int fd = -1;
 
@@ -1367,43 +1374,37 @@ static int _sysfs_open(_short mode) {
 	strcpy(buf,"/sys/class/drm/card0-");
 	strncpy(&buf[21],_mon_sysfs_name,64);
 	strcat(&buf[21],nn[mode]);
-	fd = open(buf,mode?(O_RDONLY|O_NONBLOCK):(O_RDWR|O_NONBLOCK));
+	fd = open(buf,mode?(O_RDONLY|O_NONBLOCK|_o_sync):(O_RDWR|O_NONBLOCK|_o_sync));
 #else
-	static char *buf = NULL;
+	static char *buf = NULL, *buf0;
 	buf = buf?:malloc(128+256);
-	static char *nn[] = {
-		"brightness",
-		"max_brightness",
-	};
-	static char *buf0;
-	if (!mode) {
-		buf0 = strcpy(buf,"/sys/class/drm/card0-");
+	if (mode) {
+		strcpy(buf0,"max_brightness");
+		fd = open(buf,O_RDONLY|O_NONBLOCK|_o_sync);
+	} else {
+		int l = strlen(_mon_sysfs_name);
+		if (l > 64) goto ex;
+		buf0 = strcpy(buf,"/sys/class/drm/card*-");
 		buf0 += 21;
-		// modesetting naming
-		strncpy(buf0,_mon_sysfs_name,64);
-		buf0 = _dir_d(buf);
-		DIR *dir = opendir(buf);
-		if (!dir) goto ex;
-		struct dirent *d;
-		char *buf1;
-		while((d = readdir(dir))){
-			if (d->d_type == 8 || d->d_name[0] == '.') continue;
-			if (!strstr(d->d_name,"backlight")) continue;
-			strncpy(buf0,d->d_name,256);
-			buf1 = _dir_d(buf0);
-			strcpy(buf1,nn[0]);
-			fd = open(buf,O_RDWR|O_NONBLOCK);
-			if (fd >= 0) {
-				buf0 = buf1;
-				break;
+		strcpy(buf0,_mon_sysfs_name);
+		buf0 += l;
+		strcpy(buf0,"/*backlight*/brightness");
+		glob_t pg = {};
+		size_t n = 0;
+		if (!glob(buf,GLOB_NOSORT,NULL,&pg)) {
+			if (pg.gl_pathc == 1 &&
+			    (l = strlen(pg.gl_pathv[0]) - 10) < 128+256-10+4 &&
+			    (fd = open(pg.gl_pathv[0],O_RDWR|O_NONBLOCK|_o_sync)) >= 0) {
+				memcpy(buf,pg.gl_pathv[0],l);
+				buf0 = buf + l;
+			} else if (pg.gl_pathc > 1) for (l = 0; l < pg.gl_pathc; l++) {
+				// more checks possible (only writable & max_brightness)
+				ERR("extra backlights matched: %s",pg.gl_pathv[l]);
 			}
 		}
-		closedir(dir);
+		if (pg.gl_pathv)
+			globfree(&pg);
 	}
-	if (fd < 0) {
-		strcpy(buf0,nn[mode]);
-		fd = open(buf,mode?(O_RDONLY|O_NONBLOCK):(O_RDWR|O_NONBLOCK));
-	}	
 #endif
 
 	if (fd < 0) goto ex;
@@ -1422,61 +1423,71 @@ ex:
 	return fd;
 }
 
-static _short bl_sysfs(int val){
-	_short ret = 0;
+static void _bl_sysfs(){
+	if (!(pi[p_safe]&4096)) goto ex;
 	_xrp_t cur;
-	int new;
-	XRRPropertyInfo *pinf;
 	static long values[] = {0, 0};
-	int fd = _sysfs_open(0);
-	if (fd < 0) goto ex;
-	cur.i = new = _sysfs_val;
-	int fd1 = _sysfs_open(1);
-	if (fd1 < 0) goto ex1;
-	values[1] = _sysfs_val;
-	close(fd1);
-#if 1
-	pinf = minf->prop[xrp_bl].p;
-	if (pinf && !minf->prop[xrp_bl].en) goto ex1;
-#else
-	pinf = XRRQueryOutputProperty(dpy,minf->out,a_xrp[xrp_bl]);
-#endif
-	if (pinf && (!pinf->range || pinf->values[0] != values[0] || pinf->values[1] != values[1])) goto ex1;
-	ret = 1;
-	if (!minf->prop[xrp_bl].en)
-		DBG("backlite over sysfs: %s val=%i cur=%i max=%li",_mon_sysfs_name,val,cur.i,values[1]);
-set:
-	// sysfs first [future delete ready]
-	if (cur.i != new) {
-		if (new < 0 || new > _sysfs_val) new = _sysfs_val;
-		dprintf(fd,"%u",new);
+	int fd, fd1;
+#ifdef SYSFS_CACHE
+	if (minf->blfd) {
+		fd = minf->blfd - 1;
+		cur.i = pr->v.i;
+		_sysfs_val = pr->p->values[1];
+		if (!lseek(fd,0,0)) goto files_ok;
 		close(fd);
-		fd = -1;
+		minf->blfd = 0;
 	}
-	switch (val) {
-	    case -1:
-		if (!pinf) XRRConfigureOutputProperty(dpy,minf->out,a_xrp[xrp_bl],False,True,2,(long*)&values);
-		xrSetProp(a_xrp[xrp_bl],XA_INTEGER,&cur,1,!!pinf);
-		break;
-#if 0
-	    // no delete to avoid control foreign/our (use "pending"?)
-	    case -2:
-		val = -3;
-		goto set;
-	    case -3:
-		XRRDeleteOutputProperty(dpy,minf->out,a_xrp[xrp_bl]);
 #endif
-	    case -4:
-		break;
-	    default:
-		new = val;
-		val = -4;
-		goto set;
+	fd = _sysfs_open(0);
+	if (fd < 0) goto ex;
+	cur.i = _sysfs_val;
+	fd1 = _sysfs_open(1);
+	if (fd1 < 0) goto ex1;
+	close(fd1);
+#ifdef SYSFS_CACHE
+	if ((pi[p_Safe]&8)) 
+	    minf->blfd = fd + 1;
+#endif
+files_ok:
+	if (pr->p && (!pr->p->range || pr->p->values[0] != 0 || pr->p->values[1] != _sysfs_val)) goto ex1;
+	if (pr->en) {
+		long new = pr->v.i;
+		if (cur.i != new
+#ifdef SYSFS_CACHE
+		    || minf->blfd // ???????????????????????????????????????????
+#endif
+		    ) {
+			if (new < 0 || new > _sysfs_val) new = _sysfs_val;
+			if (dprintf(fd,"%lu\n",new) <= 0) {
+#ifdef SYSFS_CACHE
+				minf->blfd = 0;
+#endif
+				goto ex1;
+			};
+		}
+	} else {
+		// init/pre-configure
+		values[1] = _sysfs_val;
+		if (!pr->p) {
+#ifdef SYSFS_CACHE
+			XRRConfigureOutputProperty(dpy,minf->out,a_xrp[xrp_bl],False,True,2,(long*)&values);
+#endif
+			pr->my = 1;
+		}
+		xrSetProp(a_xrp[xrp_bl],XA_INTEGER,&cur,1,!!pr->p);
+		DBG("backlight over sysfs: %s cur=%i max=%u",_mon_sysfs_name,cur.i,_sysfs_val);
 	}
 ex1:
-	if (fd >= 0) close(fd);
+#ifdef SYSFS_CACHE
+	if (minf->blfd) {
+		if (minf->blfd == fd + 1) goto ex;
+		fd = minf->blfd - 1;
+		minf->blfd = 0;
+	}
+#endif
+	close(fd);
 ex:
-	return ret;
+	return;
 }
 
 #if _BACKLIGHT == 2
@@ -1780,14 +1791,49 @@ static void simpleWin(_short mode) {
 
 RROutput prim0, prim;
 
-static void _pr_free(_short err){
+static void _pr_sync() {
+	switch (prI) {
+#if _BACKLIGHT
+	    case xrp_bl:
+		_mon_sysfs_name = _mon_sysfs_name?:natom(0,minf->name);
+		_bl_sysfs();
+		_mon_sysfs_name = NULL;
+		break;
+#endif
+	}
+}
+
+static _short _pr_free(_short err){
+	_short ret = 0;
 	if (pr->en) {
 		if ((err || (pi[p_safe]&2048))
-		    && !XRP_EQ(pr->v,pr->vs[0]))
-			xrSetProp(a_xrp[prI],type_xrp[prI],&pr->vs[0],1,0);
+		    && !XRP_EQ(pr->v,pr->vs[0])) {
+			ret++;
+#if 0
+			if (err == 2) _pr_set(0);
+			else 
+#endif
+			{
+			
+				pr->v = pr->vs[0];
+				xrSetProp(a_xrp[prI],type_xrp[prI],&pr->v,1,0);
+				_pr_sync();
+			}
+		}
 		pr->en = 0;
 	}
+	if (pr->my) {
+		XRRDeleteOutputProperty(dpy,minf->out,a_xrp[prI]);
+		pr->my = 0;
+		ret++;
+	}
+	if (err == 2 && !(pi[p_safe]&2048)) {
+		XRRDeleteOutputProperty(dpy,minf->out,a_xrp_save[prI]);
+		_wait_mask = 0;
+		ret++;
+	}
 	_free(pr->p);
+	return ret;
 }
 
 static void _minf_free(){
@@ -1846,19 +1892,9 @@ static _short _pr_inf(Atom prop){
 	if (prop == a_xrp[prI]) {
 		if (pr->p) XFree(pr->p);
 		pr->p = pinf;
+		_pr_sync();
 	} else if (pinf) XFree(pinf);
 	return 0;
-}
-
-static void _pr_sync(_xrp_t *v) {
-	switch (prI) {
-#if _BACKLIGHT
-	    case xrp_bl:
-		_mon_sysfs_name = natom(0,minf->name);
-		bl_sysfs(v->i);
-		break;
-#endif
-	}
 }
 
 static void _pr_get(_short r);
@@ -1874,7 +1910,7 @@ static void _pr_set(_short state){
 //	if (type_xrp[prI] == XA_ATOM) DBG("set %s %s -> %s",natom(0,minf->name),natom(1,pr->v.a),natom(2,v.a));
 	pr->v1 = pr->v;
 	pr->v = v;
-	_pr_sync(&v);
+	_pr_sync();
 	xrSetProp(a_xrp[prI],type_xrp[prI],&v,1,0);
 }
 
@@ -1920,14 +1956,15 @@ static void _pr_get(_short r){
 			pr->v1 = v;
 			return;
 		}
-		_pr_sync(&v);
 		// old?
-		if (XRP_EQ(v,pr->v1)) return; 
+		if (XRP_EQ(v,pr->v1)) goto _sync; 
 		pr->v1 = pr->v = v;
 		if (!_pr_chk(&v)) goto err;
 		pr->vs[0] = v;
 		if (_save)
 		    xrSetProp(save,type,&v,1,0); // MUST be ok
+_sync:
+		_pr_sync();
 		return;
 	}
 	pr->v = v;
@@ -2221,6 +2258,9 @@ _on:
 		_pr_get(r);
 	}
 	XFree(props);
+#if _BACKLIGHT
+	_mon_sysfs_name = oinf->name;
+#endif
 	if (minf->prop[xrp_non_desktop].en) {
 		if (minf->prop[xrp_non_desktop].v.i == 1) {
 			minf->type |= o_non_desktop;
@@ -2241,10 +2281,7 @@ _on:
 		}
 
 	}
-	if ((pi[p_safe]&4096)) {
-		_mon_sysfs_name = oinf->name;
-		bl_sysfs(-1);
-	}
+	_mon_sysfs_name = NULL;
 #endif
 	if (!(minf->crt = oinf->crtc) || !(cinf=XRRGetCrtcInfo(dpy, xrrr, minf->crt))) continue;
 	minf->width = minf->width0 = cinf->width;
@@ -3283,15 +3320,7 @@ static void _eXit(int sig){
 	MINF(minf->out) {
 		for (prI=0; prI<xrp_cnt; prI++) {
 			pr = &minf->prop[prI];
-			if (!pr->en) continue;
-			if (!XRP_EQ(pr->v,pr->vs[0])) {
-				_pr_set(0);
-				_wait_mask = 0;
-			}
-			if (!(pi[p_safe]&2048)) {
-				XRRDeleteOutputProperty(dpy,minf->out,a_xrp_save[prI]);
-				_wait_mask = 0;
-			}
+			if (_pr_free(2)) _wait_mask = 0;
 		}
 	}
 
