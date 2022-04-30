@@ -38,7 +38,7 @@
 //#define USE_EVDEV
 //#undef USE_EVDEV
 // todo
-//#define SYSFS_CACHE
+#define SYSFS_CACHE
 #define _BACKLIGHT 2
 #define PROP_FMT
 //#define _UNSAFE_WINMAP
@@ -87,13 +87,15 @@
 #include <X11/Xpoll.h>
 // internal extensions list. optional
 #include <X11/Xlibint.h>
-
-#include <sys/types.h>
-#include <dirent.h>
-
+#if _BACKLIGHT
 #include <glob.h>
-
 #endif
+#endif
+
+#if !_BACKLIGHT
+#undef SYSFS_CACHE
+#endif
+
 
 #define NO_GRP 99
 
@@ -426,6 +428,9 @@ char *ph[MAX_PAR] = {
 	"		1(+2) don't ajust values, based on deps ('max bpc')\n"
 #ifdef XSS
 	"		2(+4) don't set fullscreen 'Broadcast RGB: Limited 16:235'\n"
+#endif
+#ifdef SYSFS_CACHE
+	"		3(+8) keep sysfs 'brightness' file(s) opened (may lockup sysfs)'\n"
 #endif
 	"\n	(safe bits tested on xf86-video-intel)\n",
 #ifdef XSS
@@ -1349,14 +1354,27 @@ int noutput = 0;
 #define _BUFSIZE 1048576
 
 
+
 static void pr_set(xrp_t prop,_short state);
+
+static void _sysfs_free(){
+#ifdef SYSFS_CACHE
+	if (minf->blfd) {
+		close(minf->blfd - 1);
+		minf->blfd = 0;
+	}
+#endif
+}
 
 #if _BACKLIGHT
 
-#ifdef O_DATASYNC
-#define _o_sync (O_DATASYNC|O_DSYNC)
-#else
+
+#ifdef O_DIRECT
+#define _o_sync (O_DIRECT)
+#elif defined(SYSFS_CACHE)
 #define _o_sync (O_DSYNC)
+#else
+#define _o_sync (0)
 #endif
 
 char *_mon_sysfs_name;
@@ -1365,7 +1383,7 @@ static int _sysfs_open(_short mode) {
 	char bn[10];
 	int fd = -1;
 
-#if 0
+#ifdef MINIMAL
 	char buf[128];
 	static char *nn[] = {
 		"/intel_backlight/brightness",
@@ -1431,59 +1449,46 @@ static void _bl_sysfs(){
 #ifdef SYSFS_CACHE
 	if (minf->blfd) {
 		fd = minf->blfd - 1;
-		cur.i = pr->v.i;
+		cur.i = pr->v1.i;
 		_sysfs_val = pr->p->values[1];
 		if (!lseek(fd,0,0)) goto files_ok;
-		close(fd);
-		minf->blfd = 0;
+		_sysfs_free();
 	}
 #endif
 	fd = _sysfs_open(0);
 	if (fd < 0) goto ex;
 	cur.i = _sysfs_val;
 	fd1 = _sysfs_open(1);
-	if (fd1 < 0) goto ex1;
+	if (fd1 < 0) goto err;
 	close(fd1);
 #ifdef SYSFS_CACHE
-	if ((pi[p_Safe]&8)) 
+	if ((pi[p_Safe]&8))
 	    minf->blfd = fd + 1;
 #endif
 files_ok:
-	if (pr->p && (!pr->p->range || pr->p->values[0] != 0 || pr->p->values[1] != _sysfs_val)) goto ex1;
+	if (pr->p && (!pr->p->range || pr->p->values[0] != 0 || pr->p->values[1] != _sysfs_val)) goto err;
 	if (pr->en) {
 		long new = pr->v.i;
-		if (cur.i != new
-#ifdef SYSFS_CACHE
-		    || minf->blfd // ???????????????????????????????????????????
-#endif
-		    ) {
+		if (cur.i != new) {
 			if (new < 0 || new > _sysfs_val) new = _sysfs_val;
-			if (dprintf(fd,"%lu\n",new) <= 0) {
-#ifdef SYSFS_CACHE
-				minf->blfd = 0;
-#endif
-				goto ex1;
-			};
+			if (dprintf(fd,"%lu\n",new) <= 0) goto err;
 		}
 	} else {
 		// init/pre-configure
 		values[1] = _sysfs_val;
 		if (!pr->p) {
-#ifdef SYSFS_CACHE
 			XRRConfigureOutputProperty(dpy,minf->out,a_xrp[xrp_bl],False,True,2,(long*)&values);
-#endif
 			pr->my = 1;
 		}
 		xrSetProp(a_xrp[xrp_bl],XA_INTEGER,&cur,1,!!pr->p);
 		DBG("backlight over sysfs: %s cur=%i max=%u",_mon_sysfs_name,cur.i,_sysfs_val);
 	}
-ex1:
 #ifdef SYSFS_CACHE
-	if (minf->blfd) {
-		if (minf->blfd == fd + 1) goto ex;
-		fd = minf->blfd - 1;
-		minf->blfd = 0;
-	}
+	if (minf->blfd) goto ex;
+err:
+	minf->blfd = 0;
+#else
+err:
 #endif
 	close(fd);
 ex:
@@ -1567,7 +1572,7 @@ static void chBL(Window win,_int x,_int y,_int w,_int h, _short mode) {
 			MINF(1) minf->entered = minf->obscured = 0;
 			getWins();
 			//DBG("rescan XGetWindowAttributes() event %i",ev.type);
-#if MINIMAL
+#ifdef MINIMAL
 			WINS(wa1Mapped(*winf)) chBL(*winf,RECT(wa1),0x12);
 #else
 			// optimized
@@ -1843,6 +1848,7 @@ static void _minf_free(){
 		minf->win = 0;
 	}
 #endif
+	_sysfs_free();
 	for (prI=0; prI<xrp_cnt; prI++) {
 		pr = &minf->prop[prI];
 		_pr_free(0);
@@ -3972,7 +3978,7 @@ int main(int argc, char **argv){
 	}
 	if (pi[p_Y]) {
 		pi[p_safe] = 1+4+128+4096;
-		pi[p_Safe] = 1;
+		pi[p_Safe] = 1+8;
 		pa[p_content_type] = "Cinema";
 		pa[p_colorspace] = "DCI-P3_RGB_Theater";
 	}
