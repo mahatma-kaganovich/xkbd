@@ -1908,10 +1908,7 @@ static void _pr_set(_short state){
 	_xrp_t v;
 	v = pr->vs[state];
 //	if (type_xrp[prI] == XA_ATOM && !v.a) return;
-	if (xrevent1 < 0) {
-		_xrPropFlush();
-		_pr_get(0);
-	}
+	if (xrevent1 < 0) _pr_get(0);
 	if (!pr->en || XRP_EQ(v,pr->v)) return;
 //	if (type_xrp[prI] == XA_ATOM) DBG("set %s %s -> %s",natom(0,minf->name),natom(1,pr->v.a),natom(2,v.a));
 	pr->v1 = pr->v;
@@ -1926,6 +1923,7 @@ static void pr_set(xrp_t prop,_short state){
 	    _pr_set(state);
 }
 
+// 0=flush+read, 1=faster read, 2=info, 3=info+saved
 static void _pr_get(_short r){
 	switch (prI) {
 	    case xrp_bpc:
@@ -1949,13 +1947,14 @@ static void _pr_get(_short r){
 	Atom prop = a_xrp[prI];
 	Atom save = a_xrp_save[prI];
 	Atom type = type_xrp[prI];
-	_short _save = !(pi[p_safe]&2048);
+	_short _save = !pr->my && !(pi[p_safe]&2048);
 	_short _init = (_wait_mask&_w_init) && !pr->en;
 	_xrp_t v;
+	if (!r) _xrPropFlush();
 	if (!xrGetProp(prop,type,&v,1,0)) goto err;
 //	if (type == XA_ATOM) DBG("get %s %s = %s",natom(0,minf->name),natom(1,prop),natom(2,v.a));
 //	if (type == XA_INTEGER) DBG("get %s %s = %i",natom(0,minf->name),natom(1,prop),v.i);
-	_short inf = _pr_inf(prop);
+	_short inf = (pr->p && r==1)?:_pr_inf(prop);
 	if (inf && pr->en && r != 2) {
 		// new default/saved or nothing new
 		if (XRP_EQ(v,pr->v)) {
@@ -2056,27 +2055,33 @@ static _short xrEvent() {
 			pr = NULL;
 			MINF(minf->out == e->output) {
 				for (prI = 0; prI<xrp_cnt; prI++) {
-					if (!minf->prop[prI].en) {
-						if (e->property != a_xrp[prI]) continue;
-						DBG("new xr prop %s",natom(0,minf->name),natom(1,e->property));
-						oldShowPtr |= 8;
-					}
 					if (e->property == a_xrp_save[prI]) return 1;
 					if (e->property != a_xrp[prI]) continue;
-					if (prI == xrp_non_desktop) oldShowPtr |= 8;
-					pr = &minf->prop[prI];
-#if 1
-					if (!XRP_EQ(pr->v,pr->v1)) {
-						pr->v1 = pr->v;
+					if (e->state == PropertyDelete || !minf->prop[prI].en) {
+						oldShowPtr |= 8;
+						DBG("%s xr prop '%s' on %s",e->state == PropertyDelete?"delete":"new",natom(0,minf->name),an_xrp[prI]);
+						_xrPropFlush();
 						return 1;
 					}
-#endif
+					if (prI == xrp_non_desktop) oldShowPtr |= 8;
+					pr = &minf->prop[prI];
 					break;
 				}
 				break;
 			}
-			if (!pr || e->state) return 1;
-			_xrPropFlush();
+			if (!pr) return 1;
+#if 1
+			// speculative check
+			_xrp_t v = pr->v;
+			// our waited change
+			if (!XRP_EQ(v,pr->v1)) {
+				pr->v1 = v;
+				return 1;
+			}
+			// fast path ok & new value
+			_pr_get(1);
+			if (pr->en && !XRP_EQ(v,pr->v)) return 1;
+#endif
 			_pr_get(0);
 			xrPropFlush();
 			break;
