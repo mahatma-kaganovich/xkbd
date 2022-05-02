@@ -98,10 +98,9 @@ AC_ARG_ENABLE(debug,
       CFLAGS="$CFLAGS -g -DDEBUG"
   fi])
 
-AC_ARG_ENABLE(pthread,
-  [  --disable-pthread         disable pthread support for xtg, [default=no]],
-  enable_pthread=$enableval, enable_pthread=yes)
-
+AC_ARG_ENABLE(thread,
+  [  --disable-thread         disable thread support for xtg, [default=no]],
+  enable_thread=$enableval, enable_thread=yes)
 
 
 
@@ -127,11 +126,13 @@ AC_TYPE_SIGNAL
 AC_CHECK_FUNCS([strchr strdup])
 
 AX_PTHREAD([have_pthread=yes], [have_pthread=no])
-
-if test x$have_pthread != xno && test x$enable_pthread != xno && test x$enable_minimal != xyes; then
-	X_EXTRA_LIBS="$X_EXTRA_LIBS $PTHREAD_LIBS"
-	CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
-	CPPFLAGS="$CPPFLAGS -DUSE_PTHREAD"
+if test x$enable_thread != xno && test x$enable_minimal != xyes; then
+	if test x$have_pthread != xno; then
+		X_EXTRA_LIBS="$X_EXTRA_LIBS $PTHREAD_LIBS"
+		CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
+		CPPFLAGS="$CPPFLAGS -DUSE_PTHREAD"
+	fi
+	test -e /usr/include/X11/Xthreads.h && CPPFLAGS="$CPPFLAGS -DUSE_XTHREAD"
 fi
 
 AC_OUTPUT(Makefile 

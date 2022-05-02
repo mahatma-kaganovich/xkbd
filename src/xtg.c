@@ -52,8 +52,10 @@
 
 #if !_BACKLIGHT || defined(MINIMAL)
 #undef SYSFS_CACHE
+#undef USE_XTHREAD
 #undef USE_PTHREAD
 #endif
+
 
 
 #include <stdio.h>
@@ -97,13 +99,21 @@
 #if _BACKLIGHT
 #include <glob.h>
 #include <limits.h>
-#ifdef USE_PTHREAD
+
+#undef USE_THREAD
+#ifdef USE_XTHREAD
+#include <X11/Xthreads.h>
+#include <sys/inotify.h>
+#define USE_THREAD
+#elif defined(USE_PTHREAD)
 #include <pthread.h>
 #include <sys/inotify.h>
-#endif
-#endif
+#define xthread_fork(f,c) { pthread_t _th; pthread_create(&_th,NULL,f,c); }
+#define USE_THREAD
 #endif
 
+#endif
+#endif
 
 
 #define NO_GRP 99
@@ -1375,8 +1385,7 @@ static void _sysfs_free(){
 
 #if _BACKLIGHT
 
-#ifdef USE_PTHREAD
-pthread_t th_inotify;
+#ifdef USE_THREAD
 int inotify;
 static void *thread_inotify(void* args){
 	struct inotify_event ie;
@@ -1429,7 +1438,7 @@ static int _sysfs_open(_short mode) {
 		if (!glob(buf,GLOB_NOSORT,NULL,&pg)) {
 			int l;
 			if (pg.gl_pathc == 1 && (l = strlen(pg.gl_pathv[0]) - 10) < 128+256-10+4) {
-#ifdef USE_PTHREAD
+#ifdef USE_THREAD
 				//inotify_add_watch(inotify,pg.gl_pathv[0],IN_MODIFY|IN_ATTRIB|IN_MOVE|IN_CREATE|IN_DELETE|IN_UNMOUNT);
 				inotify_add_watch(inotify,pg.gl_pathv[0],IN_ATTRIB|IN_MOVE|IN_CREATE|IN_DELETE|IN_UNMOUNT);
 #endif
@@ -3866,14 +3875,10 @@ static void init(){
 	XFixesShowCursor(dpy,root);
 #endif
 	win = root;
-
-#ifdef _BACKLIGHT
-#ifdef USE_PTHREAD
+#ifdef USE_THREAD
 	if ((inotify = inotify_init()) >=0 )
-		pthread_create(&th_inotify,NULL,&thread_inotify,NULL);
+		xthread_fork(&thread_inotify,NULL);
 #endif
-#endif
-
 }
 
 #ifdef XTG
