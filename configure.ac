@@ -128,7 +128,7 @@ AC_CHECK_FUNCS([strchr strdup])
 
 AX_PTHREAD([have_pthread=yes], [have_pthread=no])
 
-if test x$have_pthread != xno && test x$enable_pthread != xno && test x$enable_minimal != xno; then
+if test x$have_pthread != xno && test x$enable_pthread != xno && test x$enable_minimal != xyes; then
 	X_EXTRA_LIBS="$X_EXTRA_LIBS $PTHREAD_LIBS"
 	CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
 	CPPFLAGS="$CPPFLAGS -DUSE_PTHREAD"
