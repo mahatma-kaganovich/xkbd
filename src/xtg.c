@@ -1,5 +1,5 @@
 /*
-	xtg v1.51 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.52 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -48,6 +48,14 @@
 // -f 7|15 will set per device, not XIAllDevices
 #endif
 
+
+
+#if !_BACKLIGHT || defined(MINIMAL)
+#undef SYSFS_CACHE
+#undef USE_PTHREAD
+#endif
+
+
 #include <stdio.h>
 #include <stdint.h>
 
@@ -88,12 +96,14 @@
 #include <X11/Xlibint.h>
 #if _BACKLIGHT
 #include <glob.h>
+#include <limits.h>
+#ifdef USE_PTHREAD
+#include <pthread.h>
+#include <sys/inotify.h>
+#endif
 #endif
 #endif
 
-#if !_BACKLIGHT
-#undef SYSFS_CACHE
-#endif
 
 
 #define NO_GRP 99
@@ -1365,6 +1375,16 @@ static void _sysfs_free(){
 
 #if _BACKLIGHT
 
+#ifdef USE_PTHREAD
+pthread_t th_inotify;
+int inotify;
+static void *thread_inotify(void* args){
+	struct inotify_event ie;
+	while(read(inotify, &ie, sizeof(ie))) {
+		oldShowPtr |= 8;
+	}
+}
+#endif
 
 #ifdef O_DIRECT
 #define _o_sync (O_DIRECT)
@@ -1394,7 +1414,7 @@ static int _sysfs_open(_short mode) {
 	fd = open(buf,mode?(O_RDONLY|O_NONBLOCK|_o_sync):(O_RDWR|O_NONBLOCK|_o_sync));
 #else
 	static char *buf = NULL, *buf0;
-	buf = buf?:malloc(128+256);
+	buf = buf?:malloc(128+NAME_MAX);
 	if (mode) {
 		strcpy(buf0,"max_brightness");
 		fd = open(buf,O_RDONLY|O_NONBLOCK|_o_sync);
@@ -1408,11 +1428,15 @@ static int _sysfs_open(_short mode) {
 		size_t n = 0;
 		if (!glob(buf,GLOB_NOSORT,NULL,&pg)) {
 			int l;
-			if (pg.gl_pathc == 1 &&
-			    (l = strlen(pg.gl_pathv[0]) - 10) < 128+256-10+4 &&
-			    (fd = open(pg.gl_pathv[0],O_RDWR|O_NONBLOCK|_o_sync)) >= 0) {
-				memcpy(buf,pg.gl_pathv[0],l);
-				buf0 = buf + l;
+			if (pg.gl_pathc == 1 && (l = strlen(pg.gl_pathv[0]) - 10) < 128+256-10+4) {
+#ifdef USE_PTHREAD
+				//inotify_add_watch(inotify,pg.gl_pathv[0],IN_MODIFY|IN_ATTRIB|IN_MOVE|IN_CREATE|IN_DELETE|IN_UNMOUNT);
+				inotify_add_watch(inotify,pg.gl_pathv[0],IN_ATTRIB|IN_MOVE|IN_CREATE|IN_DELETE|IN_UNMOUNT);
+#endif
+				if ((fd = open(pg.gl_pathv[0],O_RDWR|O_NONBLOCK|_o_sync)) >= 0) {
+					memcpy(buf,pg.gl_pathv[0],l);
+					buf0 = buf + l;
+				}
 			} else if (pg.gl_pathc > 1) for (l = 0; l < pg.gl_pathc; l++) {
 				// more checks possible (only writable & max_brightness)
 				ERR("extra backlights matched: %s",pg.gl_pathv[l]);
@@ -3842,6 +3866,13 @@ static void init(){
 	XFixesShowCursor(dpy,root);
 #endif
 	win = root;
+
+#ifdef _BACKLIGHT
+#ifdef USE_PTHREAD
+	if ((inotify = inotify_init()) >=0 )
+		pthread_create(&th_inotify,NULL,&thread_inotify,NULL);
+#endif
+#endif
 
 }
 

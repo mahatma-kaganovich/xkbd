@@ -77,7 +77,7 @@ fi
 
 AC_ARG_ENABLE(evdev,
   [  --disable-evdev         disable libevdev support for xtg, [default=no]],
-  enable_xrandr=$enableval, enable_evdev=yes)
+  enable_evdev=$enableval, enable_evdev=yes)
 
 if test x$enable_evdev != xno; then
 	_set_pkg_xtg libevdev -DUSE_EVDEV -levdev -I/usr/include/libevdev-1.0
@@ -97,6 +97,12 @@ AC_ARG_ENABLE(debug,
   [if test x$enable_debug = xyes; then
       CFLAGS="$CFLAGS -g -DDEBUG"
   fi])
+
+AC_ARG_ENABLE(pthread,
+  [  --disable-pthread         disable pthread support for xtg, [default=no]],
+  enable_pthread=$enableval, enable_pthread=yes)
+
+
 
 
 # Checks for programs.
@@ -119,6 +125,14 @@ AC_C_CONST
 AC_FUNC_MALLOC
 AC_TYPE_SIGNAL
 AC_CHECK_FUNCS([strchr strdup])
+
+AX_PTHREAD([have_pthread=yes], [have_pthread=no])
+
+if test x$have_pthread != xno && test x$enable_pthread != xno && test x$enable_minimal != xno; then
+	X_EXTRA_LIBS="$X_EXTRA_LIBS $PTHREAD_LIBS"
+	CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
+	CPPFLAGS="$CPPFLAGS -DUSE_PTHREAD"
+fi
 
 AC_OUTPUT(Makefile 
           src/Makefile
