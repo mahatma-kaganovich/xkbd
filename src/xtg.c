@@ -1359,10 +1359,8 @@ static void pr_set(xrp_t prop,_short state);
 
 static void _sysfs_free(){
 #ifdef SYSFS_CACHE
-	if (minf->blfd) {
-		close(minf->blfd - 1);
-		minf->blfd = 0;
-	}
+	if (minf->blfd > 0) close(minf->blfd - 1);
+	minf->blfd = 0;
 #endif
 }
 
@@ -1378,11 +1376,13 @@ static void _sysfs_free(){
 #endif
 
 char *_mon_sysfs_name;
+int _mon_sysfs_name_len;
 unsigned _sysfs_val;
 static int _sysfs_open(_short mode) {
 	char bn[10];
-	int fd = -1;
+	int fd = -3;
 
+	if (_mon_sysfs_name_len > 64) goto ex;
 #ifdef MINIMAL
 	char buf[128];
 	static char *nn[] = {
@@ -1390,8 +1390,8 @@ static int _sysfs_open(_short mode) {
 		"/intel_backlight/max_brightness",
 	};
 	strcpy(buf,"/sys/class/drm/card0-");
-	strncpy(&buf[21],_mon_sysfs_name,64);
-	strcat(&buf[21],nn[mode]);
+	memcpy(&buf[21],_mon_sysfs_name,_mon_sysfs_name_len);
+	strcpy(&buf[21+_mon_sysfs_name_len],nn[mode]);
 	fd = open(buf,mode?(O_RDONLY|O_NONBLOCK|_o_sync):(O_RDWR|O_NONBLOCK|_o_sync));
 #else
 	static char *buf = NULL, *buf0;
@@ -1400,16 +1400,15 @@ static int _sysfs_open(_short mode) {
 		strcpy(buf0,"max_brightness");
 		fd = open(buf,O_RDONLY|O_NONBLOCK|_o_sync);
 	} else {
-		int l = strlen(_mon_sysfs_name);
-		if (l > 64) goto ex;
 		buf0 = strcpy(buf,"/sys/class/drm/card*-");
 		buf0 += 21;
-		strcpy(buf0,_mon_sysfs_name);
-		buf0 += l;
+		memcpy(buf0,_mon_sysfs_name,_mon_sysfs_name_len);
+		buf0 += _mon_sysfs_name_len;
 		strcpy(buf0,"/*backlight*/brightness");
 		glob_t pg = {};
 		size_t n = 0;
 		if (!glob(buf,GLOB_NOSORT,NULL,&pg)) {
+			int l;
 			if (pg.gl_pathc == 1 &&
 			    (l = strlen(pg.gl_pathv[0]) - 10) < 128+256-10+4 &&
 			    (fd = open(pg.gl_pathv[0],O_RDWR|O_NONBLOCK|_o_sync)) >= 0) {
@@ -1436,7 +1435,7 @@ static int _sysfs_open(_short mode) {
 	goto ex;
 err:
 	close(fd);
-	fd = -1;
+	fd = -3;
 ex:
 	return fd;
 }
@@ -1448,6 +1447,7 @@ static void _bl_sysfs(){
 	int fd, fd1;
 #ifdef SYSFS_CACHE
 	if (minf->blfd) {
+		if (minf->blfd == -1) goto ex;
 		fd = minf->blfd - 1;
 		cur.i = pr->v1.i;
 		_sysfs_val = pr->p->values[1];
@@ -1455,8 +1455,17 @@ static void _bl_sysfs(){
 		_sysfs_free();
 	}
 #endif
+	if (!_mon_sysfs_name) {
+		_mon_sysfs_name = natom(0,minf->name);
+		_mon_sysfs_name_len = strlen(_mon_sysfs_name);
+	}
 	fd = _sysfs_open(0);
-	if (fd < 0) goto ex;
+	if (fd < 0) {
+		// if not found - recheck only on rescan monitors
+		// xf86-video-intel still multiple rescan on EACCES
+		if (fd == -1 && errno == ENOENT) minf->blfd = -1;
+		goto ex;
+	}
 	cur.i = _sysfs_val;
 	fd1 = _sysfs_open(1);
 	if (fd1 < 0) goto err;
@@ -1492,7 +1501,7 @@ err:
 #endif
 	close(fd);
 ex:
-	return;
+	_mon_sysfs_name = NULL;
 }
 
 #if _BACKLIGHT == 2
@@ -1800,9 +1809,7 @@ static void _pr_sync() {
 	switch (prI) {
 #if _BACKLIGHT
 	    case xrp_bl:
-		_mon_sysfs_name = _mon_sysfs_name?:natom(0,minf->name);
 		_bl_sysfs();
-		_mon_sysfs_name = NULL;
 		break;
 #endif
 	}
@@ -2253,6 +2260,10 @@ _on:
 		if (!oinf) continue;
 	}
 
+#if _BACKLIGHT
+	_mon_sysfs_name = oinf->name;
+	_mon_sysfs_name_len = oinf->nameLen;
+#endif
 	int nprop = 0;
 	Atom *props = XRRListOutputProperties(dpy, minf->out, &nprop);
 	for (prI=0; prI<xrp_cnt; prI++) {
@@ -2269,9 +2280,6 @@ _on:
 		_pr_get(r);
 	}
 	XFree(props);
-#if _BACKLIGHT
-	_mon_sysfs_name = oinf->name;
-#endif
 	if (minf->prop[xrp_non_desktop].en) {
 		if (minf->prop[xrp_non_desktop].v.i == 1) {
 			minf->type |= o_non_desktop;
@@ -2284,13 +2292,20 @@ _on:
 		}
 	}
 #if _BACKLIGHT
-	if (minf->prop[xrp_bl].en) {
+	pr = &minf->prop[prI = xrp_bl];
+	if (pr->en) {
 		minf->type |= o_backlight;
 		if (!backlight && (pi[p_safe]&4096)) {
 			backlight = 1;
 			oldShowPtr |= 32|64;
 		}
 
+	} else if (_mon_sysfs_name) {
+		// force
+		//if (inf->blfd == -1)
+		    minf->blfd = 0;
+		//_pr_sync();
+		_bl_sysfs();
 	}
 	_mon_sysfs_name = NULL;
 #endif
