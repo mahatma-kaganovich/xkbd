@@ -125,14 +125,27 @@ AC_FUNC_MALLOC
 AC_TYPE_SIGNAL
 AC_CHECK_FUNCS([strchr strdup])
 
-AX_PTHREAD([have_pthread=yes], [have_pthread=no])
+
 if test x$enable_thread != xno && test x$enable_minimal != xyes; then
-	if test x$have_pthread != xno; then
-		X_EXTRA_LIBS="$X_EXTRA_LIBS $PTHREAD_LIBS"
-		CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
-		CPPFLAGS="$CPPFLAGS -DUSE_PTHREAD"
-	fi
-	test -e /usr/include/X11/Xthreads.h && CPPFLAGS="$CPPFLAGS -DUSE_XTHREAD"
+    AC_MSG_CHECKING([for simple X11/Xthreads.h with modern glibc])
+    AC_LINK_IFELSE(
+        [AC_LANG_SOURCE([`echo '#include <X11/Xthreads.h>
+        int main(){ xthread_fork(NULL,NULL); }'`])],
+        [have_simple_Xthreads=yes],
+        [have_simple_Xthreads=no]
+    )
+    AC_MSG_RESULT($have_simple_Xthreads)
+    if test x$have_simple_Xthreads != xno; then
+        CPPFLAGS="$CPPFLAGS -DUSE_XTHREAD"
+    else
+        AX_PTHREAD([have_pthread=yes], [have_pthread=no])
+        if test x$have_pthread != xno; then
+            X_EXTRA_LIBS="$X_EXTRA_LIBS $PTHREAD_LIBS"
+            CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
+            CPPFLAGS="$CPPFLAGS -DUSE_PTHREAD"
+        fi
+        test -e /usr/include/X11/Xthreads.h && CPPFLAGS="$CPPFLAGS -DUSE_XTHREAD"
+    fi
 fi
 
 AC_OUTPUT(Makefile 
