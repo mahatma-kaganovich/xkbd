@@ -37,7 +37,6 @@
 //#define TOUCH_ORDER
 //#define USE_EVDEV
 //#undef USE_EVDEV
-// todo
 #define SYSFS_CACHE
 #define _BACKLIGHT 2
 #define PROP_FMT
@@ -1461,9 +1460,11 @@ static void _bl_sysfs(){
 	}
 	fd = _sysfs_open(0);
 	if (fd < 0) {
+#ifdef SYSFS_CACHE
 		// if not found - recheck only on rescan monitors
 		// xf86-video-intel still multiple rescan on EACCES
 		if (fd == -1 && errno == ENOENT) minf->blfd = -1;
+#endif
 		goto ex;
 	}
 	cur.i = _sysfs_val;
@@ -2299,11 +2300,12 @@ _on:
 			backlight = 1;
 			oldShowPtr |= 32|64;
 		}
-
 	} else if (_mon_sysfs_name) {
+#ifdef SYSFS_CACHE
 		// force
 		//if (inf->blfd == -1)
 		    minf->blfd = 0;
+#endif
 		//_pr_sync();
 		_bl_sysfs();
 	}
