@@ -1,5 +1,5 @@
 /*
-	xtg v1.52 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.53 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -40,6 +40,8 @@
 #define SYSFS_CACHE
 #define _BACKLIGHT 2
 #define PROP_FMT
+// if experienced sysfs related lockups on backlight devices [dis]connection
+//#define USE_MUTEX
 //#define _UNSAFE_WINMAP
 #undef PROP_FMT
 //#define TRACK_MATRIX
@@ -111,6 +113,7 @@
 #include <sys/inotify.h>
 #define xthread_fork(f,c) { pthread_t _th; pthread_create(&_th,NULL,f,c); }
 #define xmutex_rec pthread_mutex_t
+#define xmutex_init(m) pthread_mutex_init(m,NULL)
 #define xmutex_lock(m) pthread_mutex_lock(m)
 #define xmutex_unlock(m) pthread_mutex_unlock(m)
 #define USE_THREAD
@@ -150,6 +153,15 @@
 #define RECT_EQ(a,b) ((a).x == (b).x && (a).y == (b).y && (a).width == (b).width && (a).height == (b).height)
 #define RECT_MV(a,b) {(a).x = (b).x; (a).y = (b).y; (a).width = (b).width; (a).height = (b).height;}
 #define RECT(a) a.x,a.y,a.width,a.height
+#endif
+
+#ifndef USE_MUTEX
+#undef xmutex_lock
+#define xmutex_lock(m)
+#undef xmutex_unlock
+#define xmutex_unlock(m)
+#undef xmutex_init
+#define xmutex_init(m)
 #endif
 
 typedef uint_fast8_t _short;
@@ -1391,13 +1403,17 @@ static void _sysfs_free(){
 
 #ifdef USE_THREAD
 int inotify;
+#ifdef USE_MUTEX
 xmutex_rec mutex;
+#endif
 static void *thread_inotify(void* args){
 	struct inotify_event ie;
 //	char ie[512];
 	while(read(inotify, &ie, sizeof(ie)) > 0) {
 		xmutex_lock(&mutex);
+#ifdef USE_MUTEX
 		MINF(minf->blfd) _sysfs_free();
+#endif
 		oldShowPtr |= 8;
 		xmutex_unlock(&mutex);
 	}
@@ -1482,6 +1498,7 @@ ex:
 }
 
 static _short _pr_free(_short err);
+static _short _pr_inf(Atom prop);
 
 static void _bl_sysfs(){
 	if (!(pi[p_safe]&4096)) goto ex;
@@ -1489,14 +1506,16 @@ static void _bl_sysfs(){
 	static long values[] = {0, 0};
 	int fd, fd1;
 #ifdef SYSFS_CACHE
+	_short opened = 0;
 	if (minf->blfd) {
-		if (minf->blfd == -1) goto ex;
+		if (minf->blfd == -1) goto err1;
 		fd = minf->blfd - 1;
 		cur.i = pr->v1.i;
 		_sysfs_val = pr->p->values[1];
 		if (!lseek(fd,0,0)) goto files_ok;
 		_sysfs_free();
 	}
+open:	opened = 1;
 #endif
 	if (!_mon_sysfs_name) {
 		_mon_sysfs_name = natom(0,minf->name);
@@ -1505,11 +1524,14 @@ static void _bl_sysfs(){
 	fd = _sysfs_open(0);
 	if (fd < 0) {
 #ifdef SYSFS_CACHE
+#ifndef USE_THREAD
 		// if not found - recheck only on rescan monitors
 		// xf86-video-intel still multiple rescan on EACCES
-		if (fd == -1 && errno == ENOENT) minf->blfd = -1;
+		if (fd == -1 && errno == ENOENT)
 #endif
-		goto ex;
+		    minf->blfd = -1;
+#endif
+                goto err1;
 	}
 	cur.i = _sysfs_val;
 	fd1 = _sysfs_open(1);
@@ -1533,6 +1555,7 @@ files_ok:
 		if (!pr->p) {
 			XRRConfigureOutputProperty(dpy,minf->out,a_xrp[xrp_bl],False,True,2,(long*)&values);
 			pr->my = 1;
+			XFlush(dpy);
 		}
 		xrSetProp(a_xrp[xrp_bl],XA_INTEGER,&cur,1,!!pr->p);
 		DBG("backlight over sysfs: %s cur=%i max=%u",_mon_sysfs_name,cur.i,_sysfs_val);
@@ -1541,14 +1564,17 @@ files_ok:
 	if (minf->blfd) goto ex;
 err:
 	minf->blfd = 0;
-	if (pr->my) {
-		pr->en = 0;
-		_pr_free(2);
-	}
+	close(fd);
+	if (!opened) goto open;
 #else
 err:
-#endif
 	close(fd);
+#endif
+err1:
+	if (pr->my) {
+		pr->en = 0;
+		_pr_free(1);
+	}
 ex:
 	_mon_sysfs_name = NULL;
 }
@@ -1601,6 +1627,22 @@ static void chBL0(){
 	pr_set(xrp_bl,!(minf->obscured || minf->entered));
 }
 
+#ifdef CHK_ENTERED_ALL
+static _short QPtr(int devid, Window *w, _int *x, _int *y){
+	Window rw;
+	XIButtonState b;
+	XIModifierState m;
+	XIGroupState g;
+	double dx, dy, root_x,root_y;
+	if (XIQueryPointer(dpy,devid,root,&rw,&w,&root_x,&root_y,&dx,&dy,&b,&m,&g)) {
+		*x = root_x;
+		*y = root_y;
+		return 1;
+	}
+	return 0;
+}
+#endif
+
 static void chBL(Window win,_int x,_int y,_int w,_int h, _short mode) {
 	if (!backlight) return;
 	minf_t *minf1; // recursive
@@ -1626,8 +1668,21 @@ static void chBL(Window win,_int x,_int y,_int w,_int h, _short mode) {
 			}
 
 			// reset/rescan all
+			MINF(1) minf->obscured = minf->entered = 0;
+#ifdef CHK_ENTERED_ALL
+			// check all masters and floating
+			//DINF(!(dinf->type&o_kbd) && QPtr(dinf->devid,&win,&x,&y))
+			// or all masters
+			DINF((dinf->type&o_master) && QPtr(dinf->devid,&win,&x,&y))
+#else
+			unsigned int m;
+			Window root1;
+			XQueryPointer(dpy,root,&root1,&win,&x,&y,&w,&h,&m);
+#endif
+				if (win == None || win == root)
+					chBL(None,x,y,1,1,0x10);
+
 			win = None;
-			MINF(1) minf->entered = minf->obscured = 0;
 			getWins();
 			//DBG("rescan XGetWindowAttributes() event %i",ev.type);
 #ifdef MINIMAL
@@ -1776,24 +1831,6 @@ static void chBL(Window w, _short obscured, _short entered) {
 }
 #endif
 
-#if 0
-#define __check_entered
-static void checkEntered(){
-	_short i;
-	for (i=0; i<2; i++) DINF((dinf->type&(o_master|o_kbd))==o_master) {
-		Window rw,rc;
-		XIButtonState b;
-		XIModifierState m;
-		XIGroupState g;
-		double x, y, root_x = -1,root_y = -1;
-		if (XIQueryPointer(dpy,devid,root,&rw,&rc,&root_x,&root_y,&x,&y,&b,&m,&g))
-		    if ((x>=minf->x && y>=minf->y && x<=minf->x2 && y<=minf->y2) == i)
-			MINF_T2(o_active|o_backlight,o_active|o_backlight)
-			    chBL1(2,i);
-	}
-}
-#endif
-
 
 #if _BACKLIGHT == 1
 static _short fixWin(Window win,_int x,_int y,_int w,_int h){
@@ -1885,6 +1922,7 @@ static _short _pr_free(_short err){
 	}
 	if (pr->my) {
 		XRRDeleteOutputProperty(dpy,minf->out,a_xrp[prI]);
+		_free(pr->p);
 		pr->my = 0;
 		ret++;
 	}
@@ -1954,7 +1992,6 @@ static _short _pr_inf(Atom prop){
 	if (prop == a_xrp[prI]) {
 		if (pr->p) XFree(pr->p);
 		pr->p = pinf;
-		_pr_sync();
 	} else if (pinf) XFree(pinf);
 	return 0;
 }
@@ -2115,7 +2152,7 @@ static _short xrEvent() {
 					if (e->property != a_xrp[prI]) continue;
 					if (e->state == PropertyDelete || !minf->prop[prI].en) {
 						oldShowPtr |= 8;
-						DBG("%s xr prop '%s' on %s",e->state == PropertyDelete?"delete":"new",natom(0,minf->name),an_xrp[prI]);
+						DBG("%s xr prop '%s' on %s",e->state == PropertyDelete?"delete":"new",an_xrp[prI],natom(0,minf->name));
 						_xrPropFlush();
 						return 1;
 					}
@@ -2312,6 +2349,14 @@ _on:
 #if _BACKLIGHT
 	_mon_sysfs_name = oinf->name;
 	_mon_sysfs_name_len = oinf->nameLen;
+	pr = &minf->prop[prI = xrp_bl];
+#ifndef MINIMAL
+	if (pr->en || !pr->my) // avoid double open
+#endif
+	{
+		_sysfs_free();
+		_pr_sync();
+	}
 #endif
 	int nprop = 0;
 	Atom *props = XRRListOutputProperties(dpy, minf->out, &nprop);
@@ -2323,8 +2368,11 @@ _on:
 		}
 		if (r<2) continue;
 		pr = &minf->prop[prI];
-#ifndef MINIMAL
-		if (pr->en) continue;
+#if !defined(MINIMAL) && 0
+		if (pr->en) {
+			_pr_sync();
+			continue;
+		}
 #endif
 		_pr_get(r);
 	}
@@ -2348,14 +2396,6 @@ _on:
 			backlight = 1;
 			oldShowPtr |= 32|64;
 		}
-	} else if (_mon_sysfs_name) {
-#ifdef SYSFS_CACHE
-		// force
-		//if (inf->blfd == -1)
-		    minf->blfd = 0;
-#endif
-		//_pr_sync();
-		_bl_sysfs();
 	}
 	_mon_sysfs_name = NULL;
 #endif
@@ -2825,7 +2865,7 @@ found:
 	dinf = inputs;
 #endif
 	dinf1->devid = devid;
-	dinf1->attach0 = d2->attachment;
+	dinf1->attach0 = (t&o_master)?0:d2->attachment;
 	dinf1->mindiffZ = 2;
 ch:
 	t |= o_changed;
@@ -3120,12 +3160,11 @@ static void getHierarchy(){
 		}
 		switch (d2->use) {
 		    case XIMasterPointer:
-#ifdef __check_entered
-			type|=o_master;
-			break;
-#else
-			continue;
+#ifdef CHK_ENTERED_ALL
+			// for XIQueryPointer()
+			_add_input(type|=type|=o_master);
 #endif
+			continue;
 		    case XIFloatingSlave:
 			type1 |= o_floating;
 			break;
@@ -3428,14 +3467,10 @@ repeat0:
 	cnt = 3;
 repeat:
 	if (oldShowPtr&8) {
-#ifdef USE_THREAD
 		xmutex_lock(&mutex);
-#endif
 		oldShowPtr ^= 8;
 		xrMons0();
-#ifdef USE_THREAD
 		xmutex_unlock(&mutex);
-#endif
 	}
 	if (pi[p_floating] != 3)
 		if (((oldShowPtr^showPtr)&1) ) oldShowPtr |= 2; // some device configs dynamic
