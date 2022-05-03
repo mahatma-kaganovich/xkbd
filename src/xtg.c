@@ -52,11 +52,12 @@
 
 #if !_BACKLIGHT || defined(MINIMAL)
 #undef SYSFS_CACHE
+#endif
+
+#ifndef SYSFS_CACHE
 #undef USE_XTHREAD
 #undef USE_PTHREAD
 #endif
-
-
 
 #include <stdio.h>
 #include <stdint.h>
@@ -109,6 +110,9 @@
 #include <pthread.h>
 #include <sys/inotify.h>
 #define xthread_fork(f,c) { pthread_t _th; pthread_create(&_th,NULL,f,c); }
+#define xmutex_rec pthread_mutex_t
+#define xmutex_lock(m) pthread_mutex_lock(m)
+#define xmutex_unlock(m) pthread_mutex_unlock(m)
 #define USE_THREAD
 #endif
 
@@ -1387,10 +1391,15 @@ static void _sysfs_free(){
 
 #ifdef USE_THREAD
 int inotify;
+xmutex_rec mutex;
 static void *thread_inotify(void* args){
 	struct inotify_event ie;
-	while(read(inotify, &ie, sizeof(ie))) {
+//	char ie[512];
+	while(read(inotify, &ie, sizeof(ie)) > 0) {
+		xmutex_lock(&mutex);
+		MINF(minf->blfd) _sysfs_free();
 		oldShowPtr |= 8;
+		xmutex_unlock(&mutex);
 	}
 }
 #endif
@@ -1472,6 +1481,8 @@ ex:
 	return fd;
 }
 
+static _short _pr_free(_short err);
+
 static void _bl_sysfs(){
 	if (!(pi[p_safe]&4096)) goto ex;
 	_xrp_t cur;
@@ -1530,6 +1541,10 @@ files_ok:
 	if (minf->blfd) goto ex;
 err:
 	minf->blfd = 0;
+	if (pr->my) {
+		pr->en = 0;
+		_pr_free(2);
+	}
 #else
 err:
 #endif
@@ -3413,8 +3428,14 @@ repeat0:
 	cnt = 3;
 repeat:
 	if (oldShowPtr&8) {
+#ifdef USE_THREAD
+		xmutex_lock(&mutex);
+#endif
 		oldShowPtr ^= 8;
 		xrMons0();
+#ifdef USE_THREAD
+		xmutex_unlock(&mutex);
+#endif
 	}
 	if (pi[p_floating] != 3)
 		if (((oldShowPtr^showPtr)&1) ) oldShowPtr |= 2; // some device configs dynamic
@@ -3876,8 +3897,10 @@ static void init(){
 #endif
 	win = root;
 #ifdef USE_THREAD
-	if ((inotify = inotify_init()) >=0 )
+	if ((inotify = inotify_init()) >=0 ) {
+		xmutex_init(&mutex);
 		xthread_fork(&thread_inotify,NULL);
+	}
 #endif
 }
 
