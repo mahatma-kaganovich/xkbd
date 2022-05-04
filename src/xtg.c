@@ -1628,13 +1628,13 @@ static void chBL0(){
 }
 
 #ifdef CHK_ENTERED_ALL
-static _short QPtr(int devid, Window *w, _int *x, _int *y){
+static _short QPtr(int dev, Window *w, _int *x, _int *y){
 	Window rw;
 	XIButtonState b;
 	XIModifierState m;
 	XIGroupState g;
 	double dx, dy, root_x,root_y;
-	if (XIQueryPointer(dpy,devid,root,&rw,&w,&root_x,&root_y,&dx,&dy,&b,&m,&g)) {
+	if (XIQueryPointer(dpy,devid = dev,root,&rw,&w,&root_x,&root_y,&dx,&dy,&b,&m,&g)) {
 		*x = root_x;
 		*y = root_y;
 		return 1;
@@ -1660,6 +1660,27 @@ static void chBL(Window win,_int x,_int y,_int w,_int h, _short mode) {
 		    case 2: // add rectangle(s)
 			if (r) minf1->obscured++;
 			break;
+		    case 7:
+			minf1->entered += 1;
+			break;
+		    case 8: // rescan pointer(s) and window(s)
+			    // possible overcode, but sometime ask pointer state
+#ifdef CHK_ENTERED_ALL
+			MINF(1) minf->entered = 0;
+			// check all masters and floating, not attached to monitor
+			//DINF(!(dinf->type&o_kbd) && !dinf->mon
+			// or all masters
+			//DINF((dinf->type&o_master)
+			DINF((dinf->type&(o_master|o_kbd))==o_master
+			     && QPtr(dinf->devid,&win,&x,&y) && (win == None || win == root))
+					chBL(None,x,y,1,1,0x18);
+#elif !defined(MINIMAL)
+			unsigned int m;
+			int x1,y1,x2,y2;
+			Window root1;
+			XQueryPointer(dpy,root,&root1,&win,&x1,&y1,&x2,&y2,&m);
+			chBL(None,x1,y1,1,1,0x10|(win != None && win != root));
+#endif
 		    case 3: // del/rescan window(s)
 			if (win) {
 				if (r) minf1->obscured--;
@@ -1667,21 +1688,8 @@ static void chBL(Window win,_int x,_int y,_int w,_int h, _short mode) {
 				break;
 			}
 
-			// reset/rescan all
-			MINF(1) minf->obscured = minf->entered = 0;
-#ifdef CHK_ENTERED_ALL
-			// check all masters and floating
-			//DINF(!(dinf->type&o_kbd) && QPtr(dinf->devid,&win,&x,&y))
-			// or all masters
-			DINF((dinf->type&o_master) && QPtr(dinf->devid,&win,&x,&y))
-#else
-			unsigned int m;
-			Window root1;
-			XQueryPointer(dpy,root,&root1,&win,&x,&y,&w,&h,&m);
-#endif
-				if (win == None || win == root)
-					chBL(None,x,y,1,1,0x10);
-
+			// reset/rescan all windows
+			MINF(1) minf->obscured = 0;
 			win = None;
 			getWins();
 			//DBG("rescan XGetWindowAttributes() event %i",ev.type);
@@ -3462,6 +3470,9 @@ static void _eXit(int sig){
 static void setShowCursor(){
 repeat0:
 	static int cnt = 1;
+#if _BACKLIGHT == 2 && defined(XTG)
+	static _short blm = 3;
+#endif
 //	if (--cnt && XPending(dpy)) return;
 //	cnt = noutput + ninput + 1;
 	cnt = 3;
@@ -3471,12 +3482,18 @@ repeat:
 		oldShowPtr ^= 8;
 		xrMons0();
 		xmutex_unlock(&mutex);
+#if _BACKLIGHT == 2 && defined(XTG)
+		blm = 8;
+#endif
 	}
 	if (pi[p_floating] != 3)
 		if (((oldShowPtr^showPtr)&1) ) oldShowPtr |= 2; // some device configs dynamic
 	if (oldShowPtr&2) {
 		oldShowPtr ^= 2;
 		getHierarchy();
+#if _BACKLIGHT == 2 && defined(XTG)
+		blm = 8;
+#endif
 	}
 	if (oldShowPtr&16) {
 		oldShowPtr ^= 16;
@@ -3496,7 +3513,8 @@ repeat:
 	if (oldShowPtr&32) {
 		oldShowPtr ^= 32;
 #if _BACKLIGHT == 2 && defined(XTG)
-		chBL(0,0,0,0,0,3);
+		chBL(0,0,0,0,0,blm);
+		blm = 3;
 #endif
 	}
 	// "Hide" must be first!
