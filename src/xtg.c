@@ -56,9 +56,12 @@
 #undef SYSFS_CACHE
 #endif
 
+#undef USE_THREAD
+
 #ifndef SYSFS_CACHE
 #undef USE_XTHREAD
 #undef USE_PTHREAD
+#undef USE_MUTEX
 #endif
 
 #include <stdio.h>
@@ -103,7 +106,6 @@
 #include <glob.h>
 #include <limits.h>
 
-#undef USE_THREAD
 #ifdef USE_XTHREAD
 #include <X11/Xthreads.h>
 #include <sys/inotify.h>
@@ -1399,23 +1401,45 @@ static void _sysfs_free(){
 #endif
 }
 
+#ifdef USE_MUTEX
+xmutex_rec mutex;
+
+static void sysfs_free1(){
+	if (minf->blfd) {
+		xmutex_lock(&mutex);
+		_sysfs_free();
+		xmutex_unlock(&mutex);
+	}
+}
+#else
+#define  sysfs_free1() _sysfs_free()
+#endif
+
 #if _BACKLIGHT
 
 #ifdef USE_THREAD
 int inotify;
-#ifdef USE_MUTEX
-xmutex_rec mutex;
-#endif
 static void *thread_inotify(void* args){
 	struct inotify_event ie;
 //	char ie[512];
-	while(read(inotify, &ie, sizeof(ie)) > 0) {
-		xmutex_lock(&mutex);
 #ifdef USE_MUTEX
-		MINF(minf->blfd) _sysfs_free();
+	_short m = 0;
+#endif
+	while(read(inotify, &ie, sizeof(ie)) > 0) {
+#ifdef USE_MUTEX
+		MINF(minf->blfd) if (minf->blfd) {
+			if (!m) {
+				m = 1;
+				xmutex_lock(&mutex);
+			}
+			_sysfs_free();
+		}
+		if (m) {
+			xmutex_unlock(&mutex);
+			m = 0;
+		}
 #endif
 		oldShowPtr |= 8;
-		xmutex_unlock(&mutex);
 	}
 }
 #endif
@@ -1505,6 +1529,7 @@ static void _bl_sysfs(){
 	_xrp_t cur;
 	static long values[] = {0, 0};
 	int fd, fd1;
+	xmutex_lock(&mutex);
 #ifdef SYSFS_CACHE
 	_short opened = 0;
 	if (minf->blfd) {
@@ -1576,6 +1601,7 @@ err1:
 		_pr_free(1);
 	}
 ex:
+	xmutex_unlock(&mutex);
 	_mon_sysfs_name = NULL;
 }
 
@@ -1950,7 +1976,7 @@ static void _minf_free(){
 		minf->win = 0;
 	}
 #endif
-	_sysfs_free();
+	sysfs_free1();
 	for (prI=0; prI<xrp_cnt; prI++) {
 		pr = &minf->prop[prI];
 		_pr_free(0);
@@ -2362,7 +2388,7 @@ _on:
 	if (pr->en || !pr->my) // avoid double open
 #endif
 	{
-		_sysfs_free();
+		sysfs_free1();
 		_pr_sync();
 	}
 #endif
@@ -3478,10 +3504,8 @@ repeat0:
 	cnt = 3;
 repeat:
 	if (oldShowPtr&8) {
-		xmutex_lock(&mutex);
 		oldShowPtr ^= 8;
 		xrMons0();
-		xmutex_unlock(&mutex);
 #if _BACKLIGHT == 2 && defined(XTG)
 		blm = 8;
 #endif
