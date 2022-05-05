@@ -43,7 +43,9 @@
 // untested. disable
 #undef XI_GestureSwipeBegin
 
+#ifndef VERSION
 #include "../config.h"
+#endif
 
 #include "structs.h"
 #include "kb.h"
