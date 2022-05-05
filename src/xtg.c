@@ -159,6 +159,8 @@
 
 #ifdef USE_THREAD
 int inotify = -1;
+#else
+#undef USE_MUTEX
 #endif
 
 #ifndef USE_MUTEX
@@ -3120,10 +3122,12 @@ static _short xiClasses(XIAnyClassInfo **classes, int num_classes){
 	else  goto ret;
 	_classes_unsafe = (j == ABS_CL0);
 	_abs1 = &_abs[j];
+#ifdef USE_EVDEV
 	if (!(_abs[1].m&4) && ncl1[2] == 1) {
 		_abs->m |= 4;
 		_abs->cl[2] = cl1[2];
 	}
+#endif
 	for (i = 0; i < 3; i++) {
 		if (!(_abs1->m&(1<<i))) continue;
 #undef e
