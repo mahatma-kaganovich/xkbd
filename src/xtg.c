@@ -157,13 +157,17 @@
 #define RECT(a) a.x,a.y,a.width,a.height
 #endif
 
+#ifdef USE_THREAD
+int inotify = -1;
+#endif
+
 #ifndef USE_MUTEX
-#undef xmutex_lock
-#define xmutex_lock(m)
-#undef xmutex_unlock
-#define xmutex_unlock(m)
-#undef xmutex_init
-#define xmutex_init(m)
+#define _xmutex_lock(m)
+#define _xmutex_unlock(m)
+#else
+xmutex_rec mutex;
+static void _xmutex_lock(){ if (inotify >= 0) xmutex_lock(&mutex); }
+static void _xmutex_unlock(){ if (inotify >= 0) xmutex_unlock(&mutex); }
 #endif
 
 typedef uint_fast8_t _short;
@@ -1401,13 +1405,12 @@ static void pr_set(xrp_t prop,_short state);
 #endif
 
 #ifdef USE_MUTEX
-xmutex_rec mutex;
 
 static void sysfs_free1(){
 	if (minf->blfd) {
-		xmutex_lock(&mutex);
+		_xmutex_lock();
 		_SYSFS_FREE();
-		xmutex_unlock(&mutex);
+		_xmutex_unlock();
 	}
 }
 #else
@@ -1417,7 +1420,6 @@ static void sysfs_free1(){
 #if _BACKLIGHT
 
 #ifdef USE_THREAD
-int inotify;
 static void *thread_inotify(void* args){
 	struct inotify_event ie;
 //	char ie[512];
@@ -1431,6 +1433,16 @@ static void *thread_inotify(void* args){
 		xmutex_unlock(&mutex);
 #endif
 		oldShowPtr |= 8;
+	}
+}
+
+static void _init_th(){
+	if (inotify < 0 && (pi[p_Safe]&8) && (inotify = inotify_init()) >=0 ) {
+#ifdef USE_MUTEX
+		xmutex_init(&mutex);
+		xmutex_lock(&mutex);
+#endif
+		xthread_fork(&thread_inotify,NULL);
 	}
 }
 #endif
@@ -1479,8 +1491,11 @@ static int _sysfs_open(_short mode) {
 			int l;
 			if (pg.gl_pathc == 1 && (l = strlen(pg.gl_pathv[0]) - 10) < 128+256-10+4) {
 #ifdef USE_THREAD
-				//inotify_add_watch(inotify,pg.gl_pathv[0],IN_MODIFY|IN_ATTRIB|IN_MOVE|IN_CREATE|IN_DELETE|IN_UNMOUNT);
-				inotify_add_watch(inotify,pg.gl_pathv[0],IN_ATTRIB|IN_MOVE|IN_CREATE|IN_DELETE|IN_UNMOUNT);
+				_init_th();
+				if (inotify >= 0) {
+					//inotify_add_watch(inotify,pg.gl_pathv[0],IN_MODIFY|IN_ATTRIB|IN_MOVE|IN_CREATE|IN_DELETE|IN_UNMOUNT);
+					inotify_add_watch(inotify,pg.gl_pathv[0],IN_ATTRIB|IN_MOVE|IN_CREATE|IN_DELETE|IN_UNMOUNT);
+				}
 #endif
 				if ((fd = open(pg.gl_pathv[0],O_RDWR|O_NONBLOCK|_o_sync)) >= 0) {
 					memcpy(buf,pg.gl_pathv[0],l);
@@ -1520,7 +1535,7 @@ static void _bl_sysfs(){
 	_xrp_t cur;
 	static long values[] = {0, 0};
 	int fd, fd1;
-	xmutex_lock(&mutex);
+	_xmutex_lock();
 #ifdef SYSFS_CACHE
 	_short opened = 0;
 	if (minf->blfd) {
@@ -1592,7 +1607,7 @@ err1:
 		_pr_free(1);
 	}
 ex:
-	xmutex_unlock(&mutex);
+	_xmutex_unlock();
 	_mon_sysfs_name = NULL;
 }
 
@@ -2257,21 +2272,21 @@ static void xrMons0(){
     if (noutput != i) {
 	if (outputs) {
 		MINF(1) _minf_free();
-		xmutex_lock(&mutex);
+		_xmutex_lock();
 		free(outputs);
 		minf2 = minf1 =
 		outputs = minf_last = NULL;
-		xmutex_unlock(&mutex);
+		_xmutex_unlock();
 	}
 	prim0 = prim = 0;
 	noutput = i;
     }
     if (!noutput) goto ret;
     if (!outputs) {
-	xmutex_lock(&mutex);
+	_xmutex_lock();
 	outputs = calloc(noutput,sizeof(minf_t));
 	minf_last = &outputs[noutput];
-	xmutex_unlock(&mutex);
+	_xmutex_unlock();
 	oldShowPtr |= 16;
     }
     prim0 = prim = XRRGetOutputPrimary(dpy, root);
@@ -3968,12 +3983,6 @@ static void init(){
 	XFixesShowCursor(dpy,root);
 #endif
 	win = root;
-#ifdef USE_THREAD
-	if ((inotify = inotify_init()) >=0 ) {
-		xmutex_init(&mutex);
-		xthread_fork(&thread_inotify,NULL);
-	}
-#endif
 }
 
 #ifdef XTG
