@@ -2265,18 +2265,22 @@ static void xrMons0(){
     i = xrrr ? xrrr->noutput : 0;
     if (noutput != i) {
 	if (outputs) {
-		for(minf=outputs; (minf!=minf_last); minf++) _minf_free();
+		MINF(1) _minf_free();
+		xmutex_lock(&mutex);
 		free(outputs);
+		minf2 = minf1 =
+		outputs = minf_last = NULL;
+		xmutex_unlock(&mutex);
 	}
 	prim0 = prim = 0;
-	minf2 = minf1 =
-	outputs = minf_last = NULL;
 	noutput = i;
     }
     if (!noutput) goto ret;
     if (!outputs) {
+	xmutex_lock(&mutex);
 	outputs = calloc(noutput,sizeof(minf_t));
 	minf_last = &outputs[noutput];
+	xmutex_unlock(&mutex);
 	oldShowPtr |= 16;
     }
     prim0 = prim = XRRGetOutputPrimary(dpy, root);
