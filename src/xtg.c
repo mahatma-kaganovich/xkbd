@@ -1438,14 +1438,19 @@ static void *thread_inotify(void* args){
 	}
 }
 
-static void _init_th(){
-	if (inotify < 0 && (pi[p_Safe]&8) && (inotify = inotify_init()) >=0 ) {
+static void _inotify(char *file, uint32_t mask){
+	if (inotify >= 0) {
+ok:
+		inotify_add_watch(inotify,file,(IN_ATTRIB|IN_MOVE|IN_CREATE|IN_DELETE|IN_UNMOUNT)|mask);
+	} else if ((pi[p_Safe]&8) && (inotify = inotify_init()) >= 0) {
 #ifdef USE_MUTEX
 		xmutex_init(&mutex);
 		xmutex_lock(&mutex);
 #endif
 		xthread_fork(&thread_inotify,NULL);
+		goto ok;
 	}
+
 }
 #endif
 
@@ -1480,6 +1485,9 @@ static int _sysfs_open(_short mode) {
 	buf = buf?:malloc(128+NAME_MAX);
 	if (mode) {
 		strcpy(buf0,"max_brightness");
+#ifdef USE_THREAD
+		_inotify(buf,IN_MODIFY);
+#endif
 		fd = open(buf,O_RDONLY|O_NONBLOCK|_o_sync);
 	} else {
 		buf0 = strcpy(buf,"/sys/class/drm/card*-");
@@ -1493,11 +1501,7 @@ static int _sysfs_open(_short mode) {
 			int l;
 			if (pg.gl_pathc == 1 && (l = strlen(pg.gl_pathv[0]) - 10) < 128+256-10+4) {
 #ifdef USE_THREAD
-				_init_th();
-				if (inotify >= 0) {
-					//inotify_add_watch(inotify,pg.gl_pathv[0],IN_MODIFY|IN_ATTRIB|IN_MOVE|IN_CREATE|IN_DELETE|IN_UNMOUNT);
-					inotify_add_watch(inotify,pg.gl_pathv[0],IN_ATTRIB|IN_MOVE|IN_CREATE|IN_DELETE|IN_UNMOUNT);
-				}
+				_inotify(pg.gl_pathv[0],0);
 #endif
 				if ((fd = open(pg.gl_pathv[0],O_RDWR|O_NONBLOCK|_o_sync)) >= 0) {
 					memcpy(buf,pg.gl_pathv[0],l);
