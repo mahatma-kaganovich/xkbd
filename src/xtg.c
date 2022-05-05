@@ -1394,12 +1394,11 @@ int noutput = 0;
 
 static void pr_set(xrp_t prop,_short state);
 
-static void _sysfs_free(){
 #ifdef SYSFS_CACHE
-	if (minf->blfd > 0) close(minf->blfd - 1);
-	minf->blfd = 0;
+#define _SYSFS_FREE() { if (minf->blfd > 0) close(minf->blfd - 1); minf->blfd = 0; }
+#else
+#define _SYSFS_FREE()
 #endif
-}
 
 #ifdef USE_MUTEX
 xmutex_rec mutex;
@@ -1407,12 +1406,12 @@ xmutex_rec mutex;
 static void sysfs_free1(){
 	if (minf->blfd) {
 		xmutex_lock(&mutex);
-		_sysfs_free();
+		_SYSFS_FREE();
 		xmutex_unlock(&mutex);
 	}
 }
 #else
-#define  sysfs_free1() _sysfs_free()
+#define  sysfs_free1() _SYSFS_FREE()
 #endif
 
 #if _BACKLIGHT
@@ -1423,21 +1422,13 @@ static void *thread_inotify(void* args){
 	struct inotify_event ie;
 //	char ie[512];
 #ifdef USE_MUTEX
-	_short m = 0;
+	minf_t *minf;
 #endif
 	while(read(inotify, &ie, sizeof(ie)) > 0) {
 #ifdef USE_MUTEX
-		MINF(minf->blfd) if (minf->blfd) {
-			if (!m) {
-				m = 1;
-				xmutex_lock(&mutex);
-			}
-			_sysfs_free();
-		}
-		if (m) {
-			xmutex_unlock(&mutex);
-			m = 0;
-		}
+		xmutex_lock(&mutex);
+		MINF(minf->blfd) _SYSFS_FREE();
+		xmutex_unlock(&mutex);
 #endif
 		oldShowPtr |= 8;
 	}
@@ -1538,7 +1529,7 @@ static void _bl_sysfs(){
 		cur.i = pr->v1.i;
 		_sysfs_val = pr->p->values[1];
 		if (!lseek(fd,0,0)) goto files_ok;
-		_sysfs_free();
+		_SYSFS_FREE();
 	}
 open:	opened = 1;
 #endif
