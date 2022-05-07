@@ -235,7 +235,7 @@ static inline _int _max(_int x,_int y){ return x>y?x:y; }
 
 #ifdef XTG
 int devid = 0;
-int xiopcode=0, xfopcode=0, xfevent=-100;
+int xiopcode=0, xfopcode=0, xfevent=-100, vXR = 0;
 Atom aFloat,aMatrix,aABS,aDevMon;
 XRRScreenResources *xrrr = NULL;
 _short showPtr, oldShowPtr = 0, curShow;
@@ -2353,7 +2353,7 @@ static void xrMons0(){
     XRRProviderInfo **provs = NULL;
     xr_p_t *provs_m;
     int nprovs = 0;
-    if ((pi[p_safe]&4096) && (xrProvs = XRRGetProviderResources(dpy, root))) {
+    if ((pi[p_safe]&4096) && vXR > 2 && (xrProvs = XRRGetProviderResources(dpy, root))) {
 	nprovs = xrProvs->nproviders;
 	provs = malloc(sizeof(XRRProviderInfo *)*nprovs);
 	provs_m = calloc(nprovs,sizeof(xr_p_t));
@@ -4025,17 +4025,18 @@ static void init(){
 		if (xrr = XQueryExtension(dpy, "RANDR", &xropcode, &xrevent, &ierr)) {
 			int m = RRScreenChangeNotifyMask;
 #ifdef RROutputPropertyNotifyMask
-			int v1 = 0, v2 = 0;
-			XRRQueryVersion(dpy,&v1,&v2);
-			v2 += (v1 << 10) - 1024;
-			if (v2 > 1) {
+			int v1 = 0;
+			XRRQueryVersion(dpy,&v1,&vXR);
+			vXR += (v1 << 10) - 1024;
+			DBG("v %i",v1);
+			if (vXR > 1) {
 				xrevent1 = xrevent + RRNotify;
 				m |= RRCrtcChangeNotifyMask|RROutputChangeNotifyMask|RROutputPropertyNotifyMask;
 #ifdef RRProviderChangeNotifyMask
-				if (v2 > 3) m |= RRProviderChangeNotifyMask;
+				if (vXR > 3) m |= RRProviderChangeNotifyMask;
 #endif
 #ifdef RRLeaseNotifyMask
-				if (v2 > 5) m |= RRLeaseNotifyMask;
+				if (vXR > 5) m |= RRLeaseNotifyMask;
 #endif
 			}
 #endif
