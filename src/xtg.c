@@ -40,6 +40,7 @@
 #define SYSFS_CACHE
 #define _BACKLIGHT 2
 #define PROP_FMT
+#define _XR_PROVIDERS
 // if experienced sysfs related lockups on backlight devices [dis]connection
 //#define USE_MUTEX
 //#define _UNSAFE_WINMAP
@@ -52,8 +53,9 @@
 
 
 
-#if !_BACKLIGHT || defined(MINIMAL)
+#if !_BACKLIGHT || defined(MINIMAL) || !defined(XTG)
 #undef SYSFS_CACHE
+#undef _XR_PROVIDERS
 #endif
 
 #undef USE_THREAD
@@ -122,6 +124,10 @@
 #endif
 
 #endif
+#endif
+
+#ifndef RRProviderChangeNotifyMask
+#undef _XR_PROVIDERS
 #endif
 
 
@@ -684,7 +690,7 @@ typedef enum {
 	xrp_cs,
 	xrp_rgb,
 #endif
-	xrp_cnt,
+	xrp_cnt
 } xrp_t;
 
 char *an_xrp[xrp_cnt] = {
@@ -715,9 +721,34 @@ Atom type_xrp[xrp_cnt] = {
 #endif
 };
 
+
+
+
 _xrp_t val_xrp[xrp_cnt] = {};
 
 Atom a_xrp[xrp_cnt], a_xrp_save[xrp_cnt];
+
+#ifdef _XR_PROVIDERS
+// I'm not understand "xrandr providers" cross-hierarchy:
+// use parallel bitmask for known 
+typedef enum {
+	xr_p_modesetting,
+	xr_p_intel,
+
+	xr_p_cnt
+} xr_p_num;
+
+char *xr_p_name[xrp_cnt] = {
+	"modesetting",
+	"intel",
+};
+
+typedef _short xr_p_t;
+
+#define XR_P_NO_BL ((1<<xr_p_modesetting))
+#define XR_P_NATIVE_BL ((1<<xr_p_intel))
+#endif
+
 
 _short xrProp_ch = 0;
 static void xrrSet(){
@@ -910,6 +941,9 @@ typedef struct _minf {
 	_int mwidth,mheight,mwidth1,mheight1;
 	RROutput out;
 	RRCrtc crt;
+#ifdef _XR_PROVIDERS
+	xr_p_t prov_crt,prov_out;
+#endif
 	RRMode mode;
 	Rotation rotation;
 	_short r90;
@@ -1424,11 +1458,11 @@ static void sysfs_free1(){
 #ifdef USE_THREAD
 static void *thread_inotify(void* args){
 	struct inotify_event ie;
-//	char ie[512];
 #ifdef USE_MUTEX
 	minf_t *minf;
 #endif
-	while(read(inotify, &ie, sizeof(ie)) > 0) {
+	int n;
+	while((n=read(inotify, &ie, sizeof(ie))) > 0) {
 #ifdef USE_MUTEX
 		xmutex_lock(&mutex);
 		MINF(minf->blfd) _SYSFS_FREE();
@@ -1437,22 +1471,21 @@ static void *thread_inotify(void* args){
 		oldShowPtr |= 8;
 	}
 }
+#endif
 
 static void _inotify(char *file, uint32_t mask){
-	if (inotify >= 0) {
-ok:
-		inotify_add_watch(inotify,file,(IN_ATTRIB|IN_MOVE|IN_CREATE|IN_DELETE|IN_UNMOUNT)|mask);
-	} else if ((pi[p_Safe]&8) && (inotify = inotify_init()) >= 0) {
+#ifdef USE_THREAD
+	if (inotify < 0) {
+		if (!(pi[p_Safe]&8) || (inotify = inotify_init()) < 0) return;
 #ifdef USE_MUTEX
 		xmutex_init(&mutex);
 		xmutex_lock(&mutex);
 #endif
 		xthread_fork(&thread_inotify,NULL);
-		goto ok;
 	}
-
-}
+	inotify_add_watch(inotify,file,(IN_ATTRIB|IN_MOVE|IN_CREATE|IN_DELETE|IN_UNMOUNT)|mask);
 #endif
+}
 
 #ifdef O_DIRECT
 #define _o_sync (O_DIRECT)
@@ -1485,24 +1518,32 @@ static int _sysfs_open(_short mode) {
 	buf = buf?:malloc(128+NAME_MAX);
 	if (mode) {
 		strcpy(buf0,"max_brightness");
-#ifdef USE_THREAD
 		_inotify(buf,IN_MODIFY);
-#endif
 		fd = open(buf,O_RDONLY|O_NONBLOCK|_o_sync);
 	} else {
+		static char *bl_masks[] = {
+			"*backlight*",
+			"*_bl*", // amdgpu_bl0
+			//"*",
+			NULL
+		};
 		buf0 = strcpy(buf,"/sys/class/drm/card*-");
 		buf0 += 21;
 		memcpy(buf0,_mon_sysfs_name,_mon_sysfs_name_len);
 		buf0 += _mon_sysfs_name_len;
-		strcpy(buf0,"/*backlight*/brightness");
-		glob_t pg = {};
-		size_t n = 0;
-		if (!glob(buf,GLOB_NOSORT,NULL,&pg)) {
+		*(buf0++) = '/';
+		glob_t pg;
+		char **bl;
+		for(bl = bl_masks; *bl; bl++) {
+			strcpy(buf0,*bl);
+			strcat(buf0,"/brightness");
+			pg.gl_pathv = NULL;
+			if (!glob(buf,GLOB_NOSORT,NULL,&pg)) break;
+		}
+		if (*bl) {
 			int l;
 			if (pg.gl_pathc == 1 && (l = strlen(pg.gl_pathv[0]) - 10) < 128+256-10+4) {
-#ifdef USE_THREAD
 				_inotify(pg.gl_pathv[0],0);
-#endif
 				if ((fd = open(pg.gl_pathv[0],O_RDWR|O_NONBLOCK|_o_sync)) >= 0) {
 					memcpy(buf,pg.gl_pathv[0],l);
 					buf0 = buf + l;
@@ -1538,6 +1579,9 @@ static _short _pr_inf(Atom prop);
 
 static void _bl_sysfs(){
 	if (!(pi[p_safe]&4096)) goto ex;
+#ifdef _XR_PROVIDERS
+	if ((minf->prov_out|minf->prov_crt)&(XR_P_NATIVE_BL|XR_P_NO_BL) == XR_P_NATIVE_BL) goto ex;
+#endif
 	_xrp_t cur;
 	static long values[] = {0, 0};
 	int fd, fd1;
@@ -2187,6 +2231,7 @@ static _short xrEvent() {
 		//XRRTimes(dpy,screen,&T);
 		oldShowPtr |= 16;
 #ifndef MINIMAL
+		if (e->window == root)
 		switch (e->subtype) {
 #undef e
 #define e ((XRROutputPropertyNotifyEvent*)&ev)
@@ -2247,6 +2292,7 @@ static void getBPC(){
 	bits_per_rgb = v ? v->bits_per_rgb : 0;
 }
 
+
 static void fixGeometry();
 static void xrMons0(){
     if (!xrr) {
@@ -2302,6 +2348,25 @@ static void xrMons0(){
     }
     if (!(pi[p_safe]&32)) prim0 = 0;
     // getBPC();
+#ifdef _XR_PROVIDERS
+    XRRProviderResources *xrProvs = NULL;
+    XRRProviderInfo **provs = NULL;
+    xr_p_t *provs_m;
+    int nprovs = 0;
+    if ((pi[p_safe]&4096) && (xrProvs = XRRGetProviderResources(dpy, root))) {
+	nprovs = xrProvs->nproviders;
+	provs = malloc(sizeof(XRRProviderInfo *)*nprovs);
+	provs_m = calloc(nprovs,sizeof(xr_p_t));
+	for(i=0; i<nprovs; i++) {
+		provs[i] = XRRGetProviderInfo(dpy,xrrr,xrProvs->providers[i]);
+		for(xr_p_t pI=0; pI<xr_p_cnt; pI++) if (!strcmp(xr_p_name[pI],provs[i]->name)) {
+			provs_m[i] = 1<<pI;
+			break;
+		}
+	}
+	//XRRFreeProviderResources(xrProvs); xrProvs = NULL;
+    }
+#endif
     while(1) {
 	if (cinf) {
 		XRRFreeCrtcInfo(cinf);
@@ -2396,6 +2461,25 @@ _on:
 		if (!oinf) continue;
 	}
 
+#ifdef _XR_PROVIDERS
+	xr_p_t oprov = 0, cprov = 0;
+	for(int ip=0; ip<nprovs; ip++) {
+		for(int io=0; io<provs[ip]->noutputs; io++) if (provs[ip]->outputs[io] == minf->out) {
+			oprov |= provs_m[ip];
+			break;
+		}
+		//if (oinf->crtc)
+		for(int ic=0; ic<provs[ip]->ncrtcs; ic++) if (provs[ip]->crtcs[ic] == oinf->crtc) {
+			cprov |= provs_m[ip];
+			break;
+		}
+	}
+	if (oprov != minf->prov_out || cprov != minf->prov_crt) {
+		minf->prov_out = oprov;
+		minf->prov_crt = cprov;
+		minf->type |= o_changed;
+	}
+#endif
 #if _BACKLIGHT
 	_mon_sysfs_name = oinf->name;
 	_mon_sysfs_name_len = oinf->nameLen;
@@ -2501,6 +2585,18 @@ _on:
 	}
 	if (minf->width && minf->height) minf->type |= o_size;
     }
+#ifdef _XR_PROVIDERS
+	if (provs) {
+		for(i=0; i<nprovs; i++) if (provs[i]) XRRFreeProviderInfo(provs[i]);
+		free(provs_m);
+		free(provs);
+		provs = NULL;
+	}
+	if (xrProvs) {
+		XRRFreeProviderResources(xrProvs);
+		xrProvs = NULL;
+	}
+#endif
     MINF_T(o_changed) {
 	oldShowPtr |= 16|32;
 	DINF(dinf->mon && dinf->mon == minf->name) dinf->type |= o_changed;
@@ -3935,6 +4031,9 @@ static void init(){
 			if (v2 > 1) {
 				xrevent1 = xrevent + RRNotify;
 				m |= RRCrtcChangeNotifyMask|RROutputChangeNotifyMask|RROutputPropertyNotifyMask;
+#ifdef RRProviderChangeNotifyMask
+				if (v2 > 3) m |= RRProviderChangeNotifyMask;
+#endif
 #ifdef RRLeaseNotifyMask
 				if (v2 > 5) m |= RRLeaseNotifyMask;
 #endif
