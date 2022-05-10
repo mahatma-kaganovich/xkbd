@@ -1881,7 +1881,7 @@ err:
 		return;
 	}
 	if (st != st1) {
-		DBG("mapped? ev=%i %i attr=%i",ev.xany.type,st,st1);
+		//DBG("mapped? ev=%i %i attr=%i",ev.xany.type,st,st1);
 		winMapped = None;
 		oldShowPtr |= 32|64;
 		return;
@@ -4028,7 +4028,6 @@ static void init(){
 			int v1 = 0;
 			XRRQueryVersion(dpy,&v1,&vXR);
 			vXR += (v1 << 10) - 1024;
-			DBG("v %i",v1);
 			if (vXR > 1) {
 				xrevent1 = xrevent + RRNotify;
 				m |= RRCrtcChangeNotifyMask|RROutputChangeNotifyMask|RROutputPropertyNotifyMask;
