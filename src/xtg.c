@@ -1,5 +1,5 @@
 /*
-	xtg v1.53 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.54 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -41,8 +41,9 @@
 #define _BACKLIGHT 2
 #define PROP_FMT
 #define _XR_PROVIDERS
-// if experienced sysfs related lockups on backlight devices [dis]connection
-//#define USE_MUTEX
+// 1 = if experienced sysfs related lockups on backlight devices [dis]connection
+// 2 = +sync /sys/.../backlight back to prop
+//#define USE_MUTEX 1
 //#define _UNSAFE_WINMAP
 #undef PROP_FMT
 //#define TRACK_MATRIX
@@ -51,7 +52,9 @@
 // -f 7|15 will set per device, not XIAllDevices
 #endif
 
-
+#if defined(USE_XTHREAD) && !defined(USE_PTHREAD)
+#define USE_MUTEX 2
+#endif
 
 #if !_BACKLIGHT || defined(MINIMAL) || !defined(XTG)
 #undef SYSFS_CACHE
@@ -480,6 +483,9 @@ char *ph[MAX_PAR] = {
 #endif
 #ifdef SYSFS_CACHE
 	"		3(+8) keep sysfs 'brightness' file(s) opened (may lockup sysfs)'\n"
+#endif
+#if USE_MUTEX == 2
+	"		4(+16) do not sync back /sys/.../brightness -> XR property'\n"
 #endif
 	"\n	(safe bits tested on xf86-video-intel)\n",
 #ifdef XSS
@@ -960,6 +966,10 @@ typedef struct _minf {
 #endif
 #ifdef SYSFS_CACHE
 	int blfd; // sysfs file + 1
+#if USE_MUTEX == 2
+	int blwd; // +1
+	char *blfn;
+#endif
 #endif
 } minf_t;
 
@@ -1435,7 +1445,14 @@ int noutput = 0;
 static void pr_set(xrp_t prop,_short state);
 
 #ifdef SYSFS_CACHE
-#define _SYSFS_FREE() { if (minf->blfd > 0) close(minf->blfd - 1); minf->blfd = 0; }
+static void __sysfs_free(minf_t *minf) {
+	if (minf->blfd > 0) close(minf->blfd - 1);
+	minf->blfd = 0;
+#if USE_MUTEX == 2
+	_free(minf->blfn);
+#endif
+}
+#define _SYSFS_FREE() __sysfs_free(minf)
 #else
 #define _SYSFS_FREE()
 #endif
@@ -1455,38 +1472,6 @@ static void sysfs_free1(){
 
 #if _BACKLIGHT
 
-#ifdef USE_THREAD
-static void *thread_inotify(void* args){
-	struct inotify_event ie;
-#ifdef USE_MUTEX
-	minf_t *minf;
-#endif
-	int n;
-	while((n=read(inotify, &ie, sizeof(ie))) > 0) {
-#ifdef USE_MUTEX
-		xmutex_lock(&mutex);
-		MINF(minf->blfd) _SYSFS_FREE();
-		xmutex_unlock(&mutex);
-#endif
-		oldShowPtr |= 8;
-	}
-}
-#endif
-
-static void _inotify(char *file, uint32_t mask){
-#ifdef USE_THREAD
-	if (inotify < 0) {
-		if (!(pi[p_Safe]&8) || (inotify = inotify_init()) < 0) return;
-#ifdef USE_MUTEX
-		xmutex_init(&mutex);
-		xmutex_lock(&mutex);
-#endif
-		xthread_fork(&thread_inotify,NULL);
-	}
-	inotify_add_watch(inotify,file,(IN_ATTRIB|IN_MOVE|IN_CREATE|IN_DELETE|IN_UNMOUNT)|mask);
-#endif
-}
-
 #ifdef O_DIRECT
 #define _o_sync (O_DIRECT)
 #elif defined(SYSFS_CACHE)
@@ -1495,11 +1480,95 @@ static void _inotify(char *file, uint32_t mask){
 #define _o_sync (0)
 #endif
 
+long _sysfs_val;
+static void _read_u(int fd){
+	char bn[10];
+	ssize_t n = read(fd,&bn,sizeof(bn));
+	if (n < 1 || n == sizeof(bn) || bn[--n] != '\n') goto err;
+	_sysfs_val = 0;
+	for(_short i = 0; i < n; i++) {
+		if (bn[i] < '0' || bn[i] > '9') goto err;
+		_sysfs_val = _sysfs_val*10 + (bn[i] - '0');
+	}
+	return;
+err:
+	_sysfs_val = -1;
+}
+
+#ifdef USE_THREAD
+static void *thread_inotify(void* args){
+	struct inotify_event ie;
+//#ifdef USE_MUTEX
+	minf_t *minf;
+//#endif
+	int n;
+	while((n=read(inotify, &ie, sizeof(ie))) > 0) {
+#ifdef USE_MUTEX
+		xmutex_lock(&mutex);
+#endif
+#if USE_MUTEX == 2
+		MINF(minf->blwd - 1 == ie.wd) {
+			if ((ie.mask&IN_IGNORED)) {
+				minf->blwd = 0;
+				goto free;
+			}
+			if (ie.mask != IN_MODIFY) goto free;
+			if (!minf->blfn) goto free;
+			// lseek() not working. reopen
+			if (minf->blfd > 0) close(minf->blfd - 1);
+			minf->blfd = 0;
+			int fd = open(minf->blfn,O_RDWR|O_NONBLOCK|_o_sync);
+			if (fd < 0) goto free;
+			minf->blfd = fd + 1;
+			_read_u(fd);
+			if (_sysfs_val < 0) goto free;
+			pr = &minf->prop[prI = xrp_bl];
+			if (pr->v.i == _sysfs_val) goto un;
+			pr->v.i = _sysfs_val;
+			if (_sysfs_val) pr->vs[0].i = _sysfs_val;
+#if defined(USE_XTHREAD) && !defined(USE_PTHREAD)
+			// threaded xlib-xcb
+			// may be realized over oldShowPtr flag, but ?
+			xrSetProp(a_xrp[xrp_bl],XA_INTEGER,&pr->v,1,0);
+#endif
+			goto un;
+free:
+			_SYSFS_FREE();
+			goto un;
+		}
+#endif
+		MINF(1) _SYSFS_FREE();
+		oldShowPtr |= 8;
+#ifdef USE_MUTEX
+un:
+		xmutex_unlock(&mutex);
+#endif
+	}
+}
+#endif
+
+static int _inotify(char *file, uint32_t mask){
+#ifdef USE_THREAD
+	int res = -1;
+	if (inotify < 0) {
+		if (!(pi[p_Safe]&8) || (inotify = inotify_init()) < 0) goto ex;
+#ifdef USE_MUTEX
+		xmutex_init(&mutex);
+		xmutex_lock(&mutex);
+#endif
+		xthread_fork(&thread_inotify,NULL);
+	}
+	res = inotify_add_watch(inotify,file,(IN_ATTRIB|IN_MOVE|IN_CREATE|IN_DELETE|IN_UNMOUNT)|mask);
+ex:
+	return res;
+#else
+	return 0;
+#endif
+}
+
 char *_mon_sysfs_name;
 int _mon_sysfs_name_len;
-unsigned _sysfs_val;
 static int _sysfs_open(_short mode) {
-	char bn[10];
 	int fd = -3;
 
 	if (_mon_sysfs_name_len > 64) goto ex;
@@ -1543,10 +1612,18 @@ static int _sysfs_open(_short mode) {
 		if (*bl) {
 			int l;
 			if (pg.gl_pathc == 1 && (l = strlen(pg.gl_pathv[0]) - 10) < 128+256-10+4) {
-				_inotify(pg.gl_pathv[0],0);
-				if ((fd = open(pg.gl_pathv[0],O_RDWR|O_NONBLOCK|_o_sync)) >= 0) {
-					memcpy(buf,pg.gl_pathv[0],l);
-					buf0 = buf + l;
+#if USE_MUTEX == 2
+				if ((minf->blwd = _inotify(pg.gl_pathv[0],(pi[p_Safe]&16)?0:IN_MODIFY) + 1) > 0) {
+#else
+				if (_inotify(pg.gl_pathv[0],0) >= 0) {
+#endif
+					if ((fd = open(pg.gl_pathv[0],O_RDWR|O_NONBLOCK|_o_sync)) >= 0) {
+						memcpy(buf,pg.gl_pathv[0],l);
+						buf0 = buf + l;
+#if USE_MUTEX == 2
+						minf->blfn = strdup(pg.gl_pathv[0]);
+#endif
+					}
 				}
 			} else if (pg.gl_pathc > 1) for (l = 0; l < pg.gl_pathc; l++) {
 				// more checks possible (only writable & max_brightness)
@@ -1559,14 +1636,8 @@ static int _sysfs_open(_short mode) {
 #endif
 
 	if (fd < 0) goto ex;
-	ssize_t n = read(fd,&bn,sizeof(bn));
-	if (n < 1 || n == sizeof(bn) || bn[--n] != '\n') goto err;
-	_sysfs_val = 0;
-	for(_short i = 0; i < n; i++) {
-		if (bn[i] < '0' || bn[i] > '9') goto err;
-		_sysfs_val = _sysfs_val*10 + (bn[i] - '0');
-	}
-	goto ex;
+	_read_u(fd);
+	if (_sysfs_val >= 0) goto ex;
 err:
 	close(fd);
 	fd = -3;
@@ -1594,7 +1665,6 @@ static void _bl_sysfs(){
 		cur.i = pr->v1.i;
 		_sysfs_val = pr->p->values[1];
 		if (!lseek(fd,0,0)) goto files_ok;
-		_SYSFS_FREE();
 	}
 open:	opened = 1;
 #endif
@@ -1602,6 +1672,7 @@ open:	opened = 1;
 		_mon_sysfs_name = natom(0,minf->name);
 		_mon_sysfs_name_len = strlen(_mon_sysfs_name);
 	}
+	_SYSFS_FREE();
 	fd = _sysfs_open(0);
 	if (fd < 0) {
 #ifdef SYSFS_CACHE
@@ -1639,12 +1710,13 @@ files_ok:
 			XFlush(dpy);
 		}
 		xrSetProp(a_xrp[xrp_bl],XA_INTEGER,&cur,1,!!pr->p);
-		DBG("backlight over sysfs: %s cur=%i max=%u",_mon_sysfs_name,cur.i,_sysfs_val);
+		DBG("backlight over sysfs: %s cur=%i max=%li",_mon_sysfs_name,cur.i,_sysfs_val);
 	}
 #ifdef SYSFS_CACHE
 	if (minf->blfd) goto ex;
 err:
 	minf->blfd = 0;
+	_SYSFS_FREE();
 	close(fd);
 	if (!opened) goto open;
 #else
@@ -1865,7 +1937,7 @@ static void setMapped(Window w,_short st) {
 //		break;
 	}
 	if (winMapped == w && stMapped == st) {
-		DBG("remapped? ev=%i %i was=%i",ev.xany.type,st,stMapped);
+		//DBG("remapped? ev=%i %i was=%i",ev.xany.type,st,stMapped);
 		winMapped = None;
 		oldShowPtr |= 32;
 		return;
@@ -1881,7 +1953,7 @@ err:
 		return;
 	}
 	if (st != st1) {
-		//DBG("mapped? ev=%i %i attr=%i",ev.xany.type,st,st1);
+		DBG("mapped? ev=%i %i attr=%i",ev.xany.type,st,st1);
 		winMapped = None;
 		oldShowPtr |= 32|64;
 		return;
