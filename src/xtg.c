@@ -1584,7 +1584,6 @@ static int _sysfs_open(_short mode) {
 	fd = open(buf,mode?(O_RDONLY|O_NONBLOCK|_o_sync):(O_RDWR|O_NONBLOCK|_o_sync));
 #else
 	static char *buf = NULL, *buf0;
-	buf = buf?:malloc(128+NAME_MAX);
 	if (mode) {
 		strcpy(buf0,"max_brightness");
 		_inotify(buf,IN_MODIFY);
@@ -1596,6 +1595,7 @@ static int _sysfs_open(_short mode) {
 			//"*",
 			NULL
 		};
+		buf = buf?:malloc(128+NAME_MAX);
 		buf0 = strcpy(buf,"/sys/class/drm/card*-");
 		buf0 += 21;
 		memcpy(buf0,_mon_sysfs_name,_mon_sysfs_name_len);
@@ -1611,17 +1611,19 @@ static int _sysfs_open(_short mode) {
 		}
 		if (*bl) {
 			int l;
-			if (pg.gl_pathc == 1 && (l = strlen(pg.gl_pathv[0]) - 10) < 128+256-10+4) {
+			if (pg.gl_pathc == 1 && (l = strlen(pg.gl_pathv[0])) < 128+256+4) {
 #if USE_MUTEX == 2
 				if ((minf->blwd = _inotify(pg.gl_pathv[0],(pi[p_Safe]&16)?0:IN_MODIFY) + 1) > 0) {
 #else
 				if (_inotify(pg.gl_pathv[0],0) >= 0) {
 #endif
 					if ((fd = open(pg.gl_pathv[0],O_RDWR|O_NONBLOCK|_o_sync)) >= 0) {
+						l -= 10;
 						memcpy(buf,pg.gl_pathv[0],l);
 						buf0 = buf + l;
 #if USE_MUTEX == 2
-						minf->blfn = strdup(pg.gl_pathv[0]);
+						l += 11;
+						memcpy(minf->blfn = malloc(l),pg.gl_pathv[0],l);
 #endif
 					}
 				}
