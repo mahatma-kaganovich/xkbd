@@ -53,6 +53,10 @@
 #endif
 
 #if defined(USE_XTHREAD) && !defined(USE_PTHREAD)
+#define XLIB_THREADSAFE
+#endif
+
+#ifdef XLIB_THREADSAFE
 #define USE_MUTEX 2
 #endif
 
@@ -948,7 +952,10 @@ typedef struct _minf {
 	RROutput out;
 	RRCrtc crt;
 #ifdef _XR_PROVIDERS
-	xr_p_t prov_crt,prov_out;
+	xr_p_t prov_out;
+	// more unused logic
+	//xr_p_t prov_crt;
+#define prov_crt prov_out
 #endif
 	RRMode mode;
 	Rotation rotation;
@@ -1498,16 +1505,19 @@ err:
 #ifdef USE_THREAD
 static void *thread_inotify(void* args){
 	struct inotify_event ie;
-//#ifdef USE_MUTEX
+#ifdef USE_MUTEX
 	minf_t *minf;
-//#endif
+#endif
 	int n;
 	while((n=read(inotify, &ie, sizeof(ie))) > 0) {
 #ifdef USE_MUTEX
 		xmutex_lock(&mutex);
 #endif
 #if USE_MUTEX == 2
-		MINF(minf->blwd - 1 == ie.wd) {
+		int d = ie.wd + 1;
+		_short found = 0;
+		MINF(minf->blwd == d) {
+			found = 1;
 			if ((ie.mask&IN_IGNORED)) {
 				minf->blwd = 0;
 				goto free;
@@ -1515,32 +1525,41 @@ static void *thread_inotify(void* args){
 			if (ie.mask != IN_MODIFY) goto free;
 			if (!minf->blfn) goto free;
 			// lseek() not working. reopen
-			if (minf->blfd > 0) close(minf->blfd - 1);
-			minf->blfd = 0;
+			if (minf->blfd > 0) {
+				close(minf->blfd - 1);
+				minf->blfd = 0;
+			}
 			int fd = open(minf->blfn,O_RDWR|O_NONBLOCK|_o_sync);
-			if (fd < 0) goto free;
+			_sysfs_val = -1;
+			if (fd >= 0) {
+				_read_u(fd);
+				close(fd);
+			}
+			if (_sysfs_val < 0) {
+				if (minf->blfd) continue;
+				goto free;
+			}
 			minf->blfd = fd + 1;
-			_read_u(fd);
-			if (_sysfs_val < 0) goto free;
 			pr = &minf->prop[prI = xrp_bl];
-			if (pr->v.i == _sysfs_val) goto un;
+			if (pr->v.i == _sysfs_val) continue;
 			pr->v.i = _sysfs_val;
 			if (_sysfs_val) pr->vs[0].i = _sysfs_val;
-#if defined(USE_XTHREAD) && !defined(USE_PTHREAD)
+#ifdef XLIB_THREADSAFE
 			// threaded xlib-xcb
 			// may be realized over oldShowPtr flag, but ?
 			xrSetProp(a_xrp[xrp_bl],XA_INTEGER,&pr->v,1,0);
 #endif
-			goto un;
+			continue;
 free:
 			_SYSFS_FREE();
-			goto un;
 		}
+		if (!found)
 #endif
-		MINF(1) _SYSFS_FREE();
-		oldShowPtr |= 8;
+		{
+			MINF(1) _SYSFS_FREE();
+			oldShowPtr |= 8;
+		}
 #ifdef USE_MUTEX
-un:
 		xmutex_unlock(&mutex);
 #endif
 	}
@@ -1653,7 +1672,11 @@ static _short _pr_inf(Atom prop);
 static void _bl_sysfs(){
 	if (!(pi[p_safe]&4096)) goto ex;
 #ifdef _XR_PROVIDERS
-	if ((minf->prov_out|minf->prov_crt)&(XR_P_NATIVE_BL|XR_P_NO_BL) == XR_P_NATIVE_BL) goto ex;
+	if ((minf->prov_out
+#if prov_crt != prov_out
+		|minf->prov_crt
+#endif
+		)&(XR_P_NATIVE_BL|XR_P_NO_BL) == XR_P_NATIVE_BL) goto ex;
 #endif
 	_xrp_t cur;
 	static long values[] = {0, 0};
@@ -2380,6 +2403,7 @@ static void xrMons0(){
 	return;
     }
     unsigned long i;
+    int j;
     xrrFree();
     _grabX();
 //    xrrSet();
@@ -2433,8 +2457,8 @@ static void xrMons0(){
 	provs_m = calloc(nprovs,sizeof(xr_p_t));
 	for(i=0; i<nprovs; i++) {
 		provs[i] = XRRGetProviderInfo(dpy,xrrr,xrProvs->providers[i]);
-		for(xr_p_t pI=0; pI<xr_p_cnt; pI++) if (!strcmp(xr_p_name[pI],provs[i]->name)) {
-			provs_m[i] = 1<<pI;
+		for(j=0; j<xr_p_cnt; j++) if (!strcmp(xr_p_name[j],provs[i]->name)) {
+			provs_m[i] = 1<<j;
 			break;
 		}
 	}
@@ -2487,7 +2511,6 @@ static void xrMons0(){
 
 	XRRModeInfo *m,*m0 = NULL,*m1 = NULL, *m0x = NULL;
 	RRMode id;
-	int j;
 	// find first preferred simple: m0
 	// and with maximal size|clock: m0x
 	for (j=0; j<(oinf->npreferred?:oinf->nmode); j++) {
@@ -2536,21 +2559,30 @@ _on:
 	}
 
 #ifdef _XR_PROVIDERS
-	xr_p_t oprov = 0, cprov = 0;
-	for(int ip=0; ip<nprovs; ip++) {
-		for(int io=0; io<provs[ip]->noutputs; io++) if (provs[ip]->outputs[io] == minf->out) {
-			oprov |= provs_m[ip];
+	xr_p_t prov_out = 0;
+#if prov_crt != prov_out
+	xr_p_t prov_crt = 0;
+#endif
+	for(j=0; j<nprovs; j++) {
+		for(i=0; i<provs[j]->noutputs; i++) if (provs[j]->outputs[i] == minf->out) {
+			prov_out |= provs_m[j];
 			break;
 		}
-		//if (oinf->crtc)
-		for(int ic=0; ic<provs[ip]->ncrtcs; ic++) if (provs[ip]->crtcs[ic] == oinf->crtc) {
-			cprov |= provs_m[ip];
+		if (oinf->crtc)
+		    for(i=0; i<provs[j]->ncrtcs; i++) if (provs[j]->crtcs[i] == oinf->crtc) {
+			prov_crt |= provs_m[j];
 			break;
 		}
 	}
-	if (oprov != minf->prov_out || cprov != minf->prov_crt) {
-		minf->prov_out = oprov;
-		minf->prov_crt = cprov;
+	if (prov_out != minf->prov_out
+#if prov_crt != prov_out
+	    || prov_crt != minf->prov_crt
+#endif
+	    ) {
+		minf->prov_out = prov_out;
+#if prov_crt != prov_out
+		minf->prov_crt = prov_crt;
+#endif
 		minf->type |= o_changed;
 	}
 #endif
