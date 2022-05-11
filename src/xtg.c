@@ -1844,22 +1844,24 @@ static void chBL(Window win,_int x,_int y,_int w,_int h, _short mode) {
 			break;
 		    case 8: // rescan pointer(s) and window(s)
 			    // possible overcode, but sometime ask pointer state
+			{
+			Window w;
 #ifdef CHK_ENTERED_ALL
-			MINF(1) minf->entered = 0;
 			// check all masters and floating, not attached to monitor
 			//DINF(!(dinf->type&o_kbd) && !dinf->mon
 			// or all masters
 			//DINF((dinf->type&o_master)
 			DINF((dinf->type&(o_master|o_kbd))==o_master
-			     && QPtr(dinf->devid,&win,&x,&y) && (win == None || win == root))
+			     && QPtr(dinf->devid,&w,&x,&y) && (w == None || w == root))
 					chBL(None,x,y,1,1,0x18);
 #elif !defined(MINIMAL)
 			unsigned int m;
 			int x1,y1,x2,y2;
 			Window root1;
-			XQueryPointer(dpy,root,&root1,&win,&x1,&y1,&x2,&y2,&m);
-			chBL(None,x1,y1,1,1,0x10|(win != None && win != root));
+			XQueryPointer(dpy,root,&root1,&w,&x1,&y1,&x2,&y2,&m);
+			chBL(None,x1,y1,1,1,0x10|(w != None && w != root));
 #endif
+			}
 		    case 3: // del/rescan window(s)
 			if (win) {
 				if (r) minf1->obscured--;
