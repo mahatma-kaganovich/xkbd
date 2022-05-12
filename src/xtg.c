@@ -1639,21 +1639,21 @@ static int _sysfs_open(_short mode) {
 		if (*bl) {
 			int l;
 			if (pg.gl_pathc == 1 && (l = strlen(pg.gl_pathv[0])) < 128+256+4) {
-#ifdef USE_MUTEX
-				if ((minf->blwd = _inotify(pg.gl_pathv[0],(pi[p_Safe]&16)?0:IN_MODIFY) + 1) > 0) {
-#else
-				if (_inotify(pg.gl_pathv[0],(pi[p_Safe]&16)?0:IN_MODIFY) >= 0) {
-#endif
-					if ((fd = open(pg.gl_pathv[0],O_RDWR|O_NONBLOCK|_o_sync)) >= 0) {
-						l -= 10;
-						memcpy(buf,pg.gl_pathv[0],l);
-						buf0 = buf + l;
+				if ((fd = open(pg.gl_pathv[0],O_RDWR|O_NONBLOCK|_o_sync)) >= 0) {
+					l -= 10;
+					memcpy(buf,pg.gl_pathv[0],l);
+					buf0 = buf + l;
 #ifdef USE_THREAD
-						l += 11;
-						memcpy(minf->blfn = malloc(l),pg.gl_pathv[0],l);
+					l += 11;
+					memcpy(minf->blfn = malloc(l),pg.gl_pathv[0],l);
 #endif
-					}
 				}
+#ifdef USE_THREAD
+#ifdef USE_MUTEX
+				minf->blwd = 1 +
+#endif
+				    _inotify(pg.gl_pathv[0],(fd < 0 || (pi[p_Safe]&16))?0:IN_MODIFY);
+#endif
 			} else if (pg.gl_pathc > 1) for (l = 0; l < pg.gl_pathc; l++) {
 				// more checks possible (only writable & max_brightness)
 				ERR("extra backlights matched: %s",pg.gl_pathv[l]);
