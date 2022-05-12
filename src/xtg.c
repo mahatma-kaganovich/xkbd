@@ -41,8 +41,8 @@
 #define _BACKLIGHT 2
 #define PROP_FMT
 #define _XR_PROVIDERS
-// 1 = if experienced sysfs related lockups on backlight devices [dis]connection
-// 2 = +sync /sys/.../backlight back to prop
+// 1 = threaded io - if sysfs lockups on backlight devices [dis]connection or many backlights
+// 2 = threaded io+xlib - hot sync /sys/.../backlight back to prop
 //#define USE_MUTEX 1
 //#define _UNSAFE_WINMAP
 #undef PROP_FMT
@@ -57,6 +57,7 @@
 #endif
 
 #ifdef XLIB_THREADSAFE
+#undef USE_MUTEX
 #define USE_MUTEX 2
 #endif
 
@@ -488,9 +489,7 @@ char *ph[MAX_PAR] = {
 #ifdef SYSFS_CACHE
 	"		3(+8) keep sysfs 'brightness' file(s) opened (may lockup sysfs)'\n"
 #endif
-#if USE_MUTEX == 2
 	"		4(+16) do not sync back /sys/.../brightness -> XR property'\n"
-#endif
 	"\n	(safe bits tested on xf86-video-intel)\n",
 #ifdef XSS
 	"fullscreen \"content type\" prop.: see \"xrandr --props\" (I want \"Cinema\")",
@@ -521,8 +520,7 @@ Atom pr_t;
 int pr_f;
 unsigned long pr_b,pr_n;
 
-
-#define _free(p) if (p) { XFree(p); p=NULL; }
+#define _free(p) if (p) { void *p1 = p; p = NULL; XFree(p1); }
 
 char *_aret[] = {NULL,NULL,NULL,NULL,NULL};
 static char *natom(_short i,Atom a){
@@ -973,9 +971,11 @@ typedef struct _minf {
 #endif
 #ifdef SYSFS_CACHE
 	int blfd; // sysfs file + 1
-#if USE_MUTEX == 2
-	int blwd; // +1
+#ifdef USE_THREAD
 	char *blfn;
+#endif
+#ifdef USE_MUTEX
+	int blwd; // +1
 #endif
 #endif
 } minf_t;
@@ -1455,7 +1455,7 @@ static void pr_set(xrp_t prop,_short state);
 static void __sysfs_free(minf_t *minf) {
 	if (minf->blfd > 0) close(minf->blfd - 1);
 	minf->blfd = 0;
-#if USE_MUTEX == 2
+#ifdef USE_THREAD
 	_free(minf->blfn);
 #endif
 }
@@ -1467,7 +1467,7 @@ static void __sysfs_free(minf_t *minf) {
 #ifdef USE_MUTEX
 
 static void sysfs_free1(){
-	if (minf->blfd) {
+	if (minf->blfd || minf->blfn) {
 		_xmutex_lock();
 		_SYSFS_FREE();
 		_xmutex_unlock();
@@ -1502,66 +1502,75 @@ err:
 	_sysfs_val = -1;
 }
 
+
 #ifdef USE_THREAD
+
+static void _bl2prop(minf_t *minf) {
+	XRRChangeOutputProperty(dpy,minf->out,a_xrp[xrp_bl],XA_INTEGER,intFmt,PropModeReplace,(void*)&minf->prop[xrp_bl].v,1);
+	XFlush(dpy);
+}
+
+static _short _sysfs2prop(minf_t *minf) {
+	_short ret = 0;
+	if (!minf->blfn) goto err;
+	// lseek() not working. reopen
+	if (minf->blfd > 0) {
+		close(minf->blfd - 1);
+		minf->blfd = 0;
+	}
+	int fd = open(minf->blfn,O_RDWR|O_NONBLOCK|_o_sync);
+	_sysfs_val = -1;
+	if (fd >= 0) {
+		_read_u(fd);
+		close(fd);
+	}
+	if (_sysfs_val < 0) {
+		if (!minf->blfd) goto err;
+		goto ok;
+	}
+	minf->blfd = fd + 1;
+	pinf_t *pr = &minf->prop[xrp_bl];
+	if (pr->v.i == _sysfs_val) goto ok;
+	pr->v1 = pr->v;
+	pr->v.i = _sysfs_val;
+	if (_sysfs_val) pr->vs[0].i = _sysfs_val;
+#if USE_MUTEX == 1
+	oldShowPtr |= 128;
+#else
+	_bl2prop(minf);
+#endif
+ok:	ret = 1;
+err:	return ret;
+}
+
 static void *thread_inotify(void* args){
 	struct inotify_event ie;
+	while(read(inotify, &ie, sizeof(ie)) > 0) {
 #ifdef USE_MUTEX
-	minf_t *minf;
-#endif
-	int n;
-	while((n=read(inotify, &ie, sizeof(ie))) > 0) {
-#ifdef USE_MUTEX
-		xmutex_lock(&mutex);
-#endif
-#if USE_MUTEX == 2
+		minf_t *minf;
 		int d = ie.wd + 1;
 		_short found = 0;
+		xmutex_lock(&mutex);
 		MINF(minf->blwd == d) {
+			if (!(minf->type&o_backlight)) {
+				found = 0;
+				break;
+			}
 			found = 1;
-			if ((ie.mask&IN_IGNORED)) {
-				minf->blwd = 0;
-				goto free;
-			}
-			if (ie.mask != IN_MODIFY) goto free;
-			if (!minf->blfn) goto free;
-			// lseek() not working. reopen
-			if (minf->blfd > 0) {
-				close(minf->blfd - 1);
-				minf->blfd = 0;
-			}
-			int fd = open(minf->blfn,O_RDWR|O_NONBLOCK|_o_sync);
-			_sysfs_val = -1;
-			if (fd >= 0) {
-				_read_u(fd);
-				close(fd);
-			}
-			if (_sysfs_val < 0) {
-				if (minf->blfd) continue;
-				goto free;
-			}
-			minf->blfd = fd + 1;
-			pr = &minf->prop[prI = xrp_bl];
-			if (pr->v.i == _sysfs_val) continue;
-			pr->v.i = _sysfs_val;
-			if (_sysfs_val) pr->vs[0].i = _sysfs_val;
-#ifdef XLIB_THREADSAFE
-			// threaded xlib-xcb
-			// may be realized over oldShowPtr flag, but ?
-			xrSetProp(a_xrp[xrp_bl],XA_INTEGER,&pr->v,1,0);
-#endif
-			continue;
-free:
+			if ((ie.mask&IN_IGNORED)) minf->blwd = 0;
+			else if (ie.mask == IN_MODIFY && _sysfs2prop(minf)) continue;
 			_SYSFS_FREE();
 		}
-		if (!found)
-#endif
-		{
+		if (!found) {
 			MINF(1) _SYSFS_FREE();
 			oldShowPtr |= 8;
 		}
-#ifdef USE_MUTEX
 		xmutex_unlock(&mutex);
+#else
+		if (ie.mask == IN_MODIFY) oldShowPtr |= 128;
+		else oldShowPtr |= 8;
 #endif
+
 	}
 }
 #endif
@@ -1631,7 +1640,7 @@ static int _sysfs_open(_short mode) {
 		if (*bl) {
 			int l;
 			if (pg.gl_pathc == 1 && (l = strlen(pg.gl_pathv[0])) < 128+256+4) {
-#if USE_MUTEX == 2
+#ifdef USE_MUTEX
 				if ((minf->blwd = _inotify(pg.gl_pathv[0],(pi[p_Safe]&16)?0:IN_MODIFY) + 1) > 0) {
 #else
 				if (_inotify(pg.gl_pathv[0],0) >= 0) {
@@ -1640,7 +1649,7 @@ static int _sysfs_open(_short mode) {
 						l -= 10;
 						memcpy(buf,pg.gl_pathv[0],l);
 						buf0 = buf + l;
-#if USE_MUTEX == 2
+#ifdef USE_MUTEX
 						l += 11;
 						memcpy(minf->blfn = malloc(l),pg.gl_pathv[0],l);
 #endif
@@ -3756,6 +3765,23 @@ repeat:
 		freeWins();
 #endif
 	}
+#ifdef USE_THREAD
+#if USE_MUTEX == 2
+#elif USE_MUTEX == 1
+	if (oldShowPtr&128) {
+		oldShowPtr ^= 128;
+		MINF_T(o_backlight) {
+			pr = &minf->prop[xrp_bl];
+			if (pr->v.i != pr->v1.i) _bl2prop(minf);
+		}
+	}
+#else
+	if (oldShowPtr&128) {
+		oldShowPtr ^= 128;
+		MINF_T(o_backlight) if (!_sysfs2prop(minf)) sysfs_free1();
+	}
+#endif
+#endif
 	if (oldShowPtr&32) {
 		oldShowPtr ^= 32;
 #if _BACKLIGHT == 2 && defined(XTG)
