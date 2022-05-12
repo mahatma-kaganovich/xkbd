@@ -473,7 +473,7 @@ char *ph[MAX_PAR] = {
 	"		11(+2048) try delete or not create unused (saved) property\n"
 #if _BACKLIGHT
 	"		12(+4096) track backlight-controlled monitors and off when empty (under construction)\n"
-	"			modesetting: chmod o+w /sys/class/drm/card0-*/*backlight*/brightness\n"
+	"			modesetting: chmod -f o+w /sys/class/drm/card*-*/*{backlight,_bl}*/brightness\n"
 	"			- to emulate XR 'Backlight' prop\n"
 #endif	
 #ifdef XSS
@@ -1543,13 +1543,22 @@ ok:	ret = 1;
 err:	return ret;
 }
 
+Atom aPing;
+static void _ping(){
+#if USE_MUTEX == 2
+	// generate event
+	XChangeProperty(dpy,root,aPing,XA_ATOM,atomFmt,PropModeReplace,(void*)&aPing,0);
+	XFlush(dpy);
+#endif
+}
+
 static void *thread_inotify(void* args){
 	struct inotify_event ie;
+	_short found = 0;
 	while(read(inotify, &ie, sizeof(ie)) > 0) {
 #ifdef USE_MUTEX
 		minf_t *minf;
 		int d = ie.wd + 1;
-		_short found = 0;
 		xmutex_lock(&mutex);
 		MINF(minf->blwd == d) {
 			if (!(minf->type&o_backlight)) {
@@ -1560,10 +1569,14 @@ static void *thread_inotify(void* args){
 			if ((ie.mask&IN_IGNORED)) minf->blwd = 0;
 			else if (ie.mask == IN_MODIFY && _sysfs2prop(minf)) continue;
 			_SYSFS_FREE();
+			oldShowPtr |= 8;
+			_ping();
 		}
 		if (!found) {
-			MINF(1) _SYSFS_FREE();
+			found = 0;
 			oldShowPtr |= 8;
+			MINF(1) _SYSFS_FREE();
+			_ping();
 		}
 		xmutex_unlock(&mutex);
 #else
@@ -1814,21 +1827,19 @@ static void chBL0(){
 	pr_set(xrp_bl,!(minf->obscured || minf->entered));
 }
 
-#ifdef CHK_ENTERED_ALL
-static _short QPtr(int dev, Window *w, _int *x, _int *y){
+static _short QPtr(int dev, Window *w, int *x, int *y){
 	Window rw;
 	XIButtonState b;
 	XIModifierState m;
 	XIGroupState g;
 	double dx, dy, root_x,root_y;
-	if (XIQueryPointer(dpy,devid = dev,root,&rw,&w,&root_x,&root_y,&dx,&dy,&b,&m,&g)) {
+	if (XIQueryPointer(dpy,devid = dev,root,&rw,w,&root_x,&root_y,&dx,&dy,&b,&m,&g)) {
 		*x = root_x;
 		*y = root_y;
 		return 1;
 	}
 	return 0;
 }
-#endif
 
 static void chBL(Window win,_int x,_int y,_int w,_int h, _short mode) {
 	if (!backlight) return;
@@ -1854,20 +1865,24 @@ static void chBL(Window win,_int x,_int y,_int w,_int h, _short mode) {
 			    // possible overcode, but sometime ask pointer state
 			{
 			Window w;
+			int x1,y1;
 #ifdef CHK_ENTERED_ALL
 			// check all masters and floating, not attached to monitor
 			//DINF(!(dinf->type&o_kbd) && !dinf->mon
 			// or all masters
 			//DINF((dinf->type&o_master)
 			DINF((dinf->type&(o_master|o_kbd))==o_master
-			     && QPtr(dinf->devid,&w,&x,&y) && (w == None || w == root))
-					chBL(None,x,y,1,1,0x18);
+			     && QPtr(dinf->devid,&w,&x1,&y1) && (w == None || w == root))
+					chBL(None,x1,y1,1,1,0x18);
 #elif !defined(MINIMAL)
 			unsigned int m;
-			int x1,y1,x2,y2;
 			Window root1;
-			XQueryPointer(dpy,root,&root1,&w,&x1,&y1,&x2,&y2,&m);
-			chBL(None,x1,y1,1,1,0x10|(w != None && w != root));
+			int x2,y2;
+			if (
+			    (devid && QPtr(devid,&w,&x1,&y1)) ||
+			    XQueryPointer(dpy,root,&root1,&w,&x1,&y1,&x2,&y2,&m))
+				chBL(None,x1,y1,1,1,0x10|(w != None && w != root));
+			else MINF_T2(o_active|o_backlight,o_active|o_backlight) minf->entered = 1;
 #endif
 			}
 		    case 3: // del/rescan window(s)
@@ -4032,7 +4047,9 @@ static void init(){
 	dpms_enabled = DPMSQueryExtension(dpy, &dpmsevent, &ierr) && DPMSCapable(dpy);
 #endif
 #endif
-
+#if USE_MUTEX == 2
+	aPing =  XInternAtom(dpy, "_XTG_PING", False);
+#endif
 #if _WIN_STATE
 	aAbove = XInternAtom(dpy, "_NET_WM_STATE_ABOVE", False);
 	aBelow = XInternAtom(dpy, "_NET_WM_STATE_BELOW", False);
