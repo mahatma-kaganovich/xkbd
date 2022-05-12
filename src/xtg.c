@@ -1567,8 +1567,7 @@ static void *thread_inotify(void* args){
 		}
 		xmutex_unlock(&mutex);
 #else
-		if (ie.mask == IN_MODIFY) oldShowPtr |= 128;
-		else oldShowPtr |= 8;
+		oldShowPtr |= (ie.mask == IN_MODIFY) ? 128 : 8;
 #endif
 
 	}
@@ -1643,13 +1642,13 @@ static int _sysfs_open(_short mode) {
 #ifdef USE_MUTEX
 				if ((minf->blwd = _inotify(pg.gl_pathv[0],(pi[p_Safe]&16)?0:IN_MODIFY) + 1) > 0) {
 #else
-				if (_inotify(pg.gl_pathv[0],0) >= 0) {
+				if (_inotify(pg.gl_pathv[0],(pi[p_Safe]&16)?0:IN_MODIFY) >= 0) {
 #endif
 					if ((fd = open(pg.gl_pathv[0],O_RDWR|O_NONBLOCK|_o_sync)) >= 0) {
 						l -= 10;
 						memcpy(buf,pg.gl_pathv[0],l);
 						buf0 = buf + l;
-#ifdef USE_MUTEX
+#ifdef USE_THREAD
 						l += 11;
 						memcpy(minf->blfn = malloc(l),pg.gl_pathv[0],l);
 #endif
