@@ -1493,8 +1493,7 @@ static void _read_u(int fd){
 		else if (bn[i] == '\n' && i && i == n - 1) break;
 		else goto err;
 	}
-	if (!lseek(fd,0,0))
-		return;
+	return;
 err:
 	_sysfs_val = -1;
 }
@@ -1510,8 +1509,11 @@ static void _bl2prop(minf_t *minf) {
 static _short _sysfs2prop(minf_t *minf) {
 	_short ret = 0;
 
-	if (minf->blfd > 0) _read_u(minf->blfd - 1);
-	else if (!minf->blfd) goto err;
+	if (minf->blfd > 0) {
+		int fd = minf->blfd - 1;
+		if (lseek(fd,0,0)) goto err;
+		_read_u(fd);
+	} else if (!minf->blfd) goto err;
 	else goto ok;
 	if (_sysfs_val < 0) goto err;
 
@@ -1727,7 +1729,9 @@ files_ok:
 		long new = pr->v.i;
 		if (cur.i != new) {
 			if (new < 0 || new > _sysfs_val) new = _sysfs_val;
-			if (dprintf(fd,"%lu\n",new) <= 0 || lseek(fd,0,0)) goto err;
+			// keep Safe & 16 write-optimized, lseek() not required (intel)
+			//if (lseek(fd,0,0)) goto err;
+			if (dprintf(fd,"%lu\n",new) <= 0) goto err;
 		}
 	} else {
 		// init/pre-configure
@@ -4350,6 +4354,23 @@ int main(int argc, char **argv){
 			pf[i] = atof(optarg);
 			pi[i] = atoi(optarg);
 		}
+		switch (i) {
+		    case p_1:
+			_wait_mask &= ~_w_none;
+			pi[p_safe] &= ~(32+64);
+			break;
+		    case p_y:
+			pf[p_dpi] = pi[p_dpi] = 96;
+			pi[p_safe] = 1+16+32;
+			pi[p_Safe] = 1+4;
+			break;
+		    case p_Y:
+			pi[p_safe] = 1+4+128+4096;
+			pi[p_Safe] = 1+8;
+			pa[p_content_type] = "Cinema";
+			pa[p_colorspace] = "DCI-P3_RGB_Theater";
+			break;
+		}
 	}
 	initmap();
 #endif
@@ -4369,21 +4390,6 @@ int main(int argc, char **argv){
 		}
 		ERR("invalid map item '%s', -h to help",*a);
 		return 1;
-	}
-	if (pi[p_1]) {
-		_wait_mask &= ~_w_none;
-		pi[p_safe] &= ~(32+64);
-	}
-	if (pi[p_y]) {
-		pf[p_dpi] = pi[p_dpi] = 96;
-		pi[p_safe] = 1+16+32;
-		pi[p_Safe] = 1+4;
-	}
-	if (pi[p_Y]) {
-		pi[p_safe] = 1+4+128+4096;
-		pi[p_Safe] = 1+8;
-		pa[p_content_type] = "Cinema";
-		pa[p_colorspace] = "DCI-P3_RGB_Theater";
 	}
 	resX = resY = pf[p_res] < 0 ? 1 : pf[p_res];
 	strict = pa[p_mon] &&  pa[p_mon][0] == '-' && !pa[p_mon][1];
