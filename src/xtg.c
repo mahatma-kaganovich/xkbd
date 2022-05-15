@@ -1490,7 +1490,7 @@ static void _read_u(int fd){
 	for(_short i = 0; i < n; i++) {
 		if (bn[i] >= '0' && bn[i] <= '9')
 		    _sysfs_val = _sysfs_val*10 + (bn[i] - '0');
-		else if (bn[i] == '\n' && i == n - 1 ) break;
+		else if (bn[i] == '\n' && i && i == n - 1) break;
 		else goto err;
 	}
 	if (!lseek(fd,0,0))
@@ -1510,8 +1510,9 @@ static void _bl2prop(minf_t *minf) {
 static _short _sysfs2prop(minf_t *minf) {
 	_short ret = 0;
 
-	if (!minf->blfd) goto err;
-	_read_u(minf->blfd - 1);
+	if (minf->blfd > 0) _read_u(minf->blfd - 1);
+	else if (!minf->blfd) goto err;
+	else goto ok;
 	if (_sysfs_val < 0) goto err;
 
 	pinf_t *pr = &minf->prop[xrp_bl];
@@ -1565,7 +1566,7 @@ static void *thread_inotify(void* args){
 		}
 		xmutex_unlock(&mutex);
 #else
-		oldShowPtr |= (ie.mask == IN_MODIFY) ? 128 : 8;
+		oldShowPtr |= (ie.mask == IN_MODIFY & !(pi[p_Safe]&16)) ? 128 : 8;
 #endif
 
 	}
