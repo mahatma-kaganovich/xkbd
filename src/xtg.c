@@ -971,9 +971,6 @@ typedef struct _minf {
 #endif
 #ifdef SYSFS_CACHE
 	int blfd; // sysfs file + 1
-#ifdef USE_THREAD
-	char *blfn;
-#endif
 #ifdef USE_MUTEX
 	int blwd; // +1
 #endif
@@ -1455,9 +1452,6 @@ static void pr_set(xrp_t prop,_short state);
 static void __sysfs_free(minf_t *minf) {
 	if (minf->blfd > 0) close(minf->blfd - 1);
 	minf->blfd = 0;
-#ifdef USE_THREAD
-	_free(minf->blfn);
-#endif
 }
 #define _SYSFS_FREE() __sysfs_free(minf)
 #else
@@ -1467,7 +1461,7 @@ static void __sysfs_free(minf_t *minf) {
 #ifdef USE_MUTEX
 
 static void sysfs_free1(){
-	if (minf->blfd || minf->blfn) {
+	if (minf->blfd) {
 		_xmutex_lock();
 		_SYSFS_FREE();
 		_xmutex_unlock();
@@ -1489,15 +1483,18 @@ static void sysfs_free1(){
 
 long _sysfs_val;
 static void _read_u(int fd){
-	char bn[10];
+	char bn[16];
 	ssize_t n = read(fd,&bn,sizeof(bn));
-	if (n < 1 || n == sizeof(bn) || bn[--n] != '\n') goto err;
+	if (n < 1 || n == sizeof(bn)) goto err;
 	_sysfs_val = 0;
 	for(_short i = 0; i < n; i++) {
-		if (bn[i] < '0' || bn[i] > '9') goto err;
-		_sysfs_val = _sysfs_val*10 + (bn[i] - '0');
+		if (bn[i] >= '0' && bn[i] <= '9')
+		    _sysfs_val = _sysfs_val*10 + (bn[i] - '0');
+		else if (bn[i] == '\n' && i == n - 1 ) break;
+		else goto err;
 	}
-	return;
+	if (!lseek(fd,0,0))
+		return;
 err:
 	_sysfs_val = -1;
 }
@@ -1512,23 +1509,11 @@ static void _bl2prop(minf_t *minf) {
 
 static _short _sysfs2prop(minf_t *minf) {
 	_short ret = 0;
-	if (!minf->blfn) goto err;
-	// lseek() not working. reopen
-	if (minf->blfd > 0) {
-		close(minf->blfd - 1);
-		minf->blfd = 0;
-	}
-	int fd = open(minf->blfn,O_RDWR|O_NONBLOCK|_o_sync);
-	_sysfs_val = -1;
-	if (fd >= 0) {
-		_read_u(fd);
-		close(fd);
-	}
-	if (_sysfs_val < 0) {
-		if (!minf->blfd) goto err;
-		goto ok;
-	}
-	minf->blfd = fd + 1;
+
+	if (!minf->blfd) goto err;
+	_read_u(minf->blfd - 1);
+	if (_sysfs_val < 0) goto err;
+
 	pinf_t *pr = &minf->prop[xrp_bl];
 	if (pr->v.i == _sysfs_val) goto ok;
 	pr->v1 = pr->v;
@@ -1621,13 +1606,13 @@ static int _sysfs_open(_short mode) {
 	strcpy(buf,"/sys/class/drm/card0-");
 	memcpy(&buf[21],_mon_sysfs_name,_mon_sysfs_name_len);
 	strcpy(&buf[21+_mon_sysfs_name_len],nn[mode]);
-	fd = open(buf,mode?(O_RDONLY|O_NONBLOCK|_o_sync):(O_RDWR|O_NONBLOCK|_o_sync));
+	fd = open(buf,mode?(O_RDONLY|_o_sync):(O_RDWR|_o_sync));
 #else
 	static char *buf = NULL, *buf0;
 	if (mode) {
 		strcpy(buf0,"max_brightness");
 		_inotify(buf,IN_MODIFY);
-		fd = open(buf,O_RDONLY|O_NONBLOCK|_o_sync);
+		fd = open(buf,O_RDONLY|_o_sync);
 	} else {
 		static char *bl_masks[] = {
 			"*backlight*",
@@ -1652,14 +1637,10 @@ static int _sysfs_open(_short mode) {
 		if (*bl) {
 			int l;
 			if (pg.gl_pathc == 1 && (l = strlen(pg.gl_pathv[0])) < 128+256+4) {
-				if ((fd = open(pg.gl_pathv[0],O_RDWR|O_NONBLOCK|_o_sync)) >= 0) {
+				if ((fd = open(pg.gl_pathv[0],O_RDWR|_o_sync)) >= 0) {
 					l -= 10;
 					memcpy(buf,pg.gl_pathv[0],l);
 					buf0 = buf + l;
-#ifdef USE_THREAD
-					l += 11;
-					memcpy(minf->blfn = malloc(l),pg.gl_pathv[0],l);
-#endif
 				}
 #ifdef USE_THREAD
 #ifdef USE_MUTEX
@@ -1710,7 +1691,6 @@ static void _bl_sysfs(){
 		fd = minf->blfd - 1;
 		cur.i = pr->v1.i;
 		_sysfs_val = pr->p->values[1];
-		if (!lseek(fd,0,0)) goto files_ok;
 	}
 open:	opened = 1;
 #endif
@@ -1745,7 +1725,7 @@ files_ok:
 		long new = pr->v.i;
 		if (cur.i != new) {
 			if (new < 0 || new > _sysfs_val) new = _sysfs_val;
-			if (dprintf(fd,"%lu\n",new) <= 0) goto err;
+			if (dprintf(fd,"%lu\n",new) <= 0 || lseek(fd,0,0)) goto err;
 		}
 	} else {
 		// init/pre-configure
@@ -3792,7 +3772,9 @@ repeat:
 #else
 	if (oldShowPtr&128) {
 		oldShowPtr ^= 128;
-		MINF_T(o_backlight) if (!_sysfs2prop(minf)) sysfs_free1();
+		MINF_T(o_backlight) if (minf->blfd) {
+			if (!_sysfs2prop(minf)) _SYSFS_FREE();
+		}
 	}
 #endif
 #endif
