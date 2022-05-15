@@ -1691,6 +1691,7 @@ static void _bl_sysfs(){
 		fd = minf->blfd - 1;
 		cur.i = pr->v1.i;
 		_sysfs_val = pr->p->values[1];
+		goto files_ok;
 	}
 open:	opened = 1;
 #endif
