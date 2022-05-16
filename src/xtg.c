@@ -1508,16 +1508,18 @@ static void _bl2prop(minf_t *minf) {
 
 static _short _sysfs2prop(minf_t *minf) {
 	_short ret = 0;
+	pinf_t *pr = &minf->prop[xrp_bl];
 
 	if (minf->blfd > 0) {
-		int fd = minf->blfd - 1;
-		if (lseek(fd,0,0)) goto err;
-		_read_u(fd);
+		if (pr->v1.i != pr->v.i) goto ok;
 	} else if (!minf->blfd) goto err;
 	else goto ok;
+
+	int fd = minf->blfd - 1;
+	if (lseek(fd,0,0)) goto err;
+	_read_u(fd);
 	if (_sysfs_val < 0) goto err;
 
-	pinf_t *pr = &minf->prop[xrp_bl];
 	if (pr->v.i == _sysfs_val) goto ok;
 	pr->v1 = pr->v;
 	pr->v.i = _sysfs_val;
