@@ -1577,9 +1577,18 @@ static void *thread_inotify(void* args){
 }
 #endif
 
-static int _inotify(char *file, uint32_t mask){
 #ifdef USE_THREAD
+#define INO (IN_ATTRIB|IN_MOVE|IN_CREATE|IN_DELETE|IN_UNMOUNT)
+#define INO1 (IN_ATTRIB|IN_MOVE|IN_CREATE|IN_DELETE|IN_UNMOUNT|IN_MODIFY)
+#else
+#define INO 0
+#define INO1 0
+#endif
+
+static int _inotify(char *file, uint32_t mask){
 	int res = -1;
+#ifdef USE_THREAD
+	if (!mask) goto ex;
 	if (inotify < 0) {
 		if (!(pi[p_Safe]&8) || (inotify = inotify_init()) < 0) goto ex;
 #ifdef USE_MUTEX
@@ -1588,12 +1597,99 @@ static int _inotify(char *file, uint32_t mask){
 #endif
 		xthread_fork(&thread_inotify,NULL);
 	}
-	res = inotify_add_watch(inotify,file,(IN_ATTRIB|IN_MOVE|IN_CREATE|IN_DELETE|IN_UNMOUNT)|mask);
+	res = inotify_add_watch(inotify,file,mask);
 ex:
-	return res;
-#else
-	return 0;
 #endif
+	return res;
+}
+
+
+char *_buf = NULL, *_buf0, *_buf2 = NULL;
+int fd2;
+#define _buf_len (128+NAME_MAX)
+// "max_"
+#define _buf_len1 (_buf_len-4)
+
+static int _open2(char *buf,char *name1,char *name2,uint32_t ino,int ncp,int flags){
+	int fd = -1;
+	int l = strlen(name1);
+	if (l >= _buf_len1) {
+		ERR("name too long: ",name1);
+		goto ex;
+	}
+	buf = buf?:(_buf2 = _buf2?:malloc(_buf_len));
+	l += ncp;
+	memcpy(buf,name1,l);
+	memcpy(buf + l,name2,l);
+	fd = open(buf,flags);
+	if (fd < 0) goto ex;
+	_inotify(buf,ino);
+ex:	return fd;
+}
+
+static int open_glob1(int flags, uint32_t ino, uint32_t ino1, int ncp, char *name2,int flags2) {
+	glob_t pg;
+	int fd = -1;
+	fd2 = -1;
+	pg.gl_pathv = NULL;
+	if (glob(_buf,GLOB_NOSORT,NULL,&pg)) goto ex;
+	int fd1 = -1, i;
+	char *name;
+	for (i = 0; i < pg.gl_pathc; i++) {
+		char *n = pg.gl_pathv[i];
+		fd = open(n,flags);
+		if (fd < 0) {
+			fd = fd1;
+		} else if (fd1 >= 0) {
+			if (name2) {
+				if (fd2 < 0) {
+					fd2 = _open2(NULL,name,name2,ino,ncp,flags2);
+					if (fd2 < 0) goto ok;
+				}
+				int fd3 = _open2(NULL,pg.gl_pathv[i],name2,ino,ncp,flags2);
+				if (fd3 < 0) continue;
+				close(fd3);
+			}
+			close(fd);
+			fd = -1;
+			ERR("extra backlights matched: %s",n);
+		} else {
+ok:
+			fd1 = fd;
+			name = n;
+			continue;
+		}
+		_inotify(pg.gl_pathv[i],ino);
+	}
+	if (fd1 >= 0 && fd1 != fd) {
+		close(fd1);
+		_inotify(name,ino);
+		ERR("extra backlights matched: %s",name);
+	}
+	if (fd >= 0) {
+		if (name2 && fd2 < 0) {
+			fd2 = _open2(_buf,name,name2,ino,ncp,flags2);
+			if (fd2 < 0) {
+				close(fd);
+				fd = -1;
+				goto ex;
+			}
+		}
+		if (ino1)
+#ifdef USE_MUTEX
+		    minf->blwd = 1 +
+#endif
+			_inotify(name,ino1);
+	}
+ex:
+	//_free(_buf2);
+	if (fd2 >= 0 && fd < 0) {
+		close(fd2);
+		fd2 = -1;
+	}
+	if (pg.gl_pathv)
+		globfree(&pg);
+	return fd;
 }
 
 char *_mon_sysfs_name;
@@ -1613,11 +1709,8 @@ static int _sysfs_open(_short mode) {
 	strcpy(&buf[21+_mon_sysfs_name_len],nn[mode]);
 	fd = open(buf,mode?(O_RDONLY|_o_sync):(O_RDWR|_o_sync));
 #else
-	static char *buf = NULL, *buf0;
 	if (mode) {
-		strcpy(buf0,"max_brightness");
-		_inotify(buf,IN_MODIFY);
-		fd = open(buf,O_RDONLY|_o_sync);
+		fd = fd2;
 	} else {
 		static char *bl_masks[] = {
 			"*backlight*",
@@ -1625,41 +1718,24 @@ static int _sysfs_open(_short mode) {
 			//"*",
 			NULL
 		};
-		buf = buf?:malloc(128+NAME_MAX);
-		buf0 = strcpy(buf,"/sys/class/drm/card*-");
-		buf0 += 21;
-		memcpy(buf0,_mon_sysfs_name,_mon_sysfs_name_len);
-		buf0 += _mon_sysfs_name_len;
-		*(buf0++) = '/';
-		glob_t pg;
+		_buf = _buf?:malloc(_buf_len);
+		_buf0 = strcpy(_buf,"/sys/class/drm/card*-");
+		_buf0 += 21;
+		memcpy(_buf0,_mon_sysfs_name,_mon_sysfs_name_len);
+		_buf0 += _mon_sysfs_name_len;
+		*(_buf0++) = '/';
 		char **bl;
 		for(bl = bl_masks; *bl; bl++) {
-			strcpy(buf0,*bl);
-			strcat(buf0,"/brightness");
-			pg.gl_pathv = NULL;
-			if (!glob(buf,GLOB_NOSORT,NULL,&pg)) break;
+			strcpy(_buf0,*bl);
+			strcat(_buf0,"/brightness");
+			fd = open_glob1(O_RDWR|_o_sync,INO,INO1,-10,"max_brightness",O_RDONLY|_o_sync);
+			if (fd >= 0) break;
 		}
-		if (*bl) {
-			int l;
-			if (pg.gl_pathc == 1 && (l = strlen(pg.gl_pathv[0])) < 128+256+4) {
-				if ((fd = open(pg.gl_pathv[0],O_RDWR|_o_sync)) >= 0) {
-					l -= 10;
-					memcpy(buf,pg.gl_pathv[0],l);
-					buf0 = buf + l;
-				}
-#ifdef USE_THREAD
-#ifdef USE_MUTEX
-				minf->blwd = 1 +
-#endif
-				    _inotify(pg.gl_pathv[0],(fd < 0 || (pi[p_Safe]&16))?0:IN_MODIFY);
-#endif
-			} else if (pg.gl_pathc > 1) for (l = 0; l < pg.gl_pathc; l++) {
-				// more checks possible (only writable & max_brightness)
-				ERR("extra backlights matched: %s",pg.gl_pathv[l]);
-			}
-		}
-		if (pg.gl_pathv)
-			globfree(&pg);
+		// if single monitor. precount?
+		//if (fd < 0 &&) {
+		//	strcpy(_buf,"/sys/class/backlight/*/brightness");
+		//	fd = open_glob1(O_RDWR|_o_sync,INO,INO1,-10,"max_brightness",O_RDONLY|_o_sync);
+		//}
 	}
 #endif
 
@@ -1670,6 +1746,7 @@ err:
 	close(fd);
 	fd = -3;
 ex:
+	//_free(_buf);
 	return fd;
 }
 
