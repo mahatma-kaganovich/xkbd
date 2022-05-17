@@ -1646,8 +1646,12 @@ static int open_glob1(int flags, uint32_t ino, uint32_t ino1, int ncp, char *nam
 					fd2 = _open2(NULL,name,name2,ino,ncp,flags2);
 					if (fd2 < 0) goto ok;
 				}
-				int fd3 = _open2(NULL,pg.gl_pathv[i],name2,ino,ncp,flags2);
-				if (fd3 < 0) continue;
+				int fd3 = _open2(NULL,n,name2,ino,ncp,flags2);
+				if (fd3 < 0) {
+					close(fd);
+					fd = fd1;
+					continue;
+				}
 				close(fd3);
 			}
 			close(fd);
