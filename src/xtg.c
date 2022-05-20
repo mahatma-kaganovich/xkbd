@@ -1525,19 +1525,29 @@ static void sysfs_free1(){
 #define _o_sync (0)
 #endif
 
-#define buflong 16
-static long _strtou(char *b, ssize_t n) {
-	if (n < 1 || n >= buflong - 1) return -1;
-	b[n] = '\n';
-	char *p;
-	long res = strtol(b,&p,10);
-	if (*p != '\n'
-	    || p - b < n - 1
-		) res = -1;
-	return res;
+#define buflong 32
+
+#define _STR2A(type,name,conv,name2)			\
+static type name(char *b, ssize_t n){			\
+	if (n < 1 || n >= buflong - 1) return -1;	\
+	b[n] = '\n';					\
+	char *p;					\
+	type res = conv(b,&p,10);			\
+	if (*p != '\n'					\
+	    || p - b < n - 1				\
+		) res = -1;				\
+	return res;					\
+}							\
+static type name2(int fd){				\
+	char b[buflong];				\
+	return name(b,read(fd,b,buflong));		\
 }
 
-static long _read_u(int fd){
+
+_STR2A(long,_strtou,strtol,_read_u)
+_STR2A(long long,_strtouu,strtoll,_read_uu)
+
+static long _read_u__(int fd){
 	char b[buflong];
 	return _strtou(b,read(fd,b,buflong));
 }
@@ -1635,7 +1645,7 @@ static void *thread_inotify(void* args){
 #ifdef USE_MUTEX
 #undef min_light
 int fd_light,fd_light_dev,light_bytes,light_shift,light_repeat = 0;
-_short light_sign = 0, light_fmt = 0, light_fmt0 = 0;
+_short light_sign = 0, light_fmt = 0, light_fmt0 = 0,light_reendian = 0;
 double light_scale;
 static void *thread_iio_light_wait(){
 	char b[16];
@@ -1665,6 +1675,17 @@ static void *thread_iio_light(){
 #else
 	// reduce repeated math
 	char b2[2][buflong], *b = (void*)&b2[0];
+#if __BYTE_ORDER  == __BIG_ENDIAN
+	void *bl = &l.b[sizeof(long long)-light_bytes];
+#define xe16toh le16toh
+#define xe32toh le32toh
+#define xe64toh le64toh
+#elif __LITTLE_ENDIAN
+	void *bl = &l;
+#define xe16toh be16toh
+#define xe32toh be32toh
+#define xe64toh be64toh
+#endif
 	_short bb = 0, n1 = 1;
 	int n;
 err_dev:
@@ -1675,26 +1696,38 @@ err_dev:
 	while(1) {
 #if __BYTE_ORDER  == __BIG_ENDIAN || __BYTE_ORDER  == __LITTLE_ENDIAN
 		if (light_fmt) {
-			if (read(fd_light_dev,
-#if __BYTE_ORDER  == __BIG_ENDIAN
-				&l.b[sizeof(long long)-light_bytes]
-#else
-				&l
-#endif
-				,light_bytes) != light_bytes) goto err_dev;
+			if (read(fd_light_dev,bl,light_bytes) != light_bytes) goto err_dev;
+			if (light_reendian) switch (light_bytes) {
+			    case 2: *(uint16_t*)bl = xe16toh(*(uint16_t*)bl);break;
+			    case 4: *(uint32_t*)bl = xe32toh(*(uint32_t*)bl);break;
+			    case 8: *(uint64_t*)bl = xe64toh(*(uint64_t*)bl);break;
+			}
 		} else {
 #else
-#define _read_l_dev(t) { int32_t x; if (read(fd_light_dev,&x,sizeof(x)) != sizeof(x)) goto err_dev; l.l=x; break; }
+#define _read_l_dev(t,ll) { int32_t x; if (read(fd_light_dev,&x,sizeof(x)) != sizeof(x)) goto err_dev; l.ll=x; break; }
+#define _eread_l_dev(t,e,ll) { int32_t x; if (read(fd_light_dev,&x,sizeof(x)) != sizeof(x)) goto err_dev; l.ll=e(x); break; }
 		switch (light_fmt) {
-		    case 0x84: _read_l_dev(int32_t);
-		    
-		    case 1: _read_l_dev(uint8_t);
-		    case 0x81: _read_l_dev(int8_t);
-		    case 2: _read_l_dev(uint16_t);
-		    case 0x82: _read_l_dev(int16_t);
-		    case 4: _read_l_dev(uint32_t);
-		    case 8: _read_l_dev(uint64_t);
-		    case 0x88: _read_l_dev(int64_t);
+
+		    case 0x41:
+		    case 0x21:
+		    case 1: _read_l_dev(uint8_t,l);
+		    case 0xc1:
+		    case 0xa1:
+		    case 0x81: _read_l_dev(int8_t,ls);
+
+		    case 0x42: _eread_l_dev(uint16_t,be16toh,l);
+		    case 0xc2: _eread_l_dev(int16_t,be16toh,ls);
+		    case 0x44: _eread_l_dev(uint32_t,be32toh,l);
+		    case 0xc4: _eread_l_dev(int32_t,be32toh,ls);
+		    case 0x48: _eread_l_dev(uint64_t,be64toh,l);
+		    case 0xc8: _eread_l_dev(int64_t,be64toh,ls);
+
+		    case 0x22: _eread_l_dev(uint16_t,le16toh,l);
+		    case 0xa2: _eread_l_dev(int16_t,le16toh,ls);
+		    case 0x24: _eread_l_dev(uint32_t,le32toh,l);
+		    case 0xa4: _eread_l_dev(int32_t,le32toh,ls);
+		    case 0x28: _eread_l_dev(uint64_t,le64toh,l);
+		    case 0xa8: _eread_l_dev(int64_t,le64toh,ls);
 		    default:
 #endif
 #if 1
@@ -1703,7 +1736,7 @@ err_dev:
 			if (lseek(fd_light,0,0)) break;
 			n = read(fd_light,b,buflong);
 			if (n == n1 && !memcmp(&b2[0],&b2[1],n)) continue;
-			if (light_sign) l.ls = _strtou(b,n);
+			if (light_sign) l.ls = _strtouu(b,n);
 			else l.l = _strtou(b,n);
 		}
 #endif
@@ -1762,6 +1795,7 @@ err:
 	}
 ex:
 }
+
 #endif
 
 #endif
@@ -1955,16 +1989,23 @@ static void open_iio_light(){
 	n=read(fd,b,16);
 	close(fd);
 	int bits1 = 0,bits2 = 0;
-	char sign,e;
+	char sign,e,em;
 	if (sscanf(b,"%ce:%c%d/%dX%d>>%u\n",&e,&sign,&bits1,&bits2,&light_repeat,&light_shift) != 6 &&
 		sscanf(b,"%ce:%c%d/%d>>%u\n",&e,&sign,&bits1,&bits2,&light_shift) != 5) goto nofmt;
 	if (sign == 's') light_sign = 0x80;
 	else if (sign != 'u') goto nofmt;
 	light_bytes = bits2 >> 3;
-	if (light_bytes < 1 || light_bytes > sizeof(long long) || light_repeat > 1 || e != endian) goto nofmt;
+	if (light_bytes < 1 || light_bytes > sizeof(long long) || light_repeat > 1) goto nofmt;
+	switch (e) {
+	    case 'l': em = 0x20; break;
+	    case 'b': em = 0x40; break;
+	    default: goto nofmt;
+	}
+	light_reendian = (e != endian);
+	if (light_reendian && !(light_bytes == 1 || light_bytes == 2 || light_bytes == 4 || light_bytes == 8)) goto nofmt;
 
 	if (sizeof(unsigned long long) == sizeof(long long) && op_BL_FAST)
-	    light_fmt0 = light_bytes|light_sign;
+	    light_fmt0 = light_bytes|light_sign|em;
 
 	if (light_fmt0) {
 		*(_buf0 - 1) = 0;
