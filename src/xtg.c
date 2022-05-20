@@ -1,5 +1,5 @@
 /*
-	xtg v1.54 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.55 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -108,6 +108,7 @@
 #include <X11/extensions/Xfixes.h>
 #include <stdlib.h>
 #include <string.h>
+#include <getopt.h>
 //#include <sys/time.h>
 #include <X11/Xpoll.h>
 // internal extensions list. optional
@@ -129,6 +130,12 @@
 #define xmutex_lock(m) pthread_mutex_lock(m)
 #define xmutex_unlock(m) pthread_mutex_unlock(m)
 #define USE_THREAD
+
+#ifdef USE_THREAD
+// iio format
+#incluse <endian.h>
+#endif
+
 #endif
 
 #endif
@@ -154,6 +161,17 @@
 
 #define PH_BORDER (1<<2)
 
+#ifndef NAME_MAX
+#define NAME_MAX 256
+#endif
+#ifdef __USE_XOPEN2K8
+#define ifndprintf(e, fd, txt, args... ) {if (dprintf(fd, txt, ##args) <= 0) goto e;}
+#else
+#define ifndprintf(e, fd, txt, args... ) {char b[128]; int s = sprintf(b, txt, ##args); if (s <= 0 || write(fd,b,s) < s) goto e;}
+#endif
+
+#define ONCE(x) { static unsigned short _ONCE1cnt = 0; if (!_ONCE1cnt++) { x; }}
+
 #define ERR(txt, args... ) fprintf(stderr, "Error: " txt "\n", ##args )
 #ifndef NDEBUG
 #define DBG(txt, args... ) fprintf(stderr, "" txt "\n", ##args )
@@ -173,6 +191,7 @@
 
 #ifdef USE_THREAD
 int inotify = -1;
+int threads = 0;
 #else
 #undef USE_MUTEX
 #endif
@@ -182,8 +201,8 @@ int inotify = -1;
 #define _xmutex_unlock(m)
 #else
 xmutex_rec mutex;
-static void _xmutex_lock(){ if (inotify >= 0) xmutex_lock(&mutex); }
-static void _xmutex_unlock(){ if (inotify >= 0) xmutex_unlock(&mutex); }
+static void _xmutex_lock(){ if (threads) xmutex_lock(&mutex); }
+static void _xmutex_unlock(){ if (threads) xmutex_unlock(&mutex); }
 #endif
 
 typedef uint_fast8_t _short;
@@ -403,17 +422,22 @@ static void _print_bmap(_uint x, _short n, TouchTree *m) {
 #define p_Safe 16
 #define p_content_type 17
 #define p_colorspace 18
-#define p_1 19
-#define p_y 20
-#define p_Y 21
-#define p_help 22
-#define MAX_PAR 23
+
+#define p_min_backlight 19
+#define p_max_light 20
+
+#define p_1 21
+
+#define p_y 22
+#define p_Y 23
+#define p_help 24
+#define MAX_PAR 25
 char *pa[MAX_PAR] = {};
 // android: 125ms tap, 500ms long
-#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0,  14, 32, 72, 0, 0, DEF_SAFE, DEF_SAFE2, 0, 0, 0 }
+#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0,  14, 32, 72, 0, 0, DEF_SAFE, DEF_SAFE2, 0, 0, 10, 0, 0 }
 int pi[MAX_PAR] = PAR_DEFS;
 double pf[] = PAR_DEFS;
-char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:i:s:S:c:C:1yYh";
+char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:i:s:S:c:C:l:L:1yYh";
 char *ph[MAX_PAR] = {
 	"touch device 0=auto", //d
 
@@ -486,14 +510,31 @@ char *ph[MAX_PAR] = {
 #ifdef XSS
 	"		2(+4) don't set fullscreen 'Broadcast RGB: Limited 16:235'\n"
 #endif
+
 #ifdef SYSFS_CACHE
-	"		3(+8) keep sysfs 'brightness' file(s) opened (may lockup sysfs)'\n"
+#if 0
+#define op_BL_REOPEN (pi[p_Safe]&8)
+	"		3(+8) don't keep sysfs 'brightness' file(s) opened (if lockup sysfs)'\n"
+#else
+#define op_BL_REOPEN 0
 #endif
-	"		4(+16) do not sync back /sys/.../brightness -> XR property'\n"
+#endif
+#define op_BL_FAST (pi[p_Safe]&16)
+	"		4(+16) fastest /sys & /dev access; auto on '-YL <num>'"
+	"			(/dev IIO, O_WRONLY|O_NONBLOCK not readback /sys...brightness)\n"
+	"			(vs. concurrent backlight & light sensor access)\n"
 	"\n	(safe bits tested on xf86-video-intel)\n",
 #ifdef XSS
 	"fullscreen \"content type\" prop.: see \"xrandr --props\" (I want \"Cinema\")",
 	"fullscreen \"Colorspace\" prop.: see \"xrandr --props\"  (I want \"DCI-P3_RGB_Theater\")\n",
+#endif
+#ifdef USE_THREAD
+	"min % backlight brightness (for light sensor & dark surround)",
+	"max light sensor value (corrected: value * scale)\n"
+	"		(not by design, but to reduce brightness)\n"
+	"		use IIO light sensors over sysfs"
+	"		0  - disable light sensor to backlight\n"
+	"		25 - my development default\n",
 #endif
 	" oneshot (implies set DPI, panning, etc) - to run & exit before WM",
 	" preset max-conservative",
@@ -968,6 +1009,9 @@ typedef struct _minf {
 #if _BACKLIGHT == 2
 	unsigned long obscured;
 	_short entered;
+#endif
+#ifdef _BACKLIGHT
+	long minbl;
 #endif
 #ifdef SYSFS_CACHE
 	int blfd; // sysfs file + 1
@@ -1475,27 +1519,38 @@ static void sysfs_free1(){
 
 #ifdef O_DIRECT
 #define _o_sync (O_DIRECT)
-#elif defined(SYSFS_CACHE)
+#elif defined(SYSFS_CACHE) && defined(O_DSYNC)
 #define _o_sync (O_DSYNC)
 #else
 #define _o_sync (0)
 #endif
 
-long _sysfs_val;
-static void _read_u(int fd){
-	char bn[16];
-	ssize_t n = read(fd,&bn,sizeof(bn));
-	if (n < 1 || n == sizeof(bn)) goto err;
-	_sysfs_val = 0;
-	for(_short i = 0; i < n; i++) {
-		if (bn[i] >= '0' && bn[i] <= '9')
-		    _sysfs_val = _sysfs_val*10 + (bn[i] - '0');
-		else if (bn[i] == '\n' && i && i == n - 1) break;
-		else goto err;
-	}
-	return;
-err:
-	_sysfs_val = -1;
+#define buflong 16
+static long _strtou(char *b, ssize_t n) {
+	if (n < 1 || n >= buflong - 1) return -1;
+	b[n] = '\n';
+	char *p;
+	long res = strtol(b,&p,10);
+	if (*p != '\n'
+	    || p - b < n - 1
+		) res = -1;
+	return res;
+}
+
+static long _read_u(int fd){
+	char b[buflong];
+	return _strtou(b,read(fd,b,buflong));
+}
+
+static double _read_ud(int fd){
+	char b[32];
+	ssize_t n = read(fd,&b,sizeof(b)-1);
+	if (n < 1 || n == sizeof(b)-1) return -1;
+	b[n] = '\n';
+	char *p;
+	double res = strtod(b,&p);
+	if (*p != '\n') res = -1;
+	return res;
 }
 
 
@@ -1508,6 +1563,7 @@ static void _bl2prop(minf_t *minf) {
 
 static _short _sysfs2prop(minf_t *minf) {
 	_short ret = 0;
+	if (op_BL_FAST) goto ok;
 	pinf_t *pr = &minf->prop[xrp_bl];
 
 	if (minf->blfd > 0) {
@@ -1517,13 +1573,13 @@ static _short _sysfs2prop(minf_t *minf) {
 
 	int fd = minf->blfd - 1;
 	if (lseek(fd,0,0)) goto err;
-	_read_u(fd);
-	if (_sysfs_val < 0) goto err;
+	long r = _read_u(fd);
+	if (r < 0) goto err;
 
-	if (pr->v.i == _sysfs_val) goto ok;
+	if (pr->v.i == r) goto ok;
 	pr->v1 = pr->v;
-	pr->v.i = _sysfs_val;
-	if (_sysfs_val) pr->vs[0].i = _sysfs_val;
+	pr->v.i = r;
+	if (r) pr->vs[0].i = r;
 #if USE_MUTEX == 1
 	oldShowPtr |= 128;
 #else
@@ -1570,11 +1626,144 @@ static void *thread_inotify(void* args){
 		}
 		xmutex_unlock(&mutex);
 #else
-		oldShowPtr |= (ie.mask == IN_MODIFY & !(pi[p_Safe]&16)) ? 128 : 8;
+		oldShowPtr |= (ie.mask == IN_MODIFY & !(op_BL_FAST)) ? 128 : 8;
 #endif
 
 	}
 }
+
+#ifdef USE_MUTEX
+#undef min_light
+int fd_light,fd_light_dev,light_bytes,light_shift,light_repeat = 0;
+_short light_sign = 0, light_fmt = 0, light_fmt0 = 0;
+double light_scale;
+static void *thread_iio_light_wait(){
+	char b[16];
+	if (read(fd_light_dev,b,light_bytes) == light_bytes) {
+		light_fmt = light_fmt0;
+		DBG("iio over /dev");
+	}
+}
+static void *thread_iio_light(){
+	minf_t *minf;
+	union {
+		unsigned long long l;
+		long long ls;
+		char b[sizeof(unsigned long long)];
+	} l;
+	double max_light = pf[p_max_light]/light_scale;
+	unsigned long long max_sens1 = max_light + .1;
+	unsigned long long max_sens = max_sens1 >> light_shift;
+	l.ls = max_sens1;
+	if (l.ls != l.l) {
+		DBG("unknown signed/unsignes/max behaviour");
+		goto ex;
+	}
+	l.l = 0;
+#ifdef MINIMAL
+	while (!lseek(fd_light,0,0) && (l = _read_u(fd_light)) >= 0) {
+#else
+	// reduce repeated math
+	char b2[2][buflong], *b = (void*)&b2[0];
+	_short bb = 0, n1 = 1;
+	int n;
+err_dev:
+	DBG("iio over /sys");
+	light_fmt = 0;
+	b2[1][0] = '\n';
+	if (light_fmt0) xthread_fork(&thread_iio_light_wait,NULL);
+	while(1) {
+#if __BYTE_ORDER  == __BIG_ENDIAN || __BYTE_ORDER  == __LITTLE_ENDIAN
+		if (light_fmt) {
+			if (read(fd_light_dev,
+#if __BYTE_ORDER  == __BIG_ENDIAN
+				&l.b[sizeof(long long)-light_bytes]
+#else
+				&l
+#endif
+				,light_bytes) != light_bytes) goto err_dev;
+		} else {
+#else
+#define _read_l_dev(t) { int32_t x; if (read(fd_light_dev,&x,sizeof(x)) != sizeof(x)) goto err_dev; l.l=x; break; }
+		switch (light_fmt) {
+		    case 0x84: _read_l_dev(int32_t);
+		    
+		    case 1: _read_l_dev(uint8_t);
+		    case 0x81: _read_l_dev(int8_t);
+		    case 2: _read_l_dev(uint16_t);
+		    case 0x82: _read_l_dev(int16_t);
+		    case 4: _read_l_dev(uint32_t);
+		    case 8: _read_l_dev(uint64_t);
+		    case 0x88: _read_l_dev(int64_t);
+		    default:
+#endif
+#if 1
+			sleep(1);
+#endif
+			if (lseek(fd_light,0,0)) break;
+			n = read(fd_light,b,buflong);
+			if (n == n1 && !memcmp(&b2[0],&b2[1],n)) continue;
+			if (light_sign) l.ls = _strtou(b,n);
+			else l.l = _strtou(b,n);
+		}
+#endif
+		static unsigned long long l0 = -1;
+		if (l0 == l.l) continue;
+		l0 = l.l;
+		if (light_shift) {
+			// respect mad arches
+			if (light_sign) {
+				if (l.ls > max_sens) l.ls = max_sens1;
+				else {
+					l.ls <<= light_shift;
+					if (l.ls < 0) l.l = 0;
+				}
+				
+			} else {
+				if (l.l > max_sens) l.l = max_sens1;
+				else l.l <<= light_shift;
+			}
+		}
+nol0:
+		xmutex_lock(&mutex);
+		MINF(minf->blfd > 0 || minf->prop[xrp_bl].en) {
+			pinf_t *pr = &minf->prop[xrp_bl];
+			long l1 = pr->p->values[1];
+			if (l.l < max_light) {
+#ifdef min_light
+				l1 = (l.l <= min_light) ? minf->minbl :
+				    (minf->minbl + (l1 - minf->minbl)*(l.l*light_scale - min_light)/(pf[p_max_light] - min_light));
+#else
+				l1 = minf->minbl + (l1 - minf->minbl)*(l.l/max_light);
+#endif
+			}
+
+			//DBG("light %llu -> %li",l.l,l1);
+			if (pr->vs[0].i == l1) continue;
+			pr->vs[0].i = l1;
+			if (!pr->v.i) continue;
+			pr->v.i = l1;
+			if (pr->v1.i == l1)
+			    pr->v1.i = !l1;
+#ifdef SYSFS_CACHE
+			if (minf->blfd > 0) {
+				ifndprintf(err,minf->blfd - 1,"%li\n",l1);
+err:
+				continue;
+			}
+#endif
+#if USE_MUTEX == 2
+			if (pr->en) _bl2prop(minf);
+#else
+			oldShowPtr |= 128;
+#endif
+		}
+		xmutex_unlock(&mutex);
+	}
+ex:
+}
+#endif
+
 #endif
 
 #ifdef USE_THREAD
@@ -1590,12 +1779,15 @@ static int _inotify(char *file, uint32_t mask){
 #ifdef USE_THREAD
 	if (!mask) goto ex;
 	if (inotify < 0) {
-		if (!(pi[p_Safe]&8) || (inotify = inotify_init()) < 0) goto ex;
+		if (op_BL_REOPEN) goto ex;
+		if ((inotify = inotify_init()) < 0) goto ex;
+		if (!(threads&1)) {
 #ifdef USE_MUTEX
-		xmutex_init(&mutex);
-		xmutex_lock(&mutex);
+			if (!threads) xmutex_lock(&mutex);
 #endif
-		xthread_fork(&thread_inotify,NULL);
+			threads |= 1;
+			xthread_fork(&thread_inotify,NULL);
+		}
 	}
 	res = inotify_add_watch(inotify,file,mask);
 ex:
@@ -1604,11 +1796,24 @@ ex:
 }
 
 
-char *_buf = NULL, *_buf0, *_buf2 = NULL;
+char *_buf = NULL, *_buf0, *_buf1, *_buf2 = NULL;
 int fd2;
 #define _buf_len (128+NAME_MAX)
 // "max_"
 #define _buf_len1 (_buf_len-4)
+
+static int _open(char *name,int flags){
+	int fd = open(name,flags);
+	if (fd < 0) {
+		flags &= O_RDWR|O_WRONLY|O_RDONLY;
+		ERR("opening %s file %s",
+		(!(flags^O_RDWR))?"RW":
+		(!(flags^O_WRONLY))?"W":
+		(!(flags^O_RDONLY))?"R":
+		"?",name);
+	} else DBG("opened %s",name);
+	return fd;
+}
 
 static int _open2(char *buf,char *name1,char *name2,uint32_t ino,int ncp,int flags){
 	int fd = -1;
@@ -1617,13 +1822,14 @@ static int _open2(char *buf,char *name1,char *name2,uint32_t ino,int ncp,int fla
 		ERR("name too long: ",name1);
 		goto ex;
 	}
-	buf = buf?:(_buf2 = _buf2?:malloc(_buf_len));
+	_buf1 = buf?:(_buf2 = _buf2?:malloc(_buf_len));
 	l += ncp;
-	memcpy(buf,name1,l);
-	memcpy(buf + l,name2,l);
-	fd = open(buf,flags);
+	memcpy(_buf1,name1,l);
+	_buf0 = _buf1 + l;
+	memcpy(_buf0,name2,l);
+	fd = _open(_buf1,flags);
 	if (fd < 0) goto ex;
-	_inotify(buf,ino);
+	_inotify(_buf1,ino);
 ex:	return fd;
 }
 
@@ -1637,7 +1843,7 @@ static int open_glob1(int flags, uint32_t ino, uint32_t ino1, int ncp, char *nam
 	char *name;
 	for (i = 0; i < pg.gl_pathc; i++) {
 		char *n = pg.gl_pathv[i];
-		fd = open(n,flags);
+		fd = _open(n,flags);
 		if (fd < 0) {
 			fd = fd1;
 		} else if (fd1 >= 0) {
@@ -1696,10 +1902,96 @@ ex:
 	return fd;
 }
 
+
+#ifdef USE_MUTEX
+
+static _short _open_iio1(char *data, char *scale){
+	char b1[32],*b;
+	strcpy(b=b1,"in_");
+	strcpy(b+=3,scale?:data);
+	strcat(b,"_scale");
+	b=_buf;
+	strcpy(b+=33,"in_");
+	strcpy(b+3,data);
+	strcat(b,"_raw");
+	fd_light = open_glob1(O_RDONLY|_o_sync,0,0,-strlen(b),b1,O_RDONLY|_o_sync);
+	return fd_light >= 0;
+}
+
+static void open_iio_light(){
+	if ((threads&2) || !pi[p_max_light]) return;
+	_buf = _buf?:malloc(_buf_len);
+	strcpy(_buf,"/sys/bus/iio/devices/iio:device*/");
+	char *type;
+	if (!(
+	    _open_iio1(type="illuminance",NULL) ||
+	    _open_iio1(type="intensity",NULL) ||
+	    _open_iio1(type="intensity_both","intensity_scale")
+		)) return;
+
+	light_scale = _read_ud(fd2);
+	close(fd2);
+	if (light_scale <= 0.) light_scale = 1;
+//	if (_read_d(fd_light) < 0) { close(fd_light); return;}
+
+#if __BYTE_ORDER  == __BIG_ENDIAN
+#define endian 'b'
+#elif __BYTE_ORDER  == __LITTLE_ENDIAN
+#define endian 'l'
+#else
+#define endian 0
+#endif
+
+#ifndef MINIMAL
+	int fd = -1,n;
+	char b[16];
+
+	strcpy(_buf0,"scan_elements/in_");
+	strcat(_buf0+17,type);
+	strcat(_buf0+17,"_type");
+	
+	fd = _open(_buf1,O_RDONLY|_o_sync);
+	if (fd < 0) goto th;
+	n=read(fd,b,16);
+	close(fd);
+	int bits1 = 0,bits2 = 0;
+	char sign,e;
+	if (sscanf(b,"%ce:%c%d/%dX%d>>%u\n",&e,&sign,&bits1,&bits2,&light_repeat,&light_shift) != 6 &&
+		sscanf(b,"%ce:%c%d/%d>>%u\n",&e,&sign,&bits1,&bits2,&light_shift) != 5) goto nofmt;
+	if (sign == 's') light_sign = 0x80;
+	else if (sign != 'u') goto nofmt;
+	light_bytes = bits2 >> 3;
+	if (light_bytes < 1 || light_bytes > sizeof(long long) || light_repeat > 1 || e != endian) goto nofmt;
+
+	if (sizeof(unsigned long long) == sizeof(long long) && op_BL_FAST)
+	    light_fmt0 = light_bytes|light_sign;
+
+	if (light_fmt0) {
+		*(_buf0 - 1) = 0;
+		DBG("for /dev access to light sensor [su]do: cd %s && echo 1 >scan_elements/in_%s_en && echo 1 >buffer/enable",_buf1,b);
+		_buf1 += 16;
+		memcpy(_buf1,"/dev",4);
+		fd_light_dev = _open(_buf1,O_RDONLY);
+		if (fd_light_dev < 0) {
+			light_fmt0 = 0;
+			goto th;
+		}
+	}
+nofmt:
+	if (!light_fmt0) DBG("unsupported IIO format: %s",b);
+th:
+#endif
+	threads |= 2;
+	xthread_fork(&thread_iio_light,NULL);
+}
+#endif
+
 char *_mon_sysfs_name;
 int _mon_sysfs_name_len;
+long _sysfs_val;
 static int _sysfs_open(_short mode) {
 	int fd = -3;
+	_sysfs_val = -1;
 
 	if (_mon_sysfs_name_len > 64) goto ex;
 #ifdef MINIMAL
@@ -1711,7 +2003,7 @@ static int _sysfs_open(_short mode) {
 	strcpy(buf,"/sys/class/drm/card0-");
 	memcpy(&buf[21],_mon_sysfs_name,_mon_sysfs_name_len);
 	strcpy(&buf[21+_mon_sysfs_name_len],nn[mode]);
-	fd = open(buf,mode?(O_RDONLY|_o_sync):(O_RDWR|_o_sync));
+	fd = _open(buf,mode?(O_RDONLY|_o_sync):(O_RDWR|_o_sync));
 #else
 	if (mode) {
 		fd = fd2;
@@ -1732,7 +2024,7 @@ static int _sysfs_open(_short mode) {
 		for(bl = bl_masks; *bl; bl++) {
 			strcpy(_buf0,*bl);
 			strcat(_buf0,"/brightness");
-			fd = open_glob1(O_RDWR|_o_sync,INO,INO1,-10,"max_brightness",O_RDONLY|_o_sync);
+			fd = open_glob1((op_BL_FAST)?(O_WRONLY|O_NONBLOCK|_o_sync):(O_RDWR|_o_sync),(op_BL_FAST)?INO:INO1,INO1,-10,"max_brightness",O_RDONLY|_o_sync);
 			if (fd >= 0) break;
 		}
 		// if single monitor. precount?
@@ -1744,7 +2036,8 @@ static int _sysfs_open(_short mode) {
 #endif
 
 	if (fd < 0) goto ex;
-	_read_u(fd);
+	if (!mode && (op_BL_FAST)) goto ex;
+	_sysfs_val = _read_u(fd	);
 	if (_sysfs_val >= 0) goto ex;
 err:
 	close(fd);
@@ -1803,22 +2096,25 @@ open:	opened = 1;
 	if (fd1 < 0) goto err;
 	close(fd1);
 #ifdef SYSFS_CACHE
-	if ((pi[p_Safe]&8))
+	if (!op_BL_REOPEN)
 	    minf->blfd = fd + 1;
 #endif
 files_ok:
 	if (pr->p && (!pr->p->range || pr->p->values[0] != 0 || pr->p->values[1] != _sysfs_val)) goto err;
 	if (pr->en) {
+		if (cur.i < 0) cur.i = pr->v1.i; // write-only
 		long new = pr->v.i;
 		if (cur.i != new) {
 			if (new < 0 || new > _sysfs_val) new = _sysfs_val;
 			// keep Safe & 16 write-optimized, lseek() not required (intel)
 			//if (lseek(fd,0,0)) goto err;
-			if (dprintf(fd,"%lu\n",new) <= 0) goto err;
+			ifndprintf(err,fd,"%lu\n",new);
 		}
 	} else {
+		if (cur.i < 0) cur.i = _sysfs_val; // write-only
 		// init/pre-configure
 		values[1] = _sysfs_val;
+		minf->minbl = _sysfs_val*pf[p_min_backlight]/100 + .5;
 		if (!pr->p) {
 			XRRConfigureOutputProperty(dpy,minf->out,a_xrp[xrp_bl],False,True,2,(long*)&values);
 			pr->my = 1;
@@ -1829,6 +2125,7 @@ files_ok:
 	}
 #ifdef SYSFS_CACHE
 	if (minf->blfd) goto ex;
+	if (op_BL_REOPEN) goto ex;
 err:
 	minf->blfd = 0;
 	_SYSFS_FREE();
@@ -2373,7 +2670,9 @@ _sync:
 	}
 	switch (prI) {
 #if _BACKLIGHT
-	    case xrp_bl: // prevent to saved Backlight 0
+	    case xrp_bl: 
+		minf->minbl = pr->p->values[1]*pf[p_min_backlight]/100 + .5;
+		// prevent to saved Backlight 0
 		if (pr->vs[0].i == pr->p->values[0]) pr->vs[0].i = pr->p->values[1];
 		break;
 #endif
@@ -4311,6 +4610,11 @@ static void init(){
 	XFixesShowCursor(dpy,root);
 #endif
 	win = root;
+#ifdef USE_MUTEX
+	xmutex_init(&mutex);
+	open_iio_light();
+#endif
+
 }
 
 #ifdef XTG
@@ -4449,9 +4753,11 @@ int main(int argc, char **argv){
 			break;
 		    case p_Y:
 			pi[p_safe] = 1+4+128+4096;
-			pi[p_Safe] = 1+8;
+			pi[p_Safe] = 1;
 			pa[p_content_type] = "Cinema";
 			pa[p_colorspace] = "DCI-P3_RGB_Theater";
+		    case p_max_light:
+			if (pi[p_Y] && pi[p_max_light]) pi[p_Safe] |= 16;
 			break;
 		}
 	}
