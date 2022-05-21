@@ -130,12 +130,14 @@
 #define xmutex_lock(m) pthread_mutex_lock(m)
 #define xmutex_unlock(m) pthread_mutex_unlock(m)
 #define USE_THREAD
+#endif
 
 #ifdef USE_THREAD
 // iio format
-#incluse <endian.h>
+#include <endian.h>
+#ifndef be64toh
+#include <arpa/inet.h>
 #endif
-
 #endif
 
 #endif
@@ -1645,7 +1647,8 @@ static void *thread_inotify(void* args){
 #ifdef USE_MUTEX
 #undef min_light
 int fd_light,fd_light_dev,light_bytes,light_shift,light_repeat = 0;
-_short light_sign = 0, light_fmt = 0, light_fmt0 = 0,light_reendian = 0;
+_short light_sign = 0;
+unsigned char light_fmt = 0, light_fmt0 = 0;
 double light_scale;
 static void *thread_iio_light_wait(){
 	char b[16];
@@ -1685,19 +1688,6 @@ static void *thread_iio_light(){
 #else
 	// reduce repeated math
 	char b2[2][buflong], *b = (void*)&b2[0];
-#if __BYTE_ORDER  == __BIG_ENDIAN
-	void *bl = &l.b[sizeof(long long)-light_bytes];
-#define xe16toh le16toh
-#define xe32toh le32toh
-#define xe64toh le64toh
-#elif __LITTLE_ENDIAN
-	void *bl = &l;
-#define xe16toh be16toh
-#define xe32toh be32toh
-#define xe64toh be64toh
-#else 
-	void *bl = &buf;
-#endif
 	_short bb = 0, n1 = 1;
 	int n;
 err_dev:
@@ -1707,38 +1697,54 @@ err_dev:
 	if (light_fmt0) xthread_fork(&thread_iio_light_wait,NULL);
 	while(1) {
 		if (light_fmt) {
-			if (read(fd_light_dev,bl,light_bytes) != light_bytes) goto err_dev;
-#if __BYTE_ORDER  == __BIG_ENDIAN || __BYTE_ORDER  == __LITTLE_ENDIAN
-			if (light_reendian) switch (light_bytes) {
-			    case 2: *(uint16_t*)bl = xe16toh(*(uint16_t*)bl);break;
-			    case 4: *(uint32_t*)bl = xe32toh(*(uint32_t*)bl);break;
-			    case 8: *(uint64_t*)bl = xe64toh(*(uint64_t*)bl);break;
-			    case 1: light_reendian = 0;break;
-#else
+			if (read(fd_light_dev,&buf,light_bytes) != light_bytes) goto err_dev;
 			switch (light_fmt) {
+#if __BYTE_ORDER  == __LITTLE_ENDIAN
+			    // more glibc compatibility then optimization
+			    case 0x22: l.l = buf.u16;break;
+			    case 0x24: l.l = buf.u32;break;
+			    case 0x28: l.l = buf.u64;break;
+
+			    case 0xa2: l.ls = buf.s16;break;
+			    case 0xa4: l.ls = buf.s32;break;
+			    case 0xa8: l.ls = buf.s64;break;
+#else
 			    case 0x22: l.l = le16toh(buf.u16);break;
 			    case 0x24: l.l = le32toh(buf.u32);break;
-			    case 0x28: l.l = le32toh(buf.u64);break;
+			    case 0x28: l.l = le64toh(buf.u64);break;
 
 			    case 0xa2: buf.u16 = le16toh(buf.u16);l.ls = buf.s16;break;
 			    case 0xa4: buf.u32 = le32toh(buf.u32);l.ls = buf.s32;break;
-			    case 0xa8: buf.u64 = le32toh(buf.u64);l.ls = buf.s64;break;
+			    case 0xa8: buf.u64 = le64toh(buf.u64);l.ls = buf.s64;break;
+#endif
+#if __BYTE_ORDER  == __BIG_ENDIAN
+			    case 0x42: l.l = buf.u16;break;
+			    case 0x44: l.l = buf.u32;break;
+			    case 0x48: l.l = buf.u64;break;
 
+			    case 0xc2: l.ls = buf.s16;break;
+			    case 0xc4: l.ls = buf.s32;break;
+			    case 0xc8: l.ls = buf.s64;break;
+#elif defined(be64toh)
 			    case 0x42: l.l = be16toh(buf.u16);break;
 			    case 0x44: l.l = be32toh(buf.u32);break;
-			    case 0x48: l.l = be32toh(buf.u64);break;
+			    case 0x48: l.l = be64toh(buf.u64);break;
 
 			    case 0xc2: buf.u16 = be16toh(buf.u16);l.ls = buf.s16;break;
 			    case 0xc4: buf.u32 = be32toh(buf.u32);l.ls = buf.s32;break;
-			    case 0xc8: buf.u64 = be32toh(buf.u64);l.ls = buf.s64;break;
-
+			    case 0xc8: buf.u64 = be64toh(buf.u64);l.ls = buf.s64;break;
+#else
+			    case 0x42: l.l = ntohs(buf.u16);break;
+			    case 0x44: l.l = ntohl(buf.u32);break;
+			    case 0xc2: buf.u16 = ntohs(buf.u16);l.ls = buf.s16;break;
+			    case 0xc4: buf.u32 = ntohl(buf.u32);l.ls = buf.s32;break;
+#endif
 			    case 0x41:
 			    case 0x21:
 			    case 1: l.l = buf.u8; break;
 			    case 0xc1:
 			    case 0xa1:
 			    case 0x81: l.ls = buf.s8; break;
-#endif
 			    default: light_fmt0 = 0; goto err_dev;
 			}
 		} else {
@@ -2012,7 +2018,6 @@ static void open_iio_light(){
 	    case 'b': em = 0x40; break;
 	    default: goto nofmt;
 	}
-	light_reendian = (e != endian);
 
 	if (sizeof(unsigned long long) == sizeof(long long) && op_BL_FAST)
 	    light_fmt0 = light_bytes|light_sign|em;
