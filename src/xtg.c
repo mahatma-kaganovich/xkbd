@@ -1670,7 +1670,7 @@ static void *thread_iio_light(){
 		uint32_t u32;
 		int64_t s64;
 		uint64_t u64;
-	} buf;
+	} buf = {.u64 = 0};
 	double max_light = pf[p_max_light]/light_scale;
 	unsigned long long max_sens1 = max_light + .1;
 	unsigned long long max_sens = max_sens1 >> light_shift;
@@ -1713,8 +1713,8 @@ err_dev:
 			    case 2: *(uint16_t*)bl = xe16toh(*(uint16_t*)bl);break;
 			    case 4: *(uint32_t*)bl = xe32toh(*(uint32_t*)bl);break;
 			    case 8: *(uint64_t*)bl = xe64toh(*(uint64_t*)bl);break;
+			    case 1: light_reendian = 0;break;
 #else
-			//if (light_reendian)
 			switch (light_fmt) {
 			    case 0x22: l.l = le16toh(buf.u16);break;
 			    case 0x24: l.l = le32toh(buf.u32);break;
@@ -1739,13 +1739,12 @@ err_dev:
 			    case 0xa1:
 			    case 0x81: l.ls = buf.s8; break;
 #endif
-			    default: light_fmt = 0; goto nodev;
+			    default: light_fmt0 = 0; goto err_dev;
 			}
 		} else {
 #if 1
 			sleep(1);
 #endif
-nodev:
 			if (lseek(fd_light,0,0)) break;
 			n = read(fd_light,b,buflong);
 			if (n == n1 && !memcmp(&b2[0],&b2[1],n)) continue;
@@ -2014,7 +2013,6 @@ static void open_iio_light(){
 	    default: goto nofmt;
 	}
 	light_reendian = (e != endian);
-	if (light_reendian && !(light_bytes == 1 || light_bytes == 2 || light_bytes == 4 || light_bytes == 8)) goto nofmt;
 
 	if (sizeof(unsigned long long) == sizeof(long long) && op_BL_FAST)
 	    light_fmt0 = light_bytes|light_sign|em;
