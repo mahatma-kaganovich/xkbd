@@ -1675,90 +1675,97 @@ static void *thread_iio_light(){
 		uint64_t u64;
 	} buf = {.u64 = 0};
 	double max_light = pf[p_max_light]/light_scale;
+	unsigned long long l0 = 0;
 	unsigned long long max_sens1 = max_light + .1;
 	unsigned long long max_sens = max_sens1 >> light_shift;
 	l.ls = max_sens1;
-	if (l.ls != l.l) {
+	if (l.ls != l.l || l.ls < 0) {
 		DBG("unknown signed/unsignes/max behaviour");
 		goto ex;
 	}
-	l.l = 0;
+	l.ls = max_sens;
 #ifdef MINIMAL
 	while (!lseek(fd_light,0,0) && (l = _read_u(fd_light)) >= 0) {
 #else
 	// reduce repeated math
-	char b2[2][buflong], *b = (void*)&b2[0];
-	_short bb = 0, n1 = 1;
-	int n;
+	char b2[2][buflong], *b;
+	int n, n1;
+	_short bb;
 err_dev:
 	DBG("iio over /sys");
 	light_fmt = 0;
+	bb = 0;
+	n1 = 1;
+	b = (void*)&b2[0];
 	b2[1][0] = '\n';
 	if (light_fmt0) xthread_fork(&thread_iio_light_wait,NULL);
 	while(1) {
-		if (light_fmt) {
-			if (read(fd_light_dev,&buf,light_bytes) != light_bytes) goto err_dev;
-			switch (light_fmt) {
+		if (read(fd_light_dev,&buf,light_bytes) != light_bytes) goto err_dev;
+		switch (light_fmt) {
 #if __BYTE_ORDER  == __LITTLE_ENDIAN
-			    // more glibc compatibility then optimization
-			    case 0x22: l.l = buf.u16;break;
-			    case 0x24: l.l = buf.u32;break;
-			    case 0x28: l.l = buf.u64;break;
+		    // more glibc compatibility then optimization
+		    case 0x22: l.l = buf.u16;break;
+		    case 0x24: l.l = buf.u32;break;
+		    case 0x28: l.l = buf.u64;break;
 
-			    case 0xa2: l.ls = buf.s16;break;
-			    case 0xa4: l.ls = buf.s32;break;
-			    case 0xa8: l.ls = buf.s64;break;
+		    case 0xa2: l.ls = buf.s16;break;
+		    case 0xa4: l.ls = buf.s32;break;
+		    case 0xa8: l.ls = buf.s64;break;
 #else
-			    case 0x22: l.l = le16toh(buf.u16);break;
-			    case 0x24: l.l = le32toh(buf.u32);break;
-			    case 0x28: l.l = le64toh(buf.u64);break;
+		    case 0x22: l.l = le16toh(buf.u16);break;
+		    case 0x24: l.l = le32toh(buf.u32);break;
+		    case 0x28: l.l = le64toh(buf.u64);break;
 
-			    case 0xa2: buf.u16 = le16toh(buf.u16);l.ls = buf.s16;break;
-			    case 0xa4: buf.u32 = le32toh(buf.u32);l.ls = buf.s32;break;
-			    case 0xa8: buf.u64 = le64toh(buf.u64);l.ls = buf.s64;break;
+		    case 0xa2: buf.u16 = le16toh(buf.u16);l.ls = buf.s16;break;
+		    case 0xa4: buf.u32 = le32toh(buf.u32);l.ls = buf.s32;break;
+		    case 0xa8: buf.u64 = le64toh(buf.u64);l.ls = buf.s64;break;
 #endif
 #if __BYTE_ORDER  == __BIG_ENDIAN
-			    case 0x42: l.l = buf.u16;break;
-			    case 0x44: l.l = buf.u32;break;
-			    case 0x48: l.l = buf.u64;break;
+		    case 0x42: l.l = buf.u16;break;
+		    case 0x44: l.l = buf.u32;break;
+		    case 0x48: l.l = buf.u64;break;
 
-			    case 0xc2: l.ls = buf.s16;break;
-			    case 0xc4: l.ls = buf.s32;break;
-			    case 0xc8: l.ls = buf.s64;break;
+		    case 0xc2: l.ls = buf.s16;break;
+		    case 0xc4: l.ls = buf.s32;break;
+		    case 0xc8: l.ls = buf.s64;break;
 #elif defined(be64toh)
-			    case 0x42: l.l = be16toh(buf.u16);break;
-			    case 0x44: l.l = be32toh(buf.u32);break;
-			    case 0x48: l.l = be64toh(buf.u64);break;
+		    case 0x42: l.l = be16toh(buf.u16);break;
+		    case 0x44: l.l = be32toh(buf.u32);break;
+		    case 0x48: l.l = be64toh(buf.u64);break;
 
-			    case 0xc2: buf.u16 = be16toh(buf.u16);l.ls = buf.s16;break;
-			    case 0xc4: buf.u32 = be32toh(buf.u32);l.ls = buf.s32;break;
-			    case 0xc8: buf.u64 = be64toh(buf.u64);l.ls = buf.s64;break;
+		    case 0xc2: buf.u16 = be16toh(buf.u16);l.ls = buf.s16;break;
+		    case 0xc4: buf.u32 = be32toh(buf.u32);l.ls = buf.s32;break;
+		    case 0xc8: buf.u64 = be64toh(buf.u64);l.ls = buf.s64;break;
 #else
-			    case 0x42: l.l = ntohs(buf.u16);break;
-			    case 0x44: l.l = ntohl(buf.u32);break;
-			    case 0xc2: buf.u16 = ntohs(buf.u16);l.ls = buf.s16;break;
-			    case 0xc4: buf.u32 = ntohl(buf.u32);l.ls = buf.s32;break;
+		    case 0x42: l.l = ntohs(buf.u16);break;
+		    case 0x44: l.l = ntohl(buf.u32);break;
+		    case 0xc2: buf.u16 = ntohs(buf.u16);l.ls = buf.s16;break;
+		    case 0xc4: buf.u32 = ntohl(buf.u32);l.ls = buf.s32;break;
 #endif
-			    case 0x41:
-			    case 0x21:
-			    case 1: l.l = buf.u8; break;
-			    case 0xc1:
-			    case 0xa1:
-			    case 0x81: l.ls = buf.s8; break;
-			    default: light_fmt0 = 0; goto err_dev;
-			}
-		} else {
+		    case 0x41:
+		    case 0x21:
+		    case 1: l.l = buf.u8; break;
+		    case 0xc1:
+		    case 0xa1:
+		    case 0x81: l.ls = buf.s8; break;
+		    case 0:
 #if 1
 			sleep(1);
 #endif
-			if (lseek(fd_light,0,0)) break;
+			if (lseek(fd_light,0,0)) goto ex;
 			n = read(fd_light,b,buflong);
 			if (n == n1 && !memcmp(&b2[0],&b2[1],n)) continue;
-			if (light_sign) l.ls = _strtouu(b,n);
-			else l.l = _strtou(b,n);
+			if (n < 0) goto ex;
+			l.ls = _strtouu(b,n);
+			n1 = n;
+			b = (void*)&b2[bb = !bb];
+			if (l.ls < 0) l.l = max_sens;
+			break;
+		    default:
+			light_fmt0 = 0;
+			goto err_dev;
 		}
 #endif
-		static unsigned long long l0 = -1;
 		if (l0 == l.l) continue;
 		l0 = l.l;
 		if (light_shift) {
