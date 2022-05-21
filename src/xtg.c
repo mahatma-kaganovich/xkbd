@@ -1661,6 +1661,16 @@ static void *thread_iio_light(){
 		long long ls;
 		char b[sizeof(unsigned long long)];
 	} l;
+	union {
+		int8_t s8;
+		uint8_t u8;
+		int16_t s16;
+		uint16_t u16;
+		int32_t s32;
+		uint32_t u32;
+		int64_t s64;
+		uint64_t u64;
+	} buf;
 	double max_light = pf[p_max_light]/light_scale;
 	unsigned long long max_sens1 = max_light + .1;
 	unsigned long long max_sens = max_sens1 >> light_shift;
@@ -1685,6 +1695,8 @@ static void *thread_iio_light(){
 #define xe16toh be16toh
 #define xe32toh be32toh
 #define xe64toh be64toh
+#else 
+	void *bl = &buf;
 #endif
 	_short bb = 0, n1 = 1;
 	int n;
@@ -1694,45 +1706,46 @@ err_dev:
 	b2[1][0] = '\n';
 	if (light_fmt0) xthread_fork(&thread_iio_light_wait,NULL);
 	while(1) {
-#if __BYTE_ORDER  == __BIG_ENDIAN || __BYTE_ORDER  == __LITTLE_ENDIAN
 		if (light_fmt) {
 			if (read(fd_light_dev,bl,light_bytes) != light_bytes) goto err_dev;
+#if __BYTE_ORDER  == __BIG_ENDIAN || __BYTE_ORDER  == __LITTLE_ENDIAN
 			if (light_reendian) switch (light_bytes) {
 			    case 2: *(uint16_t*)bl = xe16toh(*(uint16_t*)bl);break;
 			    case 4: *(uint32_t*)bl = xe32toh(*(uint32_t*)bl);break;
 			    case 8: *(uint64_t*)bl = xe64toh(*(uint64_t*)bl);break;
+#else
+			//if (light_reendian)
+			switch (light_fmt) {
+			    case 0x22: l.l = le16toh(buf.u16);break;
+			    case 0x24: l.l = le32toh(buf.u32);break;
+			    case 0x28: l.l = le32toh(buf.u64);break;
+
+			    case 0xa2: buf.u16 = le16toh(buf.u16);l.ls = buf.s16;break;
+			    case 0xa4: buf.u32 = le32toh(buf.u32);l.ls = buf.s32;break;
+			    case 0xa8: buf.u64 = le32toh(buf.u64);l.ls = buf.s64;break;
+
+			    case 0x42: l.l = be16toh(buf.u16);break;
+			    case 0x44: l.l = be32toh(buf.u32);break;
+			    case 0x48: l.l = be32toh(buf.u64);break;
+
+			    case 0xc2: buf.u16 = be16toh(buf.u16);l.ls = buf.s16;break;
+			    case 0xc4: buf.u32 = be32toh(buf.u32);l.ls = buf.s32;break;
+			    case 0xc8: buf.u64 = be32toh(buf.u64);l.ls = buf.s64;break;
+
+			    case 0x41:
+			    case 0x21:
+			    case 1: l.l = buf.u8; break;
+			    case 0xc1:
+			    case 0xa1:
+			    case 0x81: l.ls = buf.s8; break;
+#endif
+			    default: light_fmt = 0; goto nodev;
 			}
 		} else {
-#else
-#define _read_l_dev(t,ll) { t x; if (read(fd_light_dev,&x,sizeof(x)) != sizeof(x)) goto err_dev; l.ll=x; break; }
-#define _eread_l_dev(t,tu,e,ll) { union {t s;tu u;} x; if (read(fd_light_dev,&x,sizeof(x)) != sizeof(x)) goto err_dev; x.u=e(x.u); l.ll=x.s; break; }
-		switch (light_fmt) {
-
-		    case 0x41:
-		    case 0x21:
-		    case 1: _read_l_dev(uint8_t,l);
-		    case 0xc1:
-		    case 0xa1:
-		    case 0x81: _read_l_dev(int8_t,ls);
-
-		    case 0x42: _eread_l_dev(uint16_t,uint16_t,be16toh,l);
-		    case 0xc2: _eread_l_dev(int16_t,uint16_t,be16toh,ls);
-		    case 0x44: _eread_l_dev(uint32_t,uint32_t,be32toh,l);
-		    case 0xc4: _eread_l_dev(int32_t,uint32_t,be32toh,ls);
-		    case 0x48: _eread_l_dev(uint64_t,uint64_t,be64toh,l);
-		    case 0xc8: _eread_l_dev(int64_t,uint64_t,be64toh,ls);
-
-		    case 0x22: _eread_l_dev(uint16_t,uint16_t,le16toh,l);
-		    case 0xa2: _eread_l_dev(int16_t,uint16_t,le16toh,ls);
-		    case 0x24: _eread_l_dev(uint32_t,uint32_t,le32toh,l);
-		    case 0xa4: _eread_l_dev(int32_t,uint32_t,le32toh,ls);
-		    case 0x28: _eread_l_dev(uint64_t,uint64_t,le64toh,l);
-		    case 0xa8: _eread_l_dev(int64_t,uint64_t,le64toh,ls);
-		    default:
-#endif
 #if 1
 			sleep(1);
 #endif
+nodev:
 			if (lseek(fd_light,0,0)) break;
 			n = read(fd_light,b,buflong);
 			if (n == n1 && !memcmp(&b2[0],&b2[1],n)) continue;
