@@ -1704,8 +1704,8 @@ err_dev:
 			}
 		} else {
 #else
-#define _read_l_dev(t,ll) { int32_t x; if (read(fd_light_dev,&x,sizeof(x)) != sizeof(x)) goto err_dev; l.ll=x; break; }
-#define _eread_l_dev(t,e,ll) { int32_t x; if (read(fd_light_dev,&x,sizeof(x)) != sizeof(x)) goto err_dev; l.ll=e(x); break; }
+#define _read_l_dev(t,ll) { t x; if (read(fd_light_dev,&x,sizeof(x)) != sizeof(x)) goto err_dev; l.ll=x; break; }
+#define _eread_l_dev(t,tu,e,ll) { union {t s;tu u;} x; if (read(fd_light_dev,&x,sizeof(x)) != sizeof(x)) goto err_dev; x.u=e(x.u); l.ll=x.s; break; }
 		switch (light_fmt) {
 
 		    case 0x41:
@@ -1715,19 +1715,19 @@ err_dev:
 		    case 0xa1:
 		    case 0x81: _read_l_dev(int8_t,ls);
 
-		    case 0x42: _eread_l_dev(uint16_t,be16toh,l);
-		    case 0xc2: _eread_l_dev(int16_t,be16toh,ls);
-		    case 0x44: _eread_l_dev(uint32_t,be32toh,l);
-		    case 0xc4: _eread_l_dev(int32_t,be32toh,ls);
-		    case 0x48: _eread_l_dev(uint64_t,be64toh,l);
-		    case 0xc8: _eread_l_dev(int64_t,be64toh,ls);
+		    case 0x42: _eread_l_dev(uint16_t,uint16_t,be16toh,l);
+		    case 0xc2: _eread_l_dev(int16_t,uint16_t,be16toh,ls);
+		    case 0x44: _eread_l_dev(uint32_t,uint32_t,be32toh,l);
+		    case 0xc4: _eread_l_dev(int32_t,uint32_t,be32toh,ls);
+		    case 0x48: _eread_l_dev(uint64_t,uint64_t,be64toh,l);
+		    case 0xc8: _eread_l_dev(int64_t,uint64_t,be64toh,ls);
 
-		    case 0x22: _eread_l_dev(uint16_t,le16toh,l);
-		    case 0xa2: _eread_l_dev(int16_t,le16toh,ls);
-		    case 0x24: _eread_l_dev(uint32_t,le32toh,l);
-		    case 0xa4: _eread_l_dev(int32_t,le32toh,ls);
-		    case 0x28: _eread_l_dev(uint64_t,le64toh,l);
-		    case 0xa8: _eread_l_dev(int64_t,le64toh,ls);
+		    case 0x22: _eread_l_dev(uint16_t,uint16_t,le16toh,l);
+		    case 0xa2: _eread_l_dev(int16_t,uint16_t,le16toh,ls);
+		    case 0x24: _eread_l_dev(uint32_t,uint32_t,le32toh,l);
+		    case 0xa4: _eread_l_dev(int32_t,uint32_t,le32toh,ls);
+		    case 0x28: _eread_l_dev(uint64_t,uint64_t,le64toh,l);
+		    case 0xa8: _eread_l_dev(int64_t,uint64_t,le64toh,ls);
 		    default:
 #endif
 #if 1
@@ -1757,7 +1757,6 @@ err_dev:
 				else l.l <<= light_shift;
 			}
 		}
-nol0:
 		xmutex_lock(&mutex);
 		MINF(minf->blfd > 0 || minf->prop[xrp_bl].en) {
 			pinf_t *pr = &minf->prop[xrp_bl];
