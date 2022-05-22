@@ -1651,10 +1651,15 @@ static void *thread_inotify(void* args){
 
 #ifdef USE_MUTEX
 #undef min_light
-int fd_light,fd_light_dev,light_bytes,light_shift,light_repeat = 0;
+// 0 - use thread to wait /dev
+// 1 - use select()
+// 2 - use select() to /dev timeout too
+#define NOTHREAD2 1
+int fd_light,fd_light_dev = -1,light_bytes,light_shift,light_repeat = 0;
 _short light_sign = 0;
 unsigned char light_fmt = 0, light_fmt0 = 0;
 double light_scale;
+#if NOTHREAD2 == 0
 static void *thread_iio_light_wait(){
 	char b[16];
 	if (read(fd_light_dev,b,light_bytes) == light_bytes) {
@@ -1662,6 +1667,7 @@ static void *thread_iio_light_wait(){
 		DBG("iio over /dev");
 	}
 }
+#endif
 static void *thread_iio_light(){
 	minf_t *minf;
 	union {
@@ -1696,6 +1702,13 @@ static void *thread_iio_light(){
 	char b2[2][buflong], *b;
 	int n, n1;
 	_short bb;
+#if NOTHREAD2
+	int fd_light_dev1 = fd_light_dev + 1;
+	struct timeval tv;
+	fd_set rs0,rs,*rs1;
+	FD_ZERO(&rs0);
+	FD_SET(fd_light_dev,&rs0);
+#endif
 err_dev:
 	DBG("iio over /sys");
 	light_fmt = 0;
@@ -1703,9 +1716,18 @@ err_dev:
 	n1 = 1;
 	b = (void*)&b2[0];
 	b2[1][0] = '\n';
+#if NOTHREAD2
+	rs1 = light_fmt0 ? &rs : NULL;
+#else
 	if (light_fmt0) xthread_fork(&thread_iio_light_wait,NULL);
+#endif
 	while(1) {
 		if (light_fmt) {
+#if NOTHREAD2 == 2
+		    tv.tv_sec = 10;
+		    rs = rs0;
+		    if (!Select(fd_light_dev1, rs1, 0, 0, &tv)) goto err_dev;
+#endif
 		    if (read(fd_light_dev,&buf,light_bytes) != light_bytes) goto err_dev;
 		    switch (light_fmt) {
 #if __BYTE_ORDER  == __LITTLE_ENDIAN
@@ -1757,7 +1779,15 @@ err_dev:
 		    default: light_fmt0 = 0;goto err_dev;
 		    }
 		} else {
-#if 1
+#if NOTHREAD2 != 0
+			tv.tv_sec = 1;
+			//tv.tv_usec = 0;
+			rs = rs0;
+			if (Select(fd_light_dev1, rs1, 0, 0, &tv) && (light_fmt = light_fmt0)) {
+				DBG("iio over /dev");
+				continue;
+			}
+#else
 			sleep(1);
 #endif
 			if (lseek(fd_light,0,0)) goto ex;
@@ -2035,7 +2065,7 @@ static void open_iio_light(){
 
 	if (light_fmt0) {
 		*(_buf0 - 1) = 0;
-		DBG("for /dev access to light sensor [su]do: cd %s && echo 1 >scan_elements/in_%s_en && echo 1 >buffer/enable",_buf1,b);
+		DBG("for /dev access to light sensor [su]do: (cd %s && echo 1 >scan_elements/in_%s_en && echo 1 >buffer/enable)",_buf1,type);
 		_buf1 += 16;
 		memcpy(_buf1,"/dev",4);
 		fd_light_dev = _open(_buf1,O_RDONLY);
