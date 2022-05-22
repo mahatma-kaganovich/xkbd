@@ -1707,7 +1707,7 @@ static void *thread_iio_light(){
 	struct timeval tv;
 	fd_set rs0,rs,*rs1;
 	FD_ZERO(&rs0);
-	FD_SET(fd_light_dev,&rs0);
+	if (fd_light_dev >= 0) FD_SET(fd_light_dev,&rs0);
 #endif
 err_dev:
 	DBG("iio over /sys");
@@ -1718,6 +1718,7 @@ err_dev:
 	b2[1][0] = '\n';
 #if NOTHREAD2
 	rs1 = light_fmt0 ? &rs : NULL;
+	tv.tv_sec = 0;
 #else
 	if (light_fmt0) xthread_fork(&thread_iio_light_wait,NULL);
 #endif
@@ -1781,7 +1782,7 @@ err_dev:
 		} else {
 #if NOTHREAD2 != 0
 			tv.tv_sec = 1;
-			//tv.tv_usec = 0;
+			tv.tv_usec = 0;
 			rs = rs0;
 			if (Select(fd_light_dev1, rs1, 0, 0, &tv) && (light_fmt = light_fmt0)) {
 				DBG("iio over /dev");
