@@ -1705,8 +1705,9 @@ err_dev:
 	b2[1][0] = '\n';
 	if (light_fmt0) xthread_fork(&thread_iio_light_wait,NULL);
 	while(1) {
-		if (read(fd_light_dev,&buf,light_bytes) != light_bytes) goto err_dev;
-		switch (light_fmt) {
+		if (light_fmt) {
+		    if (read(fd_light_dev,&buf,light_bytes) != light_bytes) goto err_dev;
+		    switch (light_fmt) {
 #if __BYTE_ORDER  == __LITTLE_ENDIAN
 		    // more glibc compatibility then optimization
 		    case 0x22: l.l = buf.u16;break;
@@ -1753,7 +1754,9 @@ err_dev:
 		    case 0xc1:
 		    case 0xa1:
 		    case 0x81: l.ls = buf.s8; break;
-		    case 0:
+		    default: light_fmt0 = 0;goto err_dev;
+		    }
+		} else {
 #if 1
 			sleep(1);
 #endif
@@ -1765,10 +1768,6 @@ err_dev:
 			n1 = n;
 			b = (void*)&b2[bb = !bb];
 			if (l.ls < 0) l.l = max_sens;
-			break;
-		    default:
-			light_fmt0 = 0;
-			goto err_dev;
 		}
 #endif
 		if (l0 == l.l) continue;
