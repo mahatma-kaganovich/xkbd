@@ -41,9 +41,16 @@
 #define _BACKLIGHT 2
 #define PROP_FMT
 #define _XR_PROVIDERS
+
 // 1 = threaded io - if sysfs lockups on backlight devices [dis]connection or many backlights
 // 2 = threaded io+xlib - hot sync /sys/.../backlight back to prop
 //#define USE_MUTEX 1
+
+// 0 - use thread to wait /dev/iio:device*: more ram, faster /sys access
+// 1 - use select()
+// 2 - use select() to /dev timeout too
+#define NOTHREAD2 1
+
 //#define _UNSAFE_WINMAP
 #undef PROP_FMT
 //#define TRACK_MATRIX
@@ -179,9 +186,9 @@ pthread_attr_t *pth_attr = NULL;
 
 #define ONCE(x) { static unsigned short _ONCE1cnt = 0; if (!_ONCE1cnt++) { x; }}
 
-#define ERR(txt, args... ) fprintf(stderr, "Error: " txt "\n", ##args )
+#define ERR(txt, args... ) fprintf(stderr, "xtg Error: " txt "\n", ##args )
 #ifndef NDEBUG
-#define DBG(txt, args... ) fprintf(stderr, "" txt "\n", ##args )
+#define DBG(txt, args... ) fprintf(stderr, "xtg " txt "\n", ##args )
 #else
 #define DBG(txt, args... ) /* nothing */
 #endif
@@ -1606,6 +1613,11 @@ ok:	ret = 1;
 err:	return ret;
 }
 
+#ifdef USE_MUTEX
+int light_wd = -1;
+static void light_dev_ch();
+#endif
+
 Atom aPing;
 static void _ping(){
 #if USE_MUTEX == 2
@@ -1635,12 +1647,15 @@ static void *thread_inotify(void* args){
 			oldShowPtr |= 8;
 			_ping();
 		}
-		if (!found) {
-			found = 0;
+		if (found) found = 0;
+		else if (ie.wd == light_wd) {
+			if ((ie.mask&IN_IGNORED)) light_wd = -1;
+			else light_dev_ch();
+		} else {
 			oldShowPtr |= 8;
 			MINF(1) _SYSFS_FREE();
 			_ping();
-		}
+		};
 		xmutex_unlock(&mutex);
 #else
 		oldShowPtr |= (ie.mask == IN_MODIFY & !(op_BL_FAST)) ? 128 : 8;
@@ -1651,14 +1666,11 @@ static void *thread_inotify(void* args){
 
 #ifdef USE_MUTEX
 #undef min_light
-// 0 - use thread to wait /dev
-// 1 - use select()
-// 2 - use select() to /dev timeout too
-#define NOTHREAD2 1
-int fd_light,fd_light_dev = -1,light_bytes,light_shift,light_repeat = 0;
+int fd_light,fd_light_dev = -1,fd_light_dev1 = 0,light_bytes,light_shift,light_repeat = 0;
 _short light_sign = 0;
 unsigned char light_fmt = 0, light_fmt0 = 0;
 double light_scale;
+fd_set light_rs;
 #if NOTHREAD2 == 0
 static void *thread_iio_light_wait(){
 	char b[16];
@@ -1703,11 +1715,8 @@ static void *thread_iio_light(){
 	int n, n1;
 	_short bb;
 #if NOTHREAD2
-	int fd_light_dev1 = fd_light_dev + 1;
 	struct timeval tv;
-	fd_set rs0,rs,*rs1;
-	FD_ZERO(&rs0);
-	if (fd_light_dev >= 0) FD_SET(fd_light_dev,&rs0);
+	fd_set rs;
 #endif
 err_dev:
 	DBG("iio over /sys");
@@ -1716,18 +1725,15 @@ err_dev:
 	n1 = 1;
 	b = (void*)&b2[0];
 	b2[1][0] = '\n';
-#if NOTHREAD2
-	rs1 = light_fmt0 ? &rs : NULL;
-	tv.tv_sec = 0;
-#else
+#if !NOTHREAD2
 	if (light_fmt0) xthread_fork(&thread_iio_light_wait,NULL);
 #endif
 	while(1) {
 		if (light_fmt) {
 #if NOTHREAD2 == 2
 		    tv.tv_sec = 10;
-		    rs = rs0;
-		    if (!Select(fd_light_dev1, rs1, 0, 0, &tv)) goto err_dev;
+		    rs = light_rs;
+		    if (!Select(fd_light_dev1, &rs, 0, 0, &tv)) goto err_dev;
 #endif
 		    if (read(fd_light_dev,&buf,light_bytes) != light_bytes) goto err_dev;
 		    switch (light_fmt) {
@@ -1780,16 +1786,16 @@ err_dev:
 		    default: light_fmt0 = 0;goto err_dev;
 		    }
 		} else {
-#if NOTHREAD2 != 0
+#if NOTHREAD2
 			tv.tv_sec = 1;
 			tv.tv_usec = 0;
-			rs = rs0;
-			if (Select(fd_light_dev1, rs1, 0, 0, &tv) && (light_fmt = light_fmt0)) {
+			rs = light_rs;
+			if (Select(fd_light_dev1, &rs, 0, 0, &tv) && (light_fmt = light_fmt0)) {
 				DBG("iio over /dev");
 				continue;
 			}
 #else
-			sleep(1);
+			//sleep(1);
 #endif
 			if (lseek(fd_light,0,0)) goto ex;
 			n = read(fd_light,b,buflong);
@@ -1868,21 +1874,27 @@ ex:
 #endif
 
 static int _inotify(char *file, uint32_t mask){
-	int res = -1;
+	int res = -1, in;
 #ifdef USE_THREAD
 	if (!mask) goto ex;
 	if (inotify < 0) {
 		if (op_BL_REOPEN) goto ex;
-		if ((inotify = inotify_init()) < 0) goto ex;
-		if (!(threads&1)) {
-#ifdef USE_MUTEX
-			if (!threads) xmutex_lock(&mutex);
-#endif
-			threads |= 1;
-			xthread_fork(&thread_inotify,NULL);
-		}
+		if ((in = inotify_init()) < 0) goto ex;
+	} else in = inotify;
+	res = inotify_add_watch(in,file,mask);
+	if (inotify >= 0) goto ex;
+	if (res < 0) {
+		close(in);
+		goto ex;
 	}
-	res = inotify_add_watch(inotify,file,mask);
+	inotify = in;
+	if (!(threads&1)) {
+#ifdef USE_MUTEX
+		if (!threads) xmutex_lock(&mutex);
+#endif
+		threads |= 1;
+		xthread_fork(&thread_inotify,NULL);
+	}
 ex:
 #endif
 	return res;
@@ -1942,10 +1954,10 @@ static int open_glob1(int flags, uint32_t ino, uint32_t ino1, int ncp, char *nam
 		} else if (fd1 >= 0) {
 			if (name2) {
 				if (fd2 < 0) {
-					fd2 = _open2(NULL,name,name2,ino,ncp,flags2);
+					fd2 = _open2(NULL,name,name2,ino1,ncp,flags2);
 					if (fd2 < 0) goto ok;
 				}
-				int fd3 = _open2(NULL,n,name2,ino,ncp,flags2);
+				int fd3 = _open2(NULL,n,name2,ino1,ncp,flags2);
 				if (fd3 < 0) {
 					close(fd);
 					fd = fd1;
@@ -1955,7 +1967,7 @@ static int open_glob1(int flags, uint32_t ino, uint32_t ino1, int ncp, char *nam
 			}
 			close(fd);
 			fd = -1;
-			ERR("extra backlights matched: %s",n);
+			ERR("extra matched: %s",n);
 		} else {
 ok:
 			fd1 = fd;
@@ -1966,12 +1978,12 @@ ok:
 	}
 	if (fd1 >= 0 && fd1 != fd) {
 		close(fd1);
-		_inotify(name,ino);
-		ERR("extra backlights matched: %s",name);
+		_inotify(name,INO);
+		ERR("extra matched: %s",name);
 	}
 	if (fd >= 0) {
 		if (name2 && fd2 < 0) {
-			fd2 = _open2(_buf,name,name2,ino,ncp,flags2);
+			fd2 = _open2(_buf,name,name2,ino1,ncp,flags2);
 			if (fd2 < 0) {
 				close(fd);
 				fd = -1;
@@ -1982,7 +1994,7 @@ ok:
 #ifdef USE_MUTEX
 		    minf->blwd = 1 +
 #endif
-			_inotify(name,ino1);
+			_inotify(name,ino);
 	}
 ex:
 	//_free(_buf2);
@@ -2000,15 +2012,33 @@ ex:
 
 static _short _open_iio1(char *data, char *scale){
 	char b1[32],*b;
-	strcpy(b=b1,"in_");
+	memcpy(b=b1,"in_",3);
 	strcpy(b+=3,scale?:data);
 	strcat(b,"_scale");
 	b=_buf;
-	strcpy(b+=33,"in_");
+	memcpy(b+=33,"in_",3);
 	strcpy(b+3,data);
 	strcat(b,"_raw");
 	fd_light = open_glob1(O_RDONLY|_o_sync,0,0,-strlen(b),b1,O_RDONLY|_o_sync);
 	return fd_light >= 0;
+}
+
+char *light_dev = NULL;
+static void light_dev_ch() {
+#ifndef MINIMAL
+	FD_ZERO(&light_rs);
+	fd_light_dev1 = 0;
+	if (fd_light_dev >= 0) {
+		close(fd_light_dev);
+		fd_light_dev = -1;
+	}
+	if (!light_fmt0) return;
+	fd_light_dev = _open(light_dev,O_RDONLY);
+	if (fd_light_dev < 0) return;
+	FD_SET(fd_light_dev,&light_rs);
+	fd_light_dev1 = fd_light_dev + 1;
+	if (light_wd >= 0) inotify_rm_watch(inotify,light_wd);
+#endif
 }
 
 static void open_iio_light(){
@@ -2021,6 +2051,7 @@ static void open_iio_light(){
 	    _open_iio1(type="intensity",NULL) ||
 	    _open_iio1(type="intensity_both","intensity_scale")
 		)) return;
+	int typelen = strlen(type);
 
 	light_scale = _read_ud(fd2);
 	close(fd2);
@@ -2039,9 +2070,9 @@ static void open_iio_light(){
 	int fd = -1,n;
 	char b[16];
 
-	strcpy(_buf0,"scan_elements/in_");
-	strcat(_buf0+17,type);
-	strcat(_buf0+17,"_type");
+	memcpy(_buf0,"scan_elements/in_",17);
+	memcpy(_buf0+17,type,typelen);
+	memcpy(_buf0+17+typelen,"_type",6);
 	
 	fd = _open(_buf1,O_RDONLY|_o_sync);
 	if (fd < 0) goto th;
@@ -2065,15 +2096,23 @@ static void open_iio_light(){
 	    light_fmt0 = light_bytes|light_sign|em;
 
 	if (light_fmt0) {
+		n = _buf0 - _buf1 - 16;
+		light_dev = malloc(n);
+		memcpy(light_dev,"/dev",4);
+		memcpy(light_dev + 4,_buf1 + 20,n - 5);
+		light_dev[n - 1] = 0;
+		light_dev_ch();
+		if (fd_light_dev1) goto help;
+
+		// cannot wait /dev/iio:device*, wait scan_elements/..._en
+		memcpy(_buf0+18+typelen,"en",3);
+		light_wd = _inotify(_buf1,INO1);
+		_xmutex_unlock();
+
+help:
 		*(_buf0 - 1) = 0;
-		DBG("for /dev access to light sensor [su]do: (cd %s && echo 1 >scan_elements/in_%s_en && echo 1 >buffer/enable)",_buf1,type);
-		_buf1 += 16;
-		memcpy(_buf1,"/dev",4);
-		fd_light_dev = _open(_buf1,O_RDONLY);
-		if (fd_light_dev < 0) {
-			light_fmt0 = 0;
-			goto th;
-		}
+		DBG("for /dev access to light sensor [su]do: (chmod a+r %s && cd %s && echo 1 >scan_elements/in_%s_en && echo 1 >buffer/enable)",light_dev,_buf1,type);
+		goto th;
 	}
 nofmt:
 	if (!light_fmt0) DBG("unsupported IIO format: %s",b);
