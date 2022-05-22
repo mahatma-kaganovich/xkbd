@@ -138,8 +138,13 @@
 #ifndef be64toh
 #include <arpa/inet.h>
 #endif
+// min mem
+#ifdef PTHREAD_STACK_MIN
+pthread_attr_t *pth_attr = NULL;
+#undef xthread_fork
+#define xthread_fork(f,c) { pthread_t _th; pthread_create(&_th,pth_attr,f,c); }
 #endif
-
+#endif
 #endif
 #endif
 
@@ -4673,6 +4678,12 @@ static void init(){
 	XFixesShowCursor(dpy,root);
 #endif
 	win = root;
+#if defined(USE_THREAD) && defined(PTHREAD_STACK_MIN)
+	static pthread_attr_t _pth_attr;
+	if (!pthread_attr_init(&_pth_attr) &&
+	    !pthread_attr_setstacksize(&_pth_attr,PTHREAD_STACK_MIN))
+		pth_attr = &_pth_attr;
+#endif
 #ifdef USE_MUTEX
 	xmutex_init(&mutex);
 	open_iio_light();
