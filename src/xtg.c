@@ -368,7 +368,7 @@ int resDev = 0;
 int xrr, xropcode=0, xrevent=-100, xrevent1=-100;
 Atom aMonName = None;
 
-Time timeSkip = 0, timeHold = 0;
+Time timeSkip = 0;
 
 #define MAX_BUTTON 255
 #define END_BIT ((MAX_BUTTON+1)>>1)
@@ -1062,13 +1062,22 @@ Atom mon = 0;
 double mon_grow;
 
 
-#if 0
-#define TIMEVAL(tv,x) struct timeval tv = { .tv_sec = (x) / 1000, .tv_usec = ((x) % 1000) * 1000 }
+fd_set dpy_rs;
+struct timeval dpy_tv, dpy_tv1 = {.tv_sec = 0, .tv_usec = 0};
+int dpy_fd1;
+#define _DELAY_TYPE defined(__linux__)
+#if _DELAY_TYPE
+#define TIMEVAL(tv,x) { tv.tv_sec = (x) / 1000; tv.tv_usec = ((x) % 1000) * 1000; }
+#define _Hold0 { dpy_tv1.tv_sec = 0; dpy_tv1.tv_usec = 0; }
+#define _Hold { dpy_tv1 = dpy_tv; }
+static int _delay(){
 #else
-#define TIMEVAL(tv,x) struct timeval tv = { .tv_sec = (x) >> 10, .tv_usec = ((x) & 0x3ff) << 10 }
-#endif
-
+Time timeHold = 0;
+#define TIMEVAL(tv,x) { tv.tv_sec = (x) >> 10; tv.tv_usec = ((x) & 0x3ff) << 10; }
+#define _Hold0 {timeHold = 0;}
+#define _Hold {timeHold = T;}
 static int _delay(Time delay){
+#endif
 	if (QLength(dpy)) return 0;
 	if (grabcnt) {
 		XFlush(dpy);
@@ -1077,12 +1086,11 @@ static int _delay(Time delay){
 		XSync(dpy,False);
 		if (XPending(dpy)) return 0;
 	}
-	TIMEVAL(tv,delay);
-	fd_set rs;
-	int fd = ConnectionNumber(dpy);
-	FD_ZERO(&rs);
-	FD_SET(fd,&rs);
-	return !Select(fd+1, &rs, 0, 0, &tv);
+#if !_DELAY_TYPE
+	TIMEVAL(dpy_tv1,delay);
+#endif
+	fd_set rs = dpy_rs;
+	return !Select(dpy_fd1, &rs, 0, 0, &dpy_tv1);
 }
 
 static int fmtOf(Atom type,int def){
@@ -4740,6 +4748,12 @@ static void init(){
 	rul2 =NULL;
 	ret = NULL;
 #ifdef XTG
+	dpy_fd1 = ConnectionNumber(dpy);
+	FD_ZERO(&dpy_rs);
+	FD_SET(dpy_fd1,&dpy_rs);
+	dpy_fd1++;
+	TIMEVAL(dpy_tv,pi[p_hold]);
+
 	_signals(_eXit);
 	curShow = 0;
 	showPtr = 1;
@@ -4987,12 +5001,17 @@ help:
 		} while (win1 != win); // error handled
 ev:
 #ifdef XTG
+#if _DELAY_TYPE
+		if ((dpy_tv1.tv_usec || dpy_tv1.tv_sec) && _delay()) {
+			{
+#else
 		if (timeHold) {
 			Time t = T - timeHold;
 			if (t >= pi[p_hold] || _delay(pi[p_hold] - t)) {
+#endif
 				forceUngrab();
 				to->g = BUTTON_HOLD;
-				timeHold = 0;
+				_Hold0;
 				goto hold;
 			}
 		}
@@ -5277,11 +5296,11 @@ z_noise:
 				    //case XI_ButtonPress:
 				    //case XI_ButtonRelease:
 					//showPtr = 1;
-					//timeHold = 0;
+					//_Hold0;
 					//goto ev2;
 				    default:
 					showPtr = 1;
-					timeHold = 0;
+					_Hold0;
 					goto ev2;
 				}
 touch_common:
@@ -5310,7 +5329,7 @@ touch_common:
 				}
 //				{
 					// new touch
-					timeHold = 0;
+					_Hold0;
 					if (end) goto ev2;
 					to = &touch[N];
 					N=TOUCH_N(N);
@@ -5344,7 +5363,7 @@ touch_common:
 					to->n = nt;
 					if (!m) goto ev2;
 					if (!g && nt == 1) {
-						timeHold = T;
+						_Hold;
 						goto ev;
 					}
 hold:
@@ -5411,7 +5430,7 @@ tfound:
 
 				if (bx) to->g1 = bx;
 				to->g = bx;
-				timeHold = 0;
+				_Hold0;
 
 				for (i=P; i!=N; i=TOUCH_N(i)) {
 					Touch *t1 = &touch[i];
