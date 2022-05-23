@@ -1623,6 +1623,7 @@ err:	return ret;
 
 #ifdef USE_MUTEX
 int light_wd = -1;
+_short light_ch = 1;
 static void light_dev_ch();
 #endif
 
@@ -1658,7 +1659,7 @@ static void *thread_inotify(void* args){
 		if (found) found = 0;
 		else if (ie.wd == light_wd) {
 			if ((ie.mask&IN_IGNORED)) light_wd = -1;
-			else light_dev_ch();
+			else light_ch = 1;
 		} else {
 			oldShowPtr |= 8;
 			MINF(1) _SYSFS_FREE();
@@ -1722,21 +1723,30 @@ static void *thread_iio_light(){
 	char b2[2][buflong], *b;
 	int n, n1;
 	_short bb;
-#if NOTHREAD2
-	struct timeval tv;
-	fd_set rs;
-#endif
 err_dev:
-	DBG("iio over /sys");
-	light_fmt = 0;
+	if (light_ch) light_dev_ch();
 	bb = 0;
 	n1 = 1;
 	b = (void*)&b2[0];
 	b2[1][0] = '\n';
-#if !NOTHREAD2
+#if NOTHREAD2
+	light_fmt = light_fmt0;
+sw:
+	if (!light_fmt0) {
+		FD_ZERO(&light_rs);
+		fd_light_dev1 = 0;
+		light_fmt = 0;
+	} else light_fmt ^= light_fmt0;
+	struct timeval tv = {.tv_sec = 0, .tv_usec = 0} ;
+	fd_set rs;
+#else
+	light_fmt = 0;
 	if (light_fmt0) xthread_fork(&thread_iio_light_wait,NULL);
 #endif
+	rs = light_rs;
+	DBG("iio over /%s",light_fmt?"dev":"sys");
 	while(1) {
+		if (light_ch) goto err_dev;
 		if (light_fmt) {
 #if NOTHREAD2 == 2
 		    tv.tv_sec = 10;
@@ -1795,13 +1805,9 @@ err_dev:
 		    }
 		} else {
 #if NOTHREAD2
-			tv.tv_sec = 1;
-			tv.tv_usec = 0;
+			tv.tv_usec = 999;
 			rs = light_rs;
-			if (Select(fd_light_dev1, &rs, 0, 0, &tv) && (light_fmt = light_fmt0)) {
-				DBG("iio over /dev");
-				continue;
-			}
+			if (Select(fd_light_dev1, &rs, 0, 0, &tv)) goto sw;
 #else
 			//sleep(1);
 #endif
@@ -2033,6 +2039,7 @@ static _short _open_iio1(char *data, char *scale){
 
 char *light_dev = NULL;
 static void light_dev_ch() {
+	light_ch = 0;
 #ifndef MINIMAL
 	FD_ZERO(&light_rs);
 	fd_light_dev1 = 0;
@@ -2040,12 +2047,19 @@ static void light_dev_ch() {
 		close(fd_light_dev);
 		fd_light_dev = -1;
 	}
-	if (!light_fmt0) return;
-	fd_light_dev = _open(light_dev,O_RDONLY);
-	if (fd_light_dev < 0) return;
-	FD_SET(fd_light_dev,&light_rs);
-	fd_light_dev1 = fd_light_dev + 1;
-	if (light_wd >= 0) inotify_rm_watch(inotify,light_wd);
+	if (light_fmt0) {
+#if NOTHREAD2 == 2
+		fd_light_dev = _open(light_dev,O_RDONLY|O_NONBLOCK);
+#else
+		fd_light_dev = _open(light_dev,O_RDONLY);
+#endif
+		if (fd_light_dev >= 0) {
+			FD_SET(fd_light_dev,&light_rs);
+			fd_light_dev1 = fd_light_dev + 1;
+		}
+	}
+	  else
+	    if (light_wd >= 0) inotify_rm_watch(inotify,light_wd);
 #endif
 }
 
@@ -2109,8 +2123,7 @@ static void open_iio_light(){
 		memcpy(light_dev,"/dev",4);
 		memcpy(light_dev + 4,_buf1 + 20,n - 5);
 		light_dev[n - 1] = 0;
-		light_dev_ch();
-		if (fd_light_dev1) goto help;
+		//light_dev_ch(); if (fd_light_dev1) goto help;
 
 		// cannot wait /dev/iio:device*, wait scan_elements/..._en
 		memcpy(_buf0+18+typelen,"en",3);
