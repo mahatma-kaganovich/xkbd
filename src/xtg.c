@@ -1752,7 +1752,7 @@ sw:
 #else
 	light_fmt = 0;
 #endif
-	n1 = -1;
+	n1 = -2;
 #if !(LIGHT_SELECT&1)
 	if (light_fmt0 && !light_fmt) xthread_fork(&thread_iio_light_wait,NULL);
 #endif
