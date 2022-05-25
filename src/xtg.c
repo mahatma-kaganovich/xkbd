@@ -46,10 +46,10 @@
 // 2 = threaded io+xlib - hot sync /sys/.../backlight back to prop
 //#define USE_MUTEX 1
 
-// 0 - use thread to wait /dev/iio:device*: more ram, faster /sys access
-// 1 - use select()
-// 2 - use select() to /dev timeout too
-#define NOTHREAD2 1
+// wait /dev/iio:device* bitmask:
+// 1 - use select() (less ram, +delay) vs. +thread (faster /sys access)
+// 2 - use select() to /dev timeout too (select() syscall vs. usually no switch back to /sys)
+#define LIGHT_SELECT 1
 
 //#define _UNSAFE_WINMAP
 #undef PROP_FMT
@@ -1622,7 +1622,9 @@ err:	return ret;
 }
 
 #ifdef USE_MUTEX
-int light_wd = -1;
+int light_wd[2] = {-1,-1};
+int fd_light,fd_light_dev = -1,fd_light_dev1,light_bytes,light_shift,light_repeat = 0;
+unsigned char light_fmt = 0, light_fmt0 = 0;
 _short light_ch = 1;
 static void light_dev_ch();
 #endif
@@ -1656,15 +1658,19 @@ static void *thread_inotify(void* args){
 			oldShowPtr |= 8;
 			_ping();
 		}
-		if (found) found = 0;
-		else if (ie.wd == light_wd) {
-			if ((ie.mask&IN_IGNORED)) light_wd = -1;
+		if (!found) for(_short i=0;i<2;i++) if (ie.wd == light_wd[i]) {
+			found = 1;
+			if ((ie.mask&IN_IGNORED)) light_wd[i] = -1;
 			else light_ch = 1;
-		} else {
+			break;
+		}
+		if (found) found = 0;
+		else if (found) {
 			oldShowPtr |= 8;
 			MINF(1) _SYSFS_FREE();
 			_ping();
 		};
+un:
 		xmutex_unlock(&mutex);
 #else
 		oldShowPtr |= (ie.mask == IN_MODIFY & !(op_BL_FAST)) ? 128 : 8;
@@ -1675,12 +1681,10 @@ static void *thread_inotify(void* args){
 
 #ifdef USE_MUTEX
 #undef min_light
-int fd_light,fd_light_dev = -1,fd_light_dev1 = 0,light_bytes,light_shift,light_repeat = 0;
 _short light_sign = 0;
-unsigned char light_fmt = 0, light_fmt0 = 0;
 double light_scale;
 fd_set light_rs;
-#if NOTHREAD2 == 0
+#if !(LIGHT_SELECT&1)
 static void *thread_iio_light_wait(){
 	char b[16];
 	if (read(fd_light_dev,b,light_bytes) == light_bytes) {
@@ -1723,13 +1727,20 @@ static void *thread_iio_light(){
 	char b2[2][buflong], *b;
 	int n, n1;
 	_short bb;
+	fd_set rs;
+close_dev:
+	FD_ZERO(&light_rs);
+	fd_light_dev1 = 0;
+	if (fd_light_dev >= 0) {
+		close(fd_light_dev);
+		fd_light_dev = -1;
+		light_ch = 1;
+	}
 err_dev:
 	if (light_ch) light_dev_ch();
 	bb = 0;
-	n1 = 1;
 	b = (void*)&b2[0];
-	b2[1][0] = '\n';
-#if NOTHREAD2
+#if LIGHT_SELECT
 	light_fmt = light_fmt0;
 sw:
 	if (!light_fmt0) {
@@ -1738,22 +1749,24 @@ sw:
 		light_fmt = 0;
 	} else light_fmt ^= light_fmt0;
 	struct timeval tv = {.tv_sec = 0, .tv_usec = 0} ;
-	fd_set rs;
 #else
 	light_fmt = 0;
-	if (light_fmt0) xthread_fork(&thread_iio_light_wait,NULL);
+#endif
+	n1 = -1;
+#if !(LIGHT_SELECT&1)
+	if (light_fmt0 && !light_fmt) xthread_fork(&thread_iio_light_wait,NULL);
 #endif
 	rs = light_rs;
 	DBG("iio over /%s",light_fmt?"dev":"sys");
 	while(1) {
-		if (light_ch) goto err_dev;
+		if (light_ch) goto err_dev; // goto close_dev to reopen
 		if (light_fmt) {
-#if NOTHREAD2 == 2
+#if (LIGHT_SELECT&2)
 		    tv.tv_sec = 10;
 		    rs = light_rs;
 		    if (!Select(fd_light_dev1, &rs, 0, 0, &tv)) goto err_dev;
 #endif
-		    if (read(fd_light_dev,&buf,light_bytes) != light_bytes) goto err_dev;
+		    if (read(fd_light_dev,&buf,light_bytes) != light_bytes) goto close_dev;
 		    switch (light_fmt) {
 #if __BYTE_ORDER  == __LITTLE_ENDIAN
 		    // more glibc compatibility then optimization
@@ -1804,7 +1817,7 @@ sw:
 		    default: light_fmt0 = 0;goto err_dev;
 		    }
 		} else {
-#if NOTHREAD2
+#if (LIGHT_SELECT&1)
 			tv.tv_usec = 999;
 			rs = light_rs;
 			if (Select(fd_light_dev1, &rs, 0, 0, &tv)) goto sw;
@@ -2041,14 +2054,9 @@ char *light_dev = NULL;
 static void light_dev_ch() {
 	light_ch = 0;
 #ifndef MINIMAL
-	FD_ZERO(&light_rs);
-	fd_light_dev1 = 0;
-	if (fd_light_dev >= 0) {
-		close(fd_light_dev);
-		fd_light_dev = -1;
-	}
+	if (fd_light_dev >= 0) return;
 	if (light_fmt0) {
-#if NOTHREAD2 == 2
+#if LIGHT_SELECT == 2
 		fd_light_dev = _open(light_dev,O_RDONLY|O_NONBLOCK);
 #else
 		fd_light_dev = _open(light_dev,O_RDONLY);
@@ -2059,7 +2067,7 @@ static void light_dev_ch() {
 		}
 	}
 	  else
-	    if (light_wd >= 0) inotify_rm_watch(inotify,light_wd);
+	    for (_short i=0;i<2;i++) if (light_wd[i] >= 0) inotify_rm_watch(inotify,light_wd[i]);
 #endif
 }
 
@@ -2127,7 +2135,11 @@ static void open_iio_light(){
 
 		// cannot wait /dev/iio:device*, wait scan_elements/..._en
 		memcpy(_buf0+18+typelen,"en",3);
-		light_wd = _inotify(_buf1,INO1);
+		light_wd[0] = _inotify(_buf1,INO1);
+
+		memcpy(_buf0,"buffer/enable",14);
+		light_wd[1] = _inotify(_buf1,INO1);
+
 		_xmutex_unlock();
 
 help:
