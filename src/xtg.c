@@ -59,6 +59,10 @@
 // -f 7|15 will set per device, not XIAllDevices
 #endif
 
+#define _volatile
+//#define _volatile volatile
+
+
 #if defined(USE_XTHREAD) && !defined(USE_PTHREAD)
 #define XLIB_THREADSAFE
 #endif
@@ -205,18 +209,22 @@ pthread_attr_t *pth_attr = NULL;
 
 #ifdef USE_THREAD
 int inotify = -1;
-int threads = 0;
+int _volatile threads = 0;
 #else
 #undef USE_MUTEX
 #endif
 
 #ifndef USE_MUTEX
-#define _xmutex_lock(m)
-#define _xmutex_unlock(m)
+#define _xmutex_lock()
+#define _xmutex_unlock()
+#define _xmutex_lock0()
+#define _xmutex_unlock0()
 #else
 xmutex_rec mutex;
 static void _xmutex_lock(){ if (threads) xmutex_lock(&mutex); }
 static void _xmutex_unlock(){ if (threads) xmutex_unlock(&mutex); }
+static void _xmutex_lock0(){ if (!threads) xmutex_lock(&mutex); }
+static void _xmutex_unlock0(){ if (!threads) xmutex_unlock(&mutex); }
 #endif
 
 typedef uint_fast8_t _short;
@@ -279,7 +287,8 @@ int devid = 0;
 int xiopcode=0, xfopcode=0, xfevent=-100, vXR = 0;
 Atom aFloat,aMatrix,aABS,aDevMon;
 XRRScreenResources *xrrr = NULL;
-_short showPtr, oldShowPtr = 0, curShow;
+_short showPtr, curShow;
+_short _volatile oldShowPtr = 0;
 int floatFmt = sizeof(float) << 3;
 int atomFmt = sizeof(Atom) << 3;
 int winFmt = sizeof(Window) << 3;
@@ -1588,6 +1597,22 @@ static double _read_ud(int fd){
 
 #ifdef USE_THREAD
 
+xmutex_rec mutex0;
+static void _thread(_short mask,void *(*fn)(void *)){
+	xmutex_lock(&mutex0);
+	if (!(threads&mask)) {
+		threads |= mask|8; // unstoppable
+		xthread_fork(fn,NULL);
+	}
+	xmutex_unlock(&mutex0);
+}
+
+static void _unthread(_short mask){
+	xmutex_lock(&mutex0);
+	threads &= ~mask;
+	xmutex_unlock(&mutex0);
+}
+
 static void _bl2prop(minf_t *minf) {
 	XRRChangeOutputProperty(dpy,minf->out,a_xrp[xrp_bl],XA_INTEGER,intFmt,PropModeReplace,(void*)&minf->prop[xrp_bl].v,1);
 	XFlush(dpy);
@@ -1624,8 +1649,8 @@ err:	return ret;
 #ifdef USE_MUTEX
 int light_wd[2] = {-1,-1};
 int fd_light,fd_light_dev = -1,fd_light_dev1,light_bytes,light_shift,light_repeat = 0;
-unsigned char light_fmt = 0, light_fmt0 = 0;
-_short light_ch = 1;
+unsigned char _volatile light_fmt = 0, light_fmt0 = 0;
+_short _volatile light_ch = 1;
 static void light_dev_ch();
 #endif
 
@@ -1677,6 +1702,7 @@ un:
 #endif
 
 	}
+	_unthread(1);
 }
 
 #ifdef USE_MUTEX
@@ -1688,9 +1714,10 @@ fd_set light_rs;
 static void *thread_iio_light_wait(){
 	char b[16];
 	if (read(fd_light_dev,b,light_bytes) == light_bytes) {
+		_unthread(4);
 		light_fmt = light_fmt0;
 		DBG("iio over /dev");
-	}
+	} else _unthread(4);
 }
 #endif
 static void *thread_iio_light(){
@@ -1754,7 +1781,7 @@ sw:
 #endif
 	n1 = -2;
 #if !(LIGHT_SELECT&1)
-	if (light_fmt0 && !light_fmt) xthread_fork(&thread_iio_light_wait,NULL);
+	if (light_fmt0 && !light_fmt) _thread(4,&thread_iio_light_wait);
 #endif
 	rs = light_rs;
 	DBG("iio over /%s",light_fmt?"dev":"sys");
@@ -1886,6 +1913,7 @@ err:
 		xmutex_unlock(&mutex);
 	}
 ex:
+	_unthread(2);
 }
 
 #endif
@@ -1915,13 +1943,7 @@ static int _inotify(char *file, uint32_t mask){
 		goto ex;
 	}
 	inotify = in;
-	if (!(threads&1)) {
-#ifdef USE_MUTEX
-		if (!threads) xmutex_lock(&mutex);
-#endif
-		threads |= 1;
-		xthread_fork(&thread_inotify,NULL);
-	}
+	_thread(1,&thread_inotify);
 ex:
 #endif
 	return res;
@@ -1939,9 +1961,9 @@ static int _open(char *name,int flags){
 	if (fd < 0) {
 		flags &= O_RDWR|O_WRONLY|O_RDONLY;
 		ERR("opening %s file %s",
-		(!(flags^O_RDWR))?"RW":
-		(!(flags^O_WRONLY))?"W":
-		(!(flags^O_RDONLY))?"R":
+		(flags==O_RDWR)?"RW":
+		(flags==O_WRONLY)?"W":
+		(flags==O_RDONLY)?"R":
 		"?",name);
 	} else DBG("opened %s",name);
 	return fd;
@@ -2140,8 +2162,6 @@ static void open_iio_light(){
 		memcpy(_buf0,"buffer/enable",14);
 		light_wd[1] = _inotify(_buf1,INO1);
 
-		_xmutex_unlock();
-
 help:
 		*(_buf0 - 1) = 0;
 		DBG("for /dev access to light sensor [su]do: (chmod a+r %s && cd %s && echo 1 >scan_elements/in_%s_en && echo 1 >buffer/enable)",light_dev,_buf1,type);
@@ -2151,8 +2171,7 @@ nofmt:
 	if (!light_fmt0) DBG("unsupported IIO format: %s",b);
 th:
 #endif
-	threads |= 2;
-	xthread_fork(&thread_iio_light,NULL);
+	_thread(2,&thread_iio_light);
 }
 #endif
 
@@ -2249,7 +2268,9 @@ open:	opened = 1;
 		_mon_sysfs_name_len = strlen(_mon_sysfs_name);
 	}
 	_SYSFS_FREE();
+	_xmutex_lock0();
 	fd = _sysfs_open(0);
+	_xmutex_unlock0();
 	if (fd < 0) {
 #ifdef SYSFS_CACHE
 #ifndef USE_THREAD
@@ -4793,6 +4814,7 @@ static void init(){
 		pth_attr = &_pth_attr;
 #endif
 #ifdef USE_MUTEX
+	xmutex_init(&mutex0);
 	xmutex_init(&mutex);
 	open_iio_light();
 #endif
