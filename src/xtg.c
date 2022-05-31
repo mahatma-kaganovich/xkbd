@@ -182,11 +182,6 @@ pthread_attr_t *pth_attr = NULL;
 #ifndef NAME_MAX
 #define NAME_MAX 256
 #endif
-#ifdef __USE_XOPEN2K8
-#define ifndprintf(e, fd, txt, args... ) {if (dprintf(fd, txt, ##args) <= 0) goto e;}
-#else
-#define ifndprintf(e, fd, txt, args... ) {char b[128]; int s = sprintf(b, txt, ##args); if (s <= 0 || write(fd,b,s) < s) goto e;}
-#endif
 
 #define ONCE(x) { static unsigned short _ONCE1cnt = 0; if (!_ONCE1cnt++) { x; }}
 
@@ -1552,7 +1547,7 @@ static void sysfs_free1(){
 #define _o_sync (O_SYNC)
 //#define _o_sync (0)
 
-#define buflong 32
+#define buflong (sizeof(unsigned long long)*4)
 
 #define _STR2A(type,name,conv,name2)			\
 static type name(char *b, ssize_t n){			\
@@ -1592,6 +1587,33 @@ static double _read_ud(int fd){
 
 
 #ifdef USE_THREAD
+
+static int wrull(int fd,unsigned long long l) {
+#if 0
+	return dprintf(fd,"%llu\n",l);
+#else
+	char buf[buflong],*b=&buf[buflong-1];
+	*(--b)='\n'; // not required, but separator
+#if 1
+	const char *num = "0123456789abcdef";
+	do {
+		*(--b) = num[l&0xfull];
+		l >>= 4;
+	} while(l);
+	*(--b) = 'x';
+	*(--b) = '0';
+#else
+	const char *num = "0123456789";
+	lldiv_t d = {.quot = l, .rem = 0};
+	do {
+		d = lldiv(d.quot,10);
+		*(--b) = num[d.rem];
+	} while (d.quot);
+#endif
+	return write(fd,b,&buf[buflong-1] - b);
+#endif
+}
+
 
 xmutex_rec mutex0;
 static void _thread(_short mask,void *(*fn)(void *)){
@@ -1895,8 +1917,7 @@ sw:
 			    pr->v1.i = !l1;
 #ifdef SYSFS_CACHE
 			if (minf->blfd > 0) {
-				ifndprintf(err,minf->blfd - 1,"%li\n",l1);
-err:
+				wrull(minf->blfd - 1,l1);
 				continue;
 			}
 #endif
@@ -2295,7 +2316,7 @@ files_ok:
 			if (new < 0 || new > _sysfs_val) new = _sysfs_val;
 			// keep Safe & 16 write-optimized, lseek() not required (intel)
 			//if (lseek(fd,0,0)) goto err;
-			ifndprintf(err,fd,"%lu\n",new);
+			if (wrull(fd,new) <= 0) goto err;
 		}
 	} else {
 		if (cur.i < 0) cur.i = _sysfs_val; // write-only
