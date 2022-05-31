@@ -42,6 +42,9 @@
 #define PROP_FMT
 #define _XR_PROVIDERS
 
+// remember arch with pointer check: 1 to avoid pointers to the end of array
+#define PTR_CHK 0
+
 // 1 = threaded io - if sysfs lockups on backlight devices [dis]connection or many backlights
 // 2 = threaded io+xlib - hot sync /sys/.../backlight back to prop
 //#define USE_MUTEX 1
@@ -1588,12 +1591,12 @@ static double _read_ud(int fd){
 
 #ifdef USE_THREAD
 
-static int wrull(int fd,unsigned long long l) {
+static _short wrull(int fd,unsigned long long l) {
 #if 0
-	return dprintf(fd,"%llu\n",l);
+	return dprintf(fd,"%llu\n",l) > 0;
 #else
-	char buf[buflong],*b=&buf[buflong-1];
-	*(--b)='\n'; // not required, but separator
+	char buf[buflong],*b=&buf[buflong-PTR_CHK];
+//	*(--b)='\n'; // not required, but separator
 #if 1
 	const char *num = "0123456789abcdef";
 	do {
@@ -1610,7 +1613,10 @@ static int wrull(int fd,unsigned long long l) {
 		*(--b) = num[d.rem];
 	} while (d.quot);
 #endif
-	return write(fd,b,&buf[buflong-1] - b);
+	int n = &buf[buflong-PTR_CHK] - b;
+	if (write(fd,b,n)==n) return 1;
+	ERR("file %i write error",fd);
+	return 0;
 #endif
 }
 
@@ -1977,12 +1983,12 @@ static int _open(char *name,int flags){
 	int fd = open(name,flags);
 	if (fd < 0) {
 		flags &= O_RDWR|O_WRONLY|O_RDONLY;
-		ERR("opening %s file %s",
+		ERR("%i opening %s file %s",errno,
 		(flags==O_RDWR)?"RW":
 		(flags==O_WRONLY)?"W":
 		(flags==O_RDONLY)?"R":
 		"?",name);
-	} else DBG("opened %s",name);
+	} else DBG("opened %i %s",fd,name);
 	return fd;
 }
 
@@ -2316,7 +2322,7 @@ files_ok:
 			if (new < 0 || new > _sysfs_val) new = _sysfs_val;
 			// keep Safe & 16 write-optimized, lseek() not required (intel)
 			//if (lseek(fd,0,0)) goto err;
-			if (wrull(fd,new) <= 0) goto err;
+			if (!wrull(fd,new)) goto err;
 		}
 	} else {
 		if (cur.i < 0) cur.i = _sysfs_val; // write-only
@@ -3035,7 +3041,7 @@ static void xrMons0(){
     if (!noutput) goto ret;
     if (!outputs) {
 	_xmutex_lock();
-	outputs = calloc(noutput,sizeof(minf_t));
+	outputs = calloc(noutput+PTR_CHK,sizeof(minf_t));
 	minf_last = &outputs[noutput];
 	_xmutex_unlock();
 	oldShowPtr |= 16;
@@ -3684,7 +3690,7 @@ static void _add_input(_short t){
 	_uint i = ninput1_++;
 	if (ninput1_ > ninput1 || !inputs1) {
 		_uint n = i + NINPUT_STEP;
-		dinf_t *p = malloc(n*sizeof(dinf_t));
+		dinf_t *p = malloc(n*sizeof(dinf_t)+PTR_CHK);
 		if (inputs1) {
 			memcpy(p,inputs1,i*sizeof(dinf_t));
 			free(inputs1);
