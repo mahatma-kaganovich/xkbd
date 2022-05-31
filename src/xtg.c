@@ -1548,13 +1548,9 @@ static void sysfs_free1(){
 
 #if _BACKLIGHT
 
-#ifdef O_DIRECT
-#define _o_sync (O_DIRECT)
-#elif defined(SYSFS_CACHE) && defined(O_DSYNC)
-#define _o_sync (O_DSYNC)
-#else
-#define _o_sync (0)
-#endif
+//#define _o_sync (O_DSYNC)
+#define _o_sync (O_SYNC)
+//#define _o_sync (0)
 
 #define buflong 32
 
