@@ -670,7 +670,7 @@ static void _set_same_size(){
 	}
 	// "empty" (same size) event
 	XRRSetScreenSize(dpy,root,w_width,w_height,w_mwidth,w_mheight);
-xlib:
+xlib:;
 #endif
 	// no same size event
 //	if (r) XReconfigureWMWindow(dpy,root,screen,CWWidth|CWHeight,&c);
@@ -1589,8 +1589,8 @@ static double _read_ud(int fd){
 }
 
 
-#ifdef USE_THREAD
 
+#if _BACKLIGHT
 static _short wrull(int fd,unsigned long long l) {
 #if 0
 	return dprintf(fd,"%llu\n",l) > 0;
@@ -1619,7 +1619,9 @@ static _short wrull(int fd,unsigned long long l) {
 	return 0;
 #endif
 }
+#endif
 
+#ifdef USE_THREAD
 
 xmutex_rec mutex0;
 static void _thread(_short mask,void *(*fn)(void *)){
@@ -3494,7 +3496,7 @@ static void _pan(minf_t *m) {
 		}
 //		goto pan1;
 	}
-pan0:
+pan0:;
 	XRRPanning *p = XRRGetPanning(dpy,xrrr,m->crt), p1;
 	if (!p) return;
 	memset(&p1,0,sizeof(p1));
@@ -4321,7 +4323,7 @@ static void _eXit(int sig){
 }
 
 static void setShowCursor(){
-repeat0:
+repeat0:;
 	static int cnt = 1;
 #if _BACKLIGHT == 2 && defined(XTG)
 	static _short blm = 3;
@@ -5023,7 +5025,7 @@ int main(int argc, char **argv){
 		pi[p_floating] ^= 8;
 	}
 	if (pi[p_help]) {
-help:
+help:;
 		_short j;
 		pf[p_safe] = pi[p_safe];
 		pf[p_Safe] = pi[p_Safe];

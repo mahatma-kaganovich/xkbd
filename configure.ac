@@ -32,6 +32,13 @@ _set_pkg_xtg(){
 	fi
 }
 
+_get_pkg_var(){
+	test x$PKG_CONFIG != xno &&
+	    $PKG_CONFIG --exists $1 &&
+	    (pkg-config --print-variables x11|grep -q "^$2"'$') &&
+		pkg-config --variable=$2 $1
+}
+
 AC_PATH_PROG(PKG_CONFIG, pkg-config, no)
 
 dnl check for xft support
@@ -125,7 +132,6 @@ AC_FUNC_MALLOC
 AC_TYPE_SIGNAL
 AC_CHECK_FUNCS([strchr strdup])
 
-
 if test x$enable_thread != xno && test x$enable_minimal != xyes; then
     AC_MSG_CHECKING([for simple X11/Xthreads.h with modern glibc])
     AC_LINK_IFELSE(
@@ -138,13 +144,27 @@ if test x$enable_thread != xno && test x$enable_minimal != xyes; then
     if test x$have_simple_Xthreads != xno; then
         CPPFLAGS="$CPPFLAGS -DUSE_XTHREAD"
     else
-        AX_PTHREAD([have_pthread=yes], [have_pthread=no])
-        if test x$have_pthread != xno; then
-            X_EXTRA_LIBS="$X_EXTRA_LIBS $PTHREAD_LIBS"
-            CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
-            CPPFLAGS="$CPPFLAGS -DUSE_PTHREAD"
+        AC_CHECK_HEADERS([X11/Xthreads.h])
+        if test "x$ac_cv_header_X11_Xthreads_h" = xyes; then
+          CPPFLAGS="$CPPFLAGS -DUSE_XTHREAD"
         fi
-        test -e /usr/include/X11/Xthreads.h && CPPFLAGS="$CPPFLAGS -DUSE_XTHREAD"
+        AC_MSG_CHECKING([for x11 xthreadlib])
+        if __xthlib=$(_get_pkg_var x11 xthreadlib); then
+            X_EXTRA_LIBS="$X_EXTRA_LIBS $__xthlib"
+        else
+            __xthlib=no
+        fi
+        AC_MSG_RESULT($__xthlib)
+        if test x"$__xthlib" = x-lpthread || test x"$__xthlib" = xno; then
+            AX_PTHREAD([have_pthread=yes], [have_pthread=no])
+            if x"$have_pthread" = xyes; then
+                if test x"$__xthlib" != x"$PTHREAD_LIBS"; then
+                    X_EXTRA_LIBS="$X_EXTRA_LIBS $PTHREAD_LIBS"
+                fi
+                CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
+                CPPFLAGS="$CPPFLAGS -DUSE_PTHREAD"
+            fi
+        fi
     fi
 fi
 
