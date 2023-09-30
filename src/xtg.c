@@ -2229,9 +2229,9 @@ static int _sysfs_open(_short mode) {
 		fd = fd2;
 	} else {
 		static char *bl_masks[] = {
-			"*backlight*",
-			"*_bl*", // amdgpu_bl0
-			//"*",
+			"/*backlight*",
+			"-*/*_bl*", // amdgpu_bl0
+			//"*/*",
 			NULL
 		};
 		_buf = _buf?:malloc(_buf_len);
@@ -2239,7 +2239,6 @@ static int _sysfs_open(_short mode) {
 		_buf0 += 21;
 		memcpy(_buf0,_mon_sysfs_name,_mon_sysfs_name_len);
 		_buf0 += _mon_sysfs_name_len;
-		*(_buf0++) = '/';
 		char **bl;
 		for(bl = bl_masks; *bl; bl++) {
 			strcpy(_buf0,*bl);
