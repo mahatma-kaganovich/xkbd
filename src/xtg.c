@@ -1,5 +1,5 @@
 /*
-	xtg v1.55 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.56 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -287,9 +287,9 @@ Atom aFloat,aMatrix,aABS,aDevMon;
 XRRScreenResources *xrrr = NULL;
 _short showPtr, curShow;
 _short _volatile oldShowPtr = 0;
-int floatFmt = sizeof(float) << 3;
-int atomFmt = sizeof(Atom) << 3;
-int winFmt = sizeof(Window) << 3;
+int floatFmt = 32;
+int atomFmt = 32;
+int winFmt = 32;
 _short useRawTouch = 0, useRawButton = 0;
 int bits_per_rgb = 0;
 
@@ -310,8 +310,8 @@ _short _wait_mask = _w_none|_w_init;
 #define INCH 25.4
 #define DPI_EQ(w,h) {if (!(pi[p_safe]&512)) { if (h > w) w = h; else h = w; }}
 
-#define prop_int int32_t
-int intFmt = sizeof(prop_int) << 3;
+#define prop_int int
+int intFmt = 32;
 #ifdef USE_EVDEV
 Atom aNode;
 #endif
@@ -459,6 +459,8 @@ char *pa[MAX_PAR] = {};
 int pi[MAX_PAR] = PAR_DEFS;
 double pf[] = PAR_DEFS;
 char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:i:s:S:c:C:l:L:1yYh";
+#define _bit '#'
+#define _bit_ "#"
 char *ph[MAX_PAR] = {
 	"touch device 0=auto", //d
 
@@ -502,46 +504,50 @@ char *ph[MAX_PAR] = {
 	"max dpi",
 	"default dpi - basic dpi, some apps use hardcoded 96, not real dots/inch (0)",
 	"safe mode bits\n"
-	"		0(+1) don't change hierarchy of device busy/pressed (for -f 2)\n"
+	"		"_bit_"don't change hierarchy of device busy/pressed (for -f 2)\n"
+	"		"_bit_
 #ifdef USE_EVDEV
-	"		1(+2) XUngrabServer() for libevdev call\n"
+			"XUngrabServer() for libevdev call\n"
 #endif
-	"		2(+4) XGrabServer() cumulative\n"
-	"		3(+8) cursor recheck (tricky)\n"
-	"		4(+16) no mon dpi\n"
-	"		5(+32) no mon primary\n"
-	"		6(+64) no vertical panning && auto-on && ondemand XI2 prop 'scaling mode' = Full\n"
-	"		7(+128) auto bits 5,6 on primary present - enable primary & disable panning\n"
-	"		8(+256) use mode sizes for panning (errors in xrandr tool!)\n"
-	"		9(+512) keep dpi different x & y (image panned non-aspected)\n"
-	"		10(+1024) don't use cached input ABS\n"
-	"		11(+2048) try delete or not create unused (saved) property\n"
+	"		"_bit_"XGrabServer() cumulative\n"
+	"		"_bit_"cursor recheck (tricky)\n"
+	"		"_bit_"no mon dpi\n"
+	"		"_bit_"no mon primary\n"
+	"		"_bit_"no vertical panning && auto-on && ondemand XI2 prop 'scaling mode' = Full\n"
+	"		"_bit_"auto bits 5,6 on primary present - enable primary & disable panning\n"
+	"		"_bit_"use mode sizes for panning (errors in xrandr tool!)\n"
+	"		"_bit_"keep dpi different x & y (image panned non-aspected)\n"
+	"		"_bit_"don't use cached input ABS\n"
+	"		"_bit_"try delete or not create unused (saved) property\n"
+	"		"_bit_
 #if _BACKLIGHT
-	"		12(+4096) track backlight-controlled monitors and off when empty (under construction)\n"
+			"track backlight-controlled monitors and off when empty (under construction)\n"
 	"			modesetting: chmod -f o+w /sys/class/drm/card*-*/*{backlight,_bl}*/brightness\n"
 	"			- to emulate XR 'Backlight' prop\n"
-#endif	
-#ifdef XSS
-	"		13(+8192) skip fullscreen windows without ClientMessage (XTerm)\n"
 #endif
-	"		14(+16384) XRRSetCrtcConfig() move before panning\n",
-	"Safe mode bits 2\n"
-	"		0(+1) minimize screen size changes in pixels (dont reduce, dont round to DPI)\n"
-	"		1(+2) don't ajust values, based on deps ('max bpc')\n"
+	"		"_bit_
 #ifdef XSS
-	"		2(+4) don't set fullscreen 'Broadcast RGB: Limited 16:235'\n"
+			"skip fullscreen windows without ClientMessage (XTerm)\n"
+#endif
+	"		"_bit_"XRRSetCrtcConfig() move before panning\n",
+	"Safe mode bits 2\n"
+	"		"_bit_"minimize screen size changes in pixels (dont reduce, dont round to DPI)\n"
+	"		"_bit_"don't ajust values, based on deps ('max bpc')\n"
+	"		"_bit_
+#ifdef XSS
+			"don't set fullscreen 'Broadcast RGB: Limited 16:235'\n"
 #endif
 
 #ifdef SYSFS_CACHE
 #if 0
 #define op_BL_REOPEN (pi[p_Safe]&8)
-	"		3(+8) don't keep sysfs 'brightness' file(s) opened (if lockup sysfs)'\n"
+	"		"_bit_"don't keep sysfs 'brightness' file(s) opened (if lockup sysfs)'\n"
 #else
 #define op_BL_REOPEN 0
 #endif
 #endif
 #define op_BL_FAST (pi[p_Safe]&16)
-	"		4(+16) fastest /sys & /dev access; auto on '-YL <num>'"
+	"		"_bit_"fastest /sys & /dev access; auto on '-YL <num>'"
 	"			(/dev IIO, O_WRONLY|O_NONBLOCK not readback /sys...brightness)\n"
 	"			(vs. concurrent backlight & light sensor access)\n"
 	"\n	(safe bits tested on xf86-video-intel)\n",
@@ -5038,7 +5044,17 @@ help:;
 				else if (!pf[i] && pa[i]) printf("'%s'",pa[i]);
 				else printf("%i",pi[i]);
 			}
-			printf(" %s\n",ph[i]);
+			putchar(' ');
+			int v=pi[i],o=0;
+			char *s;
+			for(s=ph[i]; *s; s++) {
+				if (*s == _bit) {
+					printf("%c%i(+%i) ",(v&1)?'*':' ',o,1<<o);
+					v >>= 1;
+					o++;
+				} else putchar(*s);
+			}
+			putchar('\n');
 		}
 		printf("\n<value> is octal combination, starting from x>0, where x is last event type:\n"
 			"	1=begin, 2=update, 3=end\n"
