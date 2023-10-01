@@ -1,5 +1,5 @@
 /*
-	xtg v1.56 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.57 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -398,10 +398,10 @@ static void SET_BMAP(_uint i, _short x, _uint key){
 }
 
 static void opendpy();
-static void _print_bmap(_uint x, _short n, TouchTree *m) {
+static void _print_bmap(unsigned long x, _short n, TouchTree *m) {
 	_short i;
 	unsigned int l = m->g;
-	if (l) printf(" 0%o:%s%x",x,l>9?"0x":"",l);
+	if (l) printf(" 0%lo:%s%x",x,l>9?"0x":"",l);
 	l = m->k;
 	if (l) {
 		if (!dpy) opendpy();
@@ -529,7 +529,7 @@ char *ph[MAX_PAR] = {
 #ifdef XSS
 			"skip fullscreen windows without ClientMessage (XTerm)\n"
 #endif
-	"		"_bit_"XRRSetCrtcConfig() move before panning\n",
+	"		"_bit_"XRRSetCrtcConfig() move before panning",
 	"Safe mode bits 2\n"
 	"		"_bit_"minimize screen size changes in pixels (dont reduce, dont round to DPI)\n"
 	"		"_bit_"don't ajust values, based on deps ('max bpc')\n"
@@ -547,21 +547,21 @@ char *ph[MAX_PAR] = {
 #endif
 #endif
 #define op_BL_FAST (pi[p_Safe]&16)
-	"		"_bit_"fastest /sys & /dev access; auto on '-YL <num>'"
-	"			(/dev IIO, O_WRONLY|O_NONBLOCK not readback /sys...brightness)\n"
-	"			(vs. concurrent backlight & light sensor access)\n"
-	"\n	(safe bits tested on xf86-video-intel)\n",
+	"		"_bit_"fastest /sys & /dev access\n"
+	"			auto on '-YL <num>' if light sensor found\n"
+	"			(/dev IIO, O_WRONLY|O_NONBLOCK not, readback /sys...brightness)\n"
+	"			(vs. concurrent backlight & light sensor access)",
 #ifdef XSS
-	"fullscreen \"content type\" prop.: see \"xrandr --props\" (I want \"Cinema\")",
-	"fullscreen \"Colorspace\" prop.: see \"xrandr --props\"  (I want \"DCI-P3_RGB_Theater\")\n",
+	"fullscreen \"content type\" prop.: see \"xrandr --props\"",
+	"fullscreen \"Colorspace\" prop.: see \"xrandr --props\"",
 #endif
 #ifdef USE_THREAD
 	"min % backlight brightness (for light sensor & dark surround)",
 	"max light sensor value (corrected: value * scale)\n"
 	"		(not by design, but to reduce brightness)\n"
-	"		use IIO light sensors over sysfs"
+	"		use IIO light sensors over sysfs\n"
 	"		0  - disable light sensor to backlight\n"
-	"		25 - my development default\n",
+	"		25 - my development default",
 #endif
 	" oneshot (implies set DPI, panning, etc) - to run & exit before WM",
 	" preset max-conservative",
@@ -2136,6 +2136,7 @@ static void open_iio_light(){
 		)) return;
 	int typelen = strlen(type);
 
+	if (pi[p_Y]) pi[p_Safe] |= 16;
 	light_scale = _read_ud(fd2);
 	close(fd2);
 	if (light_scale <= 0.) light_scale = 1;
@@ -4990,8 +4991,6 @@ int main(int argc, char **argv){
 			pi[p_Safe] = 1;
 			pa[p_content_type] = "Cinema";
 			pa[p_colorspace] = "DCI-P3_RGB_Theater";
-		    case p_max_light:
-			if (pi[p_Y] && pi[p_max_light]) pi[p_Safe] |= 16;
 			break;
 		}
 	}
