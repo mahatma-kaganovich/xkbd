@@ -1,5 +1,5 @@
 /*
-	xtg v1.57 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.58 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -29,7 +29,7 @@
 	Auto primary or vertical panning (optional).
 	-h to help
 
-	(C) 2019-2021 Denis Kaganovich, Anarchy license
+	(C) 2019-2023 Denis Kaganovich, Anarchy license
 */
 #ifndef NO_ALL
 #define XSS
@@ -149,6 +149,9 @@
 #ifdef USE_THREAD
 // iio format
 #include <endian.h>
+// v4l
+#include <sys/mman.h>
+#include <linux/videodev2.h>
 #ifndef be64toh
 #include <arpa/inet.h>
 #endif
@@ -189,6 +192,7 @@ pthread_attr_t *pth_attr = NULL;
 #define ONCE(x) { static unsigned short _ONCE1cnt = 0; if (!_ONCE1cnt++) { x; }}
 
 #define ERR(txt, args... ) fprintf(stderr, "xtg Error: " txt "\n", ##args )
+#define ERRno(txt, args... ) fprintf(stderr, "xtg Error: " txt " - %i %s\n", ##args , errno,strerror(errno))
 #ifndef NDEBUG
 #define DBG(txt, args... ) fprintf(stderr, "xtg " txt "\n", ##args )
 #else
@@ -447,18 +451,19 @@ static void _print_bmap(unsigned long x, _short n, TouchTree *m) {
 #define p_min_backlight 19
 #define p_max_light 20
 
-#define p_1 21
+#define p_v4l 21
+#define p_1 22
 
-#define p_y 22
-#define p_Y 23
-#define p_help 24
-#define MAX_PAR 25
+#define p_y 23
+#define p_Y 24
+#define p_help 25
+#define MAX_PAR 26
 char *pa[MAX_PAR] = {};
 // android: 125ms tap, 500ms long
-#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0,  14, 32, 72, 0, 0, DEF_SAFE, DEF_SAFE2, 0, 0, 10, 0, 0 }
+#define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0,  14, 32, 72, 0, 0, DEF_SAFE, DEF_SAFE2, 0, 0, 20, 0, 0, 0}
 int pi[MAX_PAR] = PAR_DEFS;
 double pf[] = PAR_DEFS;
-char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:i:s:S:c:C:l:L:1yYh";
+char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:i:s:S:c:C:l:L:4:1yYh";
 #define _bit '#'
 #define _bit_ "#"
 char *ph[MAX_PAR] = {
@@ -523,37 +528,44 @@ char *ph[MAX_PAR] = {
 #if _BACKLIGHT
 			"track backlight-controlled monitors and off when empty (under construction)\n"
 	"			modesetting: chmod -f o+w /sys/class/drm/card*-*/*{backlight,_bl}*/brightness\n"
-	"			- to emulate XR 'Backlight' prop\n"
+	"			- to emulate XR 'Backlight' prop"
 #endif
-	"		"_bit_
+	"\n		"_bit_
 #ifdef XSS
-			"skip fullscreen windows without ClientMessage (XTerm)\n"
+			"skip fullscreen windows without ClientMessage (XTerm)"
 #endif
-	"		"_bit_"XRRSetCrtcConfig() move before panning",
+	"\n		"_bit_"XRRSetCrtcConfig() move before panning",
 	"Safe mode bits 2\n"
 	"		"_bit_"minimize screen size changes in pixels (dont reduce, dont round to DPI)\n"
 	"		"_bit_"don't ajust values, based on deps ('max bpc')\n"
 	"		"_bit_
 #ifdef XSS
-			"don't set fullscreen 'Broadcast RGB: Limited 16:235'\n"
+			"don't set fullscreen 'Broadcast RGB: Limited 16:235'"
 #endif
-
+	"\n		"_bit_
 #ifdef SYSFS_CACHE
 #if 0
 #define op_BL_REOPEN (pi[p_Safe]&8)
-	"		"_bit_"don't keep sysfs 'brightness' file(s) opened (if lockup sysfs)'\n"
+			"don't keep sysfs 'brightness' file(s) opened (if lockup sysfs)'"
 #else
 #define op_BL_REOPEN 0
 #endif
 #endif
 #define op_BL_FAST (pi[p_Safe]&16)
-	"		"_bit_"fastest /sys & /dev access\n"
+	"\n		"_bit_"fastest /sys & /dev access\n"
 	"			auto on '-YL <num>' if light sensor found\n"
 	"			(/dev IIO, O_WRONLY|O_NONBLOCK not, readback /sys...brightness)\n"
-	"			(vs. concurrent backlight & light sensor access)",
+	"			(vs. concurrent backlight & light sensor access)\n"
+	"		"_bit_
+#ifdef USE_THREAD
+			"try light sensor before camera"
+#endif
+	,
 #ifdef XSS
 	"fullscreen \"content type\" prop.: see \"xrandr --props\"",
 	"fullscreen \"Colorspace\" prop.: see \"xrandr --props\"",
+#else
+	NULL,NULL,
 #endif
 #ifdef USE_THREAD
 	"min % backlight brightness (for light sensor & dark surround)",
@@ -562,11 +574,14 @@ char *ph[MAX_PAR] = {
 	"		use IIO light sensors over sysfs\n"
 	"		0  - disable light sensor to backlight\n"
 	"		25 - my development default",
+	"camera device",
+#else
+	NULL,NULL,NULL,
 #endif
-	" oneshot (implies set DPI, panning, etc) - to run & exit before WM",
-	" preset max-conservative",
-	" preset max-experimental",
-	" help",
+	"oneshot (implies set DPI, panning, etc) - to run & exit before WM",
+	"preset max-conservative",
+	"preset max-experimental",
+	"help",
 };
 #else
 #define TIME(T,t)
@@ -1737,6 +1752,7 @@ un:
 	_unthread(1);
 }
 
+
 #ifdef USE_MUTEX
 #undef min_light
 _short light_sign = 0;
@@ -1752,8 +1768,47 @@ static void *thread_iio_light_wait(){
 	} else _unthread(4);
 }
 #endif
-static void *thread_iio_light(){
+
+double max_light;
+static void chlight(const unsigned long long l){
 	minf_t *minf;
+	xmutex_lock(&mutex);
+	MINF(minf->blfd > 0 || minf->prop[xrp_bl].en) {
+		pinf_t *pr = &minf->prop[xrp_bl];
+		long l1 = pr->p->values[1];
+		if (l < max_light) {
+#ifdef min_light
+			l1 = (l <= min_light) ? minf->minbl :
+			    (minf->minbl + (l1 - minf->minbl)*(l*light_scale - min_light)/(pf[p_max_light] - min_light));
+#else
+			l1 = minf->minbl + (l1 - minf->minbl)*(l/max_light);
+#endif
+		}
+
+		//DBG("light %llu -> %li %f",l,l1,l/max_light);
+		if (pr->vs[0].i == l1) continue;
+		pr->vs[0].i = l1;
+		if (!pr->v.i) continue;
+		pr->v.i = l1;
+		if (pr->v1.i == l1)
+		    pr->v1.i = !l1;
+#ifdef SYSFS_CACHE
+		if (minf->blfd > 0) {
+			wrull(minf->blfd - 1,l1);
+			continue;
+		}
+#endif
+#if USE_MUTEX == 2
+		if (pr->en) _bl2prop(minf);
+#else
+		oldShowPtr |= 128;
+#endif
+	}
+	xmutex_unlock(&mutex);
+}
+
+
+static void *thread_iio_light(){
 	union {
 		unsigned long long l;
 		long long ls;
@@ -1769,7 +1824,7 @@ static void *thread_iio_light(){
 		int64_t s64;
 		uint64_t u64;
 	} buf = {.u64 = 0};
-	double max_light = pf[p_max_light]/light_scale;
+	max_light = pf[p_max_light]/light_scale;
 	unsigned long long l0 = 0;
 	unsigned long long max_sens1 = max_light + .1;
 	unsigned long long max_sens = max_sens1 >> light_shift;
@@ -1909,42 +1964,396 @@ sw:
 				else l.l <<= light_shift;
 			}
 		}
-		xmutex_lock(&mutex);
-		MINF(minf->blfd > 0 || minf->prop[xrp_bl].en) {
-			pinf_t *pr = &minf->prop[xrp_bl];
-			long l1 = pr->p->values[1];
-			if (l.l < max_light) {
-#ifdef min_light
-				l1 = (l.l <= min_light) ? minf->minbl :
-				    (minf->minbl + (l1 - minf->minbl)*(l.l*light_scale - min_light)/(pf[p_max_light] - min_light));
-#else
-				l1 = minf->minbl + (l1 - minf->minbl)*(l.l/max_light);
-#endif
-			}
-
-			//DBG("light %llu -> %li",l.l,l1);
-			if (pr->vs[0].i == l1) continue;
-			pr->vs[0].i = l1;
-			if (!pr->v.i) continue;
-			pr->v.i = l1;
-			if (pr->v1.i == l1)
-			    pr->v1.i = !l1;
-#ifdef SYSFS_CACHE
-			if (minf->blfd > 0) {
-				wrull(minf->blfd - 1,l1);
-				continue;
-			}
-#endif
-#if USE_MUTEX == 2
-			if (pr->en) _bl2prop(minf);
-#else
-			oldShowPtr |= 128;
-#endif
-		}
-		xmutex_unlock(&mutex);
+		chlight(l.l);
 	}
 ex:
 	_unthread(2);
+}
+
+
+
+//video
+#define V4MAXDELAY 1
+#define V4MINDELAY 0
+#define V4EWMH 3
+#define V4BUFS 1
+struct v4buffer {
+	void   *start;
+	size_t length;
+} *v4buf = NULL;
+int v4fd = -1;
+unsigned long v4nb = 0, v4mem = 0;
+struct v4l2_format v4 = {};
+int nv4ldves = 0;
+
+union {
+    union {
+	struct v4l2_capability cap;
+	struct v4l2_cropcap cropcap;
+	struct v4l2_crop crop;
+	struct v4l2_frmsizeenum s;
+	struct v4l2_format f;
+	struct v4l2_fmtdesc fmt;
+	struct v4l2_requestbuffers req;
+	struct v4l2_buffer buf;
+
+	struct v4l2_queryctrl qctrl;
+	struct v4l2_ctrl_hdr10_cll_info light;
+	struct v4l2_control ctrl; 
+    } v4l;
+} io;
+
+static char *v4fmt2str(__u32 f){
+	static unsigned char s[5];
+	unsigned char *c = s;
+	while ((*(c++)=f)) f >>= 8;
+	return s;
+}
+
+int ioret;
+static int iocall(int req, void *of){
+	if (of) memset(of,0,of-(void *)&io);
+rep:
+	ioret = ioctl(v4fd, req, &io);
+	if (ioret == -1) {
+		if (errno == EINTR) goto rep;
+		if (errno != EINVAL)
+		    ERRno("ioctl %i\n",req);
+		return 0;
+	}
+	return 1;
+}
+
+static int v4call1(int req, void *of){
+	io.v4l.cropcap.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	return iocall(req,of);
+}
+
+static void v4buf0(unsigned index){
+	memset(&io.v4l.buf,0,sizeof(io.v4l.buf));
+	io.v4l.buf.index = index;
+	io.v4l.buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	io.v4l.buf.memory = v4mem;
+}
+
+static void v4close(){
+	if (!v4buf) goto close;
+	if (v4mem) v4call1(VIDIOC_STREAMOFF,NULL);
+	while(v4nb--) {
+	    if (v4buf[v4nb].length) {
+		if (v4mem==V4L2_MEMORY_MMAP) munmap(v4buf[v4nb].start,v4buf[v4nb].length);
+		else free(v4buf[v4nb].start);
+	    }
+	};
+	free(v4buf);
+	v4buf = NULL;
+	v4mem = 0;
+close:
+	if (v4fd != -1) {
+		close(v4fd);
+		v4fd = -1;
+	}
+}
+
+static void v4ctrl_list(){
+	io.v4l.qctrl.id = V4L2_CTRL_FLAG_NEXT_CTRL;
+	while (iocall(VIDIOC_QUERYCTRL,&io.v4l.qctrl)){
+		printf("v4l ctrl 0x%x 0x%x '%s' %i..%i %i\n",io.v4l.qctrl.id-V4L2_CID_BASE,io.v4l.qctrl.id-V4L2_CID_CAMERA_CLASS_BASE,io.v4l.qctrl.name,io.v4l.qctrl.minimum,io.v4l.qctrl.maximum,io.v4l.qctrl.default_value);
+		io.v4l.qctrl.id |= V4L2_CTRL_FLAG_NEXT_CTRL;
+	};
+}
+
+static long long v4cget(__u32 id) {
+	io.v4l.ctrl.id=id;
+	io.v4l.ctrl.value=0;
+	if (!iocall(VIDIOC_G_CTRL,NULL)) return -1;
+	return io.v4l.ctrl.value; 
+}
+
+static int v4cset(__u32 id,__u32 value) {
+	io.v4l.ctrl.id=id;
+	io.v4l.ctrl.value=value;
+	return iocall(VIDIOC_S_CTRL,NULL);
+}
+
+static int v4cinfo(__u32 id) {
+	io.v4l.qctrl.id = id;
+	return iocall(VIDIOC_QUERYCTRL,&io.v4l.qctrl);
+}
+
+
+// 0 = default, 1 = min. 2 = max
+static void v4cdefault(__u32 id, int i) {
+	if (v4cinfo(id)) {
+	    v4cset(id,(i==0)?io.v4l.qctrl.default_value:(i==1)?io.v4l.qctrl.minimum:io.v4l.qctrl.maximum);
+	}
+}
+
+static void *thread_v4l(){
+	unsigned long index, cnt, i;
+	unsigned char *b;
+	unsigned int delay;
+	max_light = pf[p_max_light];
+
+rep0:
+	delay = 1;
+rep:
+	sleep(delay);
+	if (v4mem) {
+		v4buf0(0);
+		if (ioctl(v4fd, VIDIOC_DQBUF, &io.v4l.buf) == -1) goto err_r;
+		if (io.v4l.buf.index >= v4nb) goto err;
+		cnt = io.v4l.buf.bytesused;
+		b = v4buf[io.v4l.buf.index].start;
+	} else if ((ioret = read(v4fd, v4buf[0].start, v4buf[0].length)) != -1 ){
+		if (ioret != v4buf[0].length) goto err;
+		index = 0;
+		cnt = v4buf[0].length;
+		b = v4buf[0].start;
+	} else {
+err_r:
+		switch (errno) {
+		    case EINTR:
+			//goto rep;
+		    case EAGAIN:
+			goto rep0;
+		    case EIO:
+			break;
+		    default:
+			goto err1;
+		}
+		goto err;
+	}
+	unsigned long long s = 0; // scale to byte
+	switch (v4.fmt.pix.pixelformat) {
+	    case V4L2_PIX_FMT_GREY:
+		for (i=0; i<cnt; i++) s+=b[i];
+		break;
+	    case V4L2_PIX_FMT_YUYV:
+		for (i=0; i<cnt; i++) s+=b[i] & 0xf;
+		s<<=1;cnt>>=3;
+		break;
+	    case V4L2_PIX_FMT_UYVY:
+		for (i=0; i<cnt; i++) s+=b[i] >> 4;
+		//cnt>>=4;
+		s<<=1;cnt>>=3;
+		break;
+	    //case V4L2_PIX_FMT_SGRBG8:
+	}
+rep1:
+	switch (v4mem) {
+	    case V4L2_MEMORY_USERPTR:
+		for (i=0; i<v4nb; i++)
+		    if (io.v4l.buf.m.userptr == (unsigned long)v4buf[i].start
+			&& io.v4l.buf.length == v4buf[i].length)
+			    break;
+		if (!(i < v4nb)) {
+			goto err;
+		}
+	    case V4L2_MEMORY_MMAP:
+		if (ioctl(v4fd, VIDIOC_QBUF, &io.v4l.buf) == -1) switch (errno) {
+		    case EAGAIN:
+			sleep(1);
+		    case EINTR:
+			goto rep1;
+		    default:
+			goto err;
+		}
+	}
+
+	double s0=(s + .0)/cnt;
+	static double s1 = 100;
+	double d = ((s1>s0) ? (s1-s0)/s1 : (s0-s1)/s0);
+//	double d = ((s1>s0) ? (s1-s0) : (s0-s1))/256;
+	s1 = (s1*(V4EWMH-1)+s0)/V4EWMH;
+
+//	delay = (V4MAXDELAY-V4MINDELAY)*(1-d) + V4MINDELAY;
+	delay = V4MAXDELAY - (V4MAXDELAY-V4MINDELAY)*d;
+
+	chlight(s1);
+//	DBG("v4l OK %f d=%f s1=%f sleep=%i",s0,d,s1,delay);
+
+	goto rep;
+err1:
+	ERRno("v4l");
+err:
+	v4close();
+	DBG("v4l closed");
+	_unthread(2);
+}
+
+
+static int v4open(){
+	if ((threads&2) || !pa[p_v4l]) return 0;
+	unsigned int i,j,m1=0,m2=3;
+
+	v4fd = open(pa[p_v4l], O_RDWR | O_NONBLOCK, 0);
+	if (v4fd == -1) {
+err:
+		if (v4fd != -1) close(v4fd);
+		ERRno("v4l");
+		v4close();
+		return 0;
+	}
+
+	if (!iocall(VIDIOC_QUERYCAP,&io.v4l.cap)) goto err;
+	if (!(io.v4l.cap.capabilities & V4L2_CAP_VIDEO_CAPTURE)) goto err;
+	if (!(io.v4l.cap.capabilities & V4L2_CAP_STREAMING)) m1=1;
+	if (!(io.v4l.cap.capabilities & V4L2_CAP_READWRITE)) m2=2;
+
+	if (v4call1(VIDIOC_CROPCAP,&io.v4l.cropcap.bounds)) {
+		struct v4l2_rect c = io.v4l.cropcap.defrect;
+		if (!ioret && v4call1(VIDIOC_G_CROP,&io.v4l.crop.c) && memcmp(&io.v4l.crop.c,&c,sizeof(c))) {
+			io.v4l.crop.c = c;
+			if (!v4call1(VIDIOC_S_CROP,NULL)){
+			}
+		}
+	}
+
+	unsigned long len = 0xffffffff;
+	v4.fmt.pix.width = v4.fmt.pix.height = 0;
+	__u32 formats[] = {V4L2_PIX_FMT_GREY,
+		V4L2_PIX_FMT_YUYV,
+		V4L2_PIX_FMT_UYVY,
+		//V4L2_PIX_FMT_SGRBG8,
+		0};
+	for(j=0;formats[j];j++) {
+	    i=0;
+	    do {
+		io.v4l.s.index=i;
+		io.v4l.s.pixel_format = formats[j];
+		io.v4l.s.type = V4L2_FRMSIZE_TYPE_DISCRETE;
+//		io.v4l.s.type = V4L2_FRMSIZE_TYPE_STEPWISE;
+		if (!iocall(VIDIOC_ENUM_FRAMESIZES,&io.v4l.s.discrete)) break;
+		if (io.v4l.s.pixel_format != formats[j]) continue;
+		unsigned long w,h,l;
+		if (io.v4l.s.type == V4L2_FRMSIZE_TYPE_DISCRETE) {
+			w=io.v4l.s.discrete.width;
+			h=io.v4l.s.discrete.height;
+		} else if (io.v4l.s.type == V4L2_FRMSIZE_TYPE_STEPWISE) {
+			w=io.v4l.s.stepwise.min_width;
+			h=io.v4l.s.stepwise.min_height;
+		} else continue;
+		l=w*h;
+		if (formats[j] != V4L2_PIX_FMT_GREY) l <<= 1;
+		if (l>=len) continue;
+		v4.fmt.pix.width = w;
+		v4.fmt.pix.height = h;
+		len = l;
+		v4.fmt.pix.pixelformat = formats[j];
+	    } while ((++i)&0xffff);
+	}
+
+	if (!v4.fmt.pix.pixelformat) {
+		fprintf(stderr,"v4l no format supported");
+#ifndef MINIMAL
+		i=0;
+		do {
+			io.v4l.fmt.index = i;
+			io.v4l.fmt.type =  V4L2_BUF_TYPE_VIDEO_CAPTURE;
+			if (!iocall(VIDIOC_ENUM_FMT,&io.v4l.fmt.flags)) break;
+			fprintf(stderr," %s",v4fmt2str(io.v4l.fmt.pixelformat));
+		} while ((++i)&&0xffff);
+#endif
+		fprintf(stderr,"\n");
+		return 0;
+	}
+
+	io.v4l.f = v4;
+	if (!v4call1(VIDIOC_S_FMT,NULL)) goto err;
+
+	if (!v4call1(VIDIOC_G_FMT,&io.v4l.f.fmt.pix)) goto err;
+	if (io.v4l.f.fmt.pix.pixelformat != v4.fmt.pix.pixelformat) {
+		ERR("v4l %s format unsupported",v4fmt2str(io.v4l.f.fmt.pix.pixelformat));
+		v4close();
+		return 0;
+	}
+	v4 = io.v4l.f;
+	v4.type =  V4L2_BUF_TYPE_VIDEO_CAPTURE;
+
+
+
+	// try in order: mmap, userptr, read
+	static unsigned mems[] = {V4L2_MEMORY_MMAP,V4L2_MEMORY_USERPTR,0};
+	for (i=m1; i<m2; i++) {
+		unsigned long n = 1;
+		v4mem = mems[i];
+		switch (v4mem) {
+		    case V4L2_MEMORY_MMAP:
+		    case V4L2_MEMORY_USERPTR:
+			io.v4l.req.count = V4BUFS;
+			io.v4l.req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+			io.v4l.req.memory = v4mem;
+			if (!iocall(VIDIOC_REQBUFS, &io.v4l.req.capabilities)) continue;
+			if ((n = io.v4l.req.count) < 1) continue;
+		}
+		v4buf = calloc(n, sizeof(*v4buf));
+		if (!v4buf) continue;
+		switch (v4mem) {
+		    case V4L2_MEMORY_MMAP:
+			for (v4nb = 0; v4nb < n; v4nb++) {
+				v4buf0(v4nb);
+				if (!iocall(VIDIOC_QUERYBUF, NULL)) goto err;
+				v4buf[v4nb].start = mmap(NULL,io.v4l.buf.length,PROT_READ | PROT_WRITE,MAP_SHARED,v4fd,io.v4l.buf.m.offset);
+				if (v4buf[v4nb].start == MAP_FAILED) goto err1;
+				v4buf[v4nb].length = io.v4l.buf.length;
+			}
+			break;
+		    case V4L2_MEMORY_USERPTR:
+			//if (n != V4BUFS) goto err1;
+		    default:
+			for (v4nb = 0; v4nb < n; v4nb++) {
+				v4buf[v4nb].start = malloc(v4.fmt.pix.sizeimage);
+				if (!v4buf[v4nb].start) goto err1;
+				v4buf[v4nb].length =  v4.fmt.pix.sizeimage;
+			}
+			break;
+		}
+		break;
+	}
+	if (!v4buf){
+err1:
+		ERR("v4l memory alloc error");
+		v4close();
+		return 0;
+	}
+	DBG("v4l format %ix%i %s %s buffers=%lu",v4.fmt.pix.width,v4.fmt.pix.height,v4fmt2str(v4.fmt.pix.pixelformat),
+	    (!v4mem)?"read":(v4mem==V4L2_MEMORY_USERPTR)?"userptr":"mmap",v4nb);
+
+	if (!v4mem) goto ok;
+	for (i = 0; i < v4nb; i++) {
+		v4buf0(i);
+		if (v4mem==V4L2_MEMORY_USERPTR) {
+			io.v4l.buf.m.userptr = (unsigned long)v4buf[i].start;
+			io.v4l.buf.length = v4buf[i].length;
+		}
+		if (!iocall(VIDIOC_QBUF,NULL)) {
+			ERR("v4l VIDIOC_QBUF");
+			return 0;
+		}
+	}
+
+	if (!v4call1(VIDIOC_STREAMON,NULL)) {
+		ERR("v4l VIDIOC_STREAMON");
+		goto err;
+	}
+
+	v4cset(V4L2_CID_EXPOSURE_AUTO,1);
+	v4cdefault(V4L2_CID_EXPOSURE_ABSOLUTE,1);
+	v4cset(V4L2_CID_EXPOSURE_AUTO_PRIORITY,0);
+	v4cdefault(V4L2_CID_EXPOSURE_AUTO,2);
+	if (!v4cget(V4L2_CID_BACKLIGHT_COMPENSATION))
+	    v4cset(V4L2_CID_BACKLIGHT_COMPENSATION,1);
+#if 0
+	v4ctrl_list();
+	DBG("v4l exposure auto=%lli absolute=%lli prio=%lli",
+	    v4cget(V4L2_CID_EXPOSURE_AUTO),
+	    v4cget(V4L2_CID_EXPOSURE_ABSOLUTE),
+	    v4cget(V4L2_CID_EXPOSURE_AUTO_PRIORITY));
+#endif
+ok:
+	_thread(2,&thread_v4l);
+	return 1; 
 }
 
 #endif
@@ -1991,7 +2400,7 @@ static int _open(char *name,int flags){
 	int fd = open(name,flags);
 	if (fd < 0) {
 		flags &= O_RDWR|O_WRONLY|O_RDONLY;
-		ERR("%i opening %s file %s",errno,
+		ERRno("opening %s file %s",
 		(flags==O_RDWR)?"RW":
 		(flags==O_WRONLY)?"W":
 		(flags==O_RDONLY)?"R":
@@ -4847,7 +5256,9 @@ static void init(){
 #ifdef USE_MUTEX
 	xmutex_init(&mutex0);
 	xmutex_init(&mutex);
-	open_iio_light();
+	if (!pa[p_v4l] || (pi[p_Safe]&32))
+	    open_iio_light();
+	v4open();
 #endif
 
 }
@@ -4994,6 +5405,11 @@ int main(int argc, char **argv){
 			break;
 		}
 	}
+	if (pi[p_Y] && pi[p_max_light] && !pa[p_v4l]) {
+		pa[p_v4l] = "/dev/video0";
+		pi[p_Safe] |= 32;
+	}
+
 	initmap();
 #endif
 	opendpy();
@@ -5036,6 +5452,10 @@ help:;
 		printf("Usage: %s {<option>} {<value>:<button>[:<key>]}\n",argv[0]);
 		for(i=j=0; i<MAX_PAR; i++) {
 			if (pc[j] == ':') j++;
+			if (!ph[i]) {
+				j++;
+				continue;
+			}
 			printf("	-%c ",pc[j++]);
 			if (i<p_1) {
 				if (pf[i] != pi[i]) printf("%.1f",pf[i]);
@@ -5828,3 +6248,5 @@ exit:
 	XCloseDisplay(dpy);
 #endif
 }
+
+

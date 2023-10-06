@@ -42,6 +42,11 @@ _c xssevent xssevent.c xscrnsaver
 _c xkbswitch xkbswitch.c
 _c xkbdd xtg.c "" -DNO_ALL
 _c xkbdd-xss xtg.c "xext xscrnsaver" "-DNO_ALL -DXSS"
-_c xtg xtg.c "xtst xi xrandr xext xscrnsaver xfixes" "$(pkg-config --variable=xthreadlib x11) -DUSE_XTHREAD $([ -e /usr/include/libevdev-1.0 ] && echo -DUSE_EVDEV -levdev -I/usr/include/libevdev-1.0)"
+evdev=$(pkg-config --cflags --libs libevdev) || {
+	# rare
+	[ -e /usr/include/libevdev-1.0 ] && evdev='-levdev -I/usr/include/libevdev-1.0'
+}
+[ -n "$evdev" ] && evdev+=' -DUSE_EVDEV'
+_c xtg xtg.c "xtst xi xrandr xext xscrnsaver xfixes" "$(pkg-config --variable=xthreadlib x11) -DUSE_XTHREAD $evdev"
 
 wait
