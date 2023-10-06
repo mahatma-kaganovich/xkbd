@@ -2190,8 +2190,8 @@ static int v4open(){
 	v4fd = open(pa[p_v4l], O_RDWR | O_NONBLOCK, 0);
 	if (v4fd == -1) {
 err:
-		if (v4fd != -1) close(v4fd);
 		ERRno("v4l");
+err_:
 		v4close();
 		return 0;
 	}
@@ -2256,7 +2256,7 @@ err:
 		} while ((++i)&&0xffff);
 #endif
 		fprintf(stderr,"\n");
-		return 0;
+		goto err_;
 	}
 
 	io.v4l.f = v4;
@@ -2265,13 +2265,10 @@ err:
 	if (!v4call1(VIDIOC_G_FMT,&io.v4l.f.fmt.pix)) goto err;
 	if (io.v4l.f.fmt.pix.pixelformat != v4.fmt.pix.pixelformat) {
 		ERR("v4l %s format unsupported",v4fmt2str(io.v4l.f.fmt.pix.pixelformat));
-		v4close();
-		return 0;
+		goto err_;
 	}
 	v4 = io.v4l.f;
 	v4.type =  V4L2_BUF_TYPE_VIDEO_CAPTURE;
-
-
 
 	// try in order: mmap, userptr, read
 	static unsigned mems[] = {V4L2_MEMORY_MMAP,V4L2_MEMORY_USERPTR,0};
@@ -2314,10 +2311,10 @@ err:
 	if (!v4buf){
 err1:
 		ERR("v4l memory alloc error");
-		v4close();
-		return 0;
+		goto err_;
 	}
-	DBG("v4l format %ix%i %s %s buffers=%lu",v4.fmt.pix.width,v4.fmt.pix.height,v4fmt2str(v4.fmt.pix.pixelformat),
+	DBG("v4l %s format %ix%i %s %s buffers=%lu", pa[p_v4l],
+	    v4.fmt.pix.width,v4.fmt.pix.height,v4fmt2str(v4.fmt.pix.pixelformat),
 	    (!v4mem)?"read":(v4mem==V4L2_MEMORY_USERPTR)?"userptr":"mmap",v4nb);
 
 	if (!v4mem) goto ok;
@@ -2327,16 +2324,10 @@ err1:
 			io.v4l.buf.m.userptr = (unsigned long)v4buf[i].start;
 			io.v4l.buf.length = v4buf[i].length;
 		}
-		if (!iocall(VIDIOC_QBUF,NULL)) {
-			ERR("v4l VIDIOC_QBUF");
-			return 0;
-		}
+		if (!iocall(VIDIOC_QBUF,NULL)) goto err;
 	}
 
-	if (!v4call1(VIDIOC_STREAMON,NULL)) {
-		ERR("v4l VIDIOC_STREAMON");
-		goto err;
-	}
+	if (!v4call1(VIDIOC_STREAMON,NULL)) goto err;
 
 	v4cset(V4L2_CID_EXPOSURE_AUTO,1);
 	v4cdefault(V4L2_CID_EXPOSURE_ABSOLUTE,1);
