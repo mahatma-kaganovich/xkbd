@@ -723,6 +723,7 @@ static void chTerm(){
 #endif
 _short xssState = 3;
 #ifdef USE_THREAD
+static int active_bl_();
 static int v4call1(int req, void *of);
 static int v4start();
 unsigned long v4mem = 0;
@@ -731,7 +732,7 @@ unsigned long v4mem = 0;
 static void scrONOFF() {
 #ifdef USE_MUTEX
 	static int frozen = 0;
-	if (xssState == 1) {
+	if (xssState == 1 || !active_bl_()) {
 		if (threads) {
 			xmutex_lock(&mutex);
 			xmutex_lock(&mutex0);
@@ -1807,6 +1808,16 @@ static void *thread_iio_light_wait(){
 	} else _unthread(4);
 }
 #endif
+
+static int active_bl_(){
+	minf_t *minf;
+	//if (backlight)
+	MINF(minf->blfd > 0 || minf->prop[xrp_bl].en) {
+		pinf_t *pr = &minf->prop[xrp_bl];
+		if (pr->v.i) return 1;
+	}
+	return 0;
+}
 
 double max_light;
 static void chlight(const unsigned long long l){
@@ -2894,6 +2905,7 @@ _short stMapped = 0;
 
 static void chBL0(){
 	pr_set(xrp_bl,!(minf->obscured || minf->entered));
+	scrONOFF();
 }
 
 static _short QPtr(int dev, Window *w, int *x, int *y){
