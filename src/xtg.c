@@ -429,43 +429,46 @@ static void _print_bmap(unsigned long x, _short n, TouchTree *m) {
 #define DEF_SAFE (1+32+64)
 #define DEF_SAFE2 (2+4)
 
-#define p_device 0
-#define p_minfingers 1
-#define p_maxfingers 2
-#define p_hold 3
-#define p_xy 4
-#define p_res 5
-#define p_round 6
-#define p_floating 7
-#define p_mon 8
-#define p_touch_add 9
+enum {
+  p_device,
+  p_minfingers,
+  p_maxfingers,
+  p_hold,
+  p_xy,
+  p_res,
+  p_round,
+  p_floating,
+  p_mon,
+  p_touch_add,
 
-#define p_min_native_mon 10
-#define p_max_native_mon 11
-#define p_min_dpi 12
-#define p_max_dpi 13
-#define p_dpi 14
-#define p_safe 15
-#define p_Safe 16
-#define p_content_type 17
-#define p_colorspace 18
+  p_min_native_mon,
+  p_max_native_mon,
+  p_min_dpi,
+  p_max_dpi,
+  p_dpi,
+  p_safe,
+  p_Safe,
+  p_content_type,
+  p_colorspace,
 
-#define p_min_backlight 19
-#define p_max_light 20
+  p_min_backlight,
+  p_max_light,
 
-#define p_v4l 21
-#define p_1 22
+  p_v4l,
+  p_sm,
+  p_1,
 
-#define p_y 23
-#define p_Y 24
-#define p_help 25
-#define MAX_PAR 26
+  p_y,
+  p_Y,
+  p_help,
+  MAX_PAR
+};
 char *pa[MAX_PAR] = {};
 // android: 125ms tap, 500ms long
 #define PAR_DEFS { 0, 1, 2, 1000, 2, -2, 0, 1, DEF_RR, 0,  14, 32, 72, 0, 0, DEF_SAFE, DEF_SAFE2, 0, 0, 20, 0, 0, 0}
 int pi[MAX_PAR] = PAR_DEFS;
 double pf[] = PAR_DEFS;
-char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:i:s:S:c:C:l:L:4:1yYh";
+char pc[] = "d:m:M:t:x:r:e:f:R:a:o:O:p:P:i:s:S:c:C:l:L:4:A:1yYh";
 #define _bit '#'
 #define _bit_ "#"
 char *ph[MAX_PAR] = {
@@ -520,7 +523,7 @@ char *ph[MAX_PAR] = {
 	"		"_bit_"cursor recheck (tricky)\n"
 	"		"_bit_"no mon dpi\n"
 	"		"_bit_"no mon primary\n"
-	"		"_bit_"no vertical panning && auto-on && ondemand XI2 prop 'scaling mode' = Full\n"
+	"		"_bit_"no vertical panning && auto-on && ondemand XI2 prop 'scaling mode' = -A param\n"
 	"		"_bit_"auto bits 5,6 on primary present - enable primary & disable panning\n"
 	"		"_bit_"use mode sizes for panning (errors in xrandr tool!)\n"
 	"		"_bit_"keep dpi different x & y (image panned non-aspected)\n"
@@ -580,6 +583,7 @@ char *ph[MAX_PAR] = {
 #else
 	NULL,NULL,NULL,
 #endif
+	"'scaling mode' for native size monitors ('None' or 'Full' or <xrandr --verbose>)",
 	"oneshot (implies set DPI, panning, etc) - to run & exit before WM",
 	"preset max-conservative",
 	"preset max-experimental",
@@ -5181,7 +5185,7 @@ static void init(){
 	if (pa[p_colorspace]) val_xrp[xrp_cs].a = XInternAtom(dpy, pa[p_colorspace], False);
 	val_xrp[xrp_rgb].a = XInternAtom(dpy, "Limited 16:235", False);
 #endif
-	val_xrp[xrp_sm].a = XInternAtom(dpy, "Full", False); // if native aspect
+	val_xrp[xrp_sm].a = XInternAtom(dpy, pa[p_sm], False); // if native aspect
 
 	XISetMask(ximaskButton, XI_ButtonPress);
 	XISetMask(ximaskButton, XI_ButtonRelease);
@@ -5442,7 +5446,9 @@ int main(int argc, char **argv){
 	int detail;
 	double x1,y1,z1,xx,yy,zz,res;
 	TouchTree *m;
-	Touch *to;
+	Touch *to;+
+
+	pa[p_sm] = "None";
 
 	while((opt=getopt(argc, argv, pc))>=0){
 		_short j;
