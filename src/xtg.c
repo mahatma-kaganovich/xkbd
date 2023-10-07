@@ -2246,7 +2246,7 @@ rep1:
 		xmutex_unlock(&mutex);
 	}
 #endif
-	DBG("v4l OK %f d=%f s1=%f sleep=%i",s0,d,s1,delay);
+	//DBG("v4l OK %f d=%f s1=%f sleep=%i",s0,d,s1,delay);
 
 	goto rep;
 err:
