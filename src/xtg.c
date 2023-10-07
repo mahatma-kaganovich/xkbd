@@ -5446,7 +5446,7 @@ int main(int argc, char **argv){
 	int detail;
 	double x1,y1,z1,xx,yy,zz,res;
 	TouchTree *m;
-	Touch *to;+
+	Touch *to;
 
 	pa[p_sm] = "None";
 
