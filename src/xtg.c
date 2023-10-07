@@ -225,6 +225,8 @@ int _volatile threads = 0;
 #define _xmutex_unlock0()
 #else
 xmutex_rec mutex;
+xmutex_rec mutex0;
+
 static void _xmutex_lock(){ if (threads) xmutex_lock(&mutex); }
 static void _xmutex_unlock(){ if (threads) xmutex_unlock(&mutex); }
 static void _xmutex_lock0(){ if (!threads) xmutex_lock(&mutex); }
@@ -729,9 +731,10 @@ unsigned long v4mem = 0;
 static void scrONOFF() {
 #ifdef USE_MUTEX
 	static int frozen = 0;
-	if (threads) {
-		if (xssState == 1) {
+	if (xssState == 1) {
+		if (threads) {
 			xmutex_lock(&mutex);
+			xmutex_lock(&mutex0);
 			frozen = threads;
 			threads = 0;
 #ifdef V4L_NOBLOCK
@@ -739,14 +742,13 @@ static void scrONOFF() {
 #endif
 		}
 	} else if (frozen) {
-		if (xssState != 1) {
 #ifdef V4L_NOBLOCK
-			v4start();
+		v4start();
 #endif
-			threads = frozen;
-			frozen = 0;
-			xmutex_unlock(&mutex);
-		}
+		threads = frozen;
+		frozen = 0;
+		xmutex_unlock(&mutex0);
+		xmutex_unlock(&mutex);
 	}
 #endif
 }
@@ -1682,7 +1684,6 @@ static _short wrull(int fd,unsigned long long l) {
 
 #ifdef USE_THREAD
 
-xmutex_rec mutex0;
 static void _thread(_short mask,void *(*fn)(void *)){
 	xmutex_lock(&mutex0);
 	if (!(threads&mask)) {
@@ -2148,7 +2149,7 @@ again:
 #ifdef V4L_NOBLOCK
 select:
 	fds = fds0;
-	if (select(v4fd + 1, &fds, NULL, NULL, NULL) == -1) switch (errno) {
+	if (Select(v4fd + 1, &fds, NULL, NULL, NULL) == -1) switch (errno) {
 		    case EINTR: goto select;
 		    case EAGAIN: goto rep0;
 		    default:
@@ -2245,7 +2246,7 @@ rep1:
 		xmutex_unlock(&mutex);
 	}
 #endif
-	//DBG("v4l OK %f d=%f s1=%f sleep=%i",s0,d,s1,delay);
+	DBG("v4l OK %f d=%f s1=%f sleep=%i",s0,d,s1,delay);
 
 	goto rep;
 err:
