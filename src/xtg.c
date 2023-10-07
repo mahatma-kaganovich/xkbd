@@ -41,6 +41,8 @@
 #define _BACKLIGHT 2
 #define PROP_FMT
 #define _XR_PROVIDERS
+// camera off on dpms:
+#define V4L_NOBLOCK
 
 // remember arch with pointer check: 1 to avoid pointers to the end of array
 #define PTR_CHK 0
@@ -714,6 +716,36 @@ static void chTerm(){
 }
 #endif
 _short xssState = 3;
+#ifdef USE_THREAD
+static int v4call1(int req, void *of);
+static int v4start();
+unsigned long v4mem = 0;
+#endif
+// todo: stop ALS streaming too
+static void scrONOFF() {
+#ifdef USE_MUTEX
+	static int frozen = 0;
+	if (threads) {
+		if (xssState == 1) {
+			xmutex_lock(&mutex);
+			frozen = threads;
+			threads = 0;
+#ifdef V4L_NOBLOCK
+			if (v4mem) v4call1(VIDIOC_STREAMOFF,NULL);
+#endif
+		}
+	} else if (frozen) {
+		if (xssState != 1) {
+#ifdef V4L_NOBLOCK
+			v4start();
+#endif
+			threads = frozen;
+			frozen = 0;
+			xmutex_unlock(&mutex);
+		}
+	}
+#endif
+}
 #if ScreenSaverDisabled == 3 && ScreenSaverOn == 1 && ScreenSaverOff == 0
 static void xssStateSet(_short s){
 #ifdef XTG
@@ -721,6 +753,7 @@ static void xssStateSet(_short s){
 #else
 	xssState = s;
 #endif
+	scrONOFF();
 }
 #else
 static void xssStateSet(_short s){
@@ -737,6 +770,7 @@ static void xssStateSet(_short s){
 	    default:
 		    xssState = 3; break; // or dpms
 	}
+	scrONOFF();
 }
 #endif
 static _short xss_state(){
@@ -1772,7 +1806,6 @@ static void *thread_iio_light_wait(){
 double max_light;
 static void chlight(const unsigned long long l){
 	minf_t *minf;
-	xmutex_lock(&mutex);
 	MINF(minf->blfd > 0 || minf->prop[xrp_bl].en) {
 		pinf_t *pr = &minf->prop[xrp_bl];
 		long l1 = pr->p->values[1];
@@ -1804,7 +1837,6 @@ static void chlight(const unsigned long long l){
 		oldShowPtr |= 128;
 #endif
 	}
-	xmutex_unlock(&mutex);
 }
 
 
@@ -1964,7 +1996,9 @@ sw:
 				else l.l <<= light_shift;
 			}
 		}
+		xmutex_lock(&mutex);
 		chlight(l.l);
+		xmutex_unlock(&mutex);
 	}
 ex:
 	_unthread(2);
@@ -1973,16 +2007,16 @@ ex:
 
 
 //video
-#define V4MAXDELAY 1
-#define V4MINDELAY 0
+#define V4MAXDELAY 2000000
+#define V4MINDELAY 1000
 #define V4EWMH 3
-#define V4BUFS 1
+#define V4BUFS 2
 struct v4buffer {
 	void   *start;
 	size_t length;
 } *v4buf = NULL;
 int v4fd = -1;
-unsigned long v4nb = 0, v4mem = 0;
+unsigned long v4nb = 0;
 struct v4l2_format v4 = {};
 int nv4ldves = 0;
 
@@ -2037,6 +2071,7 @@ static void v4buf0(unsigned index){
 }
 
 static void v4close(){
+	DBG("v4close");
 	if (!v4buf) goto close;
 	if (v4mem) v4call1(VIDIOC_STREAMOFF,NULL);
 	while(v4nb--) {
@@ -2092,21 +2127,40 @@ static void v4cdefault(__u32 id, int i) {
 static void *thread_v4l(){
 	unsigned long index, cnt, i;
 	unsigned char *b;
-	unsigned int delay;
+	useconds_t delay;
 	max_light = pf[p_max_light];
+#ifdef V4L_NOBLOCK
+	fd_set fds;
+	static fd_set fds0;
+	FD_ZERO(&fds0);
+	FD_SET(v4fd, &fds0);
+#endif
 
 rep0:
-	delay = 1;
+	delay = V4MINDELAY;
 rep:
-	sleep(delay);
+	usleep(delay);
+again:
+#ifdef V4L_NOBLOCK
+select:
+	fds = fds0;
+	if (select(v4fd + 1, &fds, NULL, NULL, NULL) == -1) switch (errno) {
+		    case EINTR: goto select;
+		    case EAGAIN: goto rep0;
+		    default:
+			ERRno("v4l select");
+			goto err;
+	}
+	xmutex_lock(&mutex);
+#endif
 	if (v4mem) {
 		v4buf0(0);
 		if (ioctl(v4fd, VIDIOC_DQBUF, &io.v4l.buf) == -1) goto err_r;
-		if (io.v4l.buf.index >= v4nb) goto err;
+		if (io.v4l.buf.index >= v4nb) goto err_r1;
 		cnt = io.v4l.buf.bytesused;
 		b = v4buf[io.v4l.buf.index].start;
 	} else if ((ioret = read(v4fd, v4buf[0].start, v4buf[0].length)) != -1 ){
-		if (ioret != v4buf[0].length) goto err;
+		if (ioret != v4buf[0].length) goto err_r1;
 		index = 0;
 		cnt = v4buf[0].length;
 		b = v4buf[0].start;
@@ -2114,14 +2168,20 @@ rep:
 err_r:
 		switch (errno) {
 		    case EINTR:
-			//goto rep;
-		    case EAGAIN:
-			goto rep0;
-		    case EIO:
-			break;
+			goto rep;
+		    case EAGAIN: // DPMS OFF/screen ON
+			//DBG("EAGAIN");
+#ifdef V4L_NOBLOCK
+			xmutex_unlock(&mutex);
+#endif
+			goto again;
 		    default:
-			goto err1;
+			ERRno("v4l read");
 		}
+err_r1:
+#ifdef V4L_NOBLOCK
+		xmutex_unlock(&mutex);
+#endif
 		goto err;
 	}
 	unsigned long long s = 0; // scale to byte
@@ -2165,29 +2225,53 @@ rep1:
 	static double s1 = 100;
 	double d = ((s1>s0) ? (s1-s0)/s1 : (s0-s1)/s0);
 //	double d = ((s1>s0) ? (s1-s0) : (s0-s1))/256;
-	s1 = (s1*(V4EWMH-1)+s0)/V4EWMH;
+	unsigned long long l = s1 = (s1*(V4EWMH-1)+s0)/V4EWMH;
 
 //	delay = (V4MAXDELAY-V4MINDELAY)*(1-d) + V4MINDELAY;
 	delay = V4MAXDELAY - (V4MAXDELAY-V4MINDELAY)*d;
 
-	chlight(s1);
-//	DBG("v4l OK %f d=%f s1=%f sleep=%i",s0,d,s1,delay);
+	static unsigned long long l0 = 0xfff;
+#ifdef V4L_NOBLOCK
+	if (l != l0) chlight(l0 = l);
+	xmutex_unlock(&mutex);
+#else
+	if (l != l0) {
+		xmutex_lock(&mutex);
+		chlight(l0 = l);
+		xmutex_unlock(&mutex);
+	}
+#endif
+	//DBG("v4l OK %f d=%f s1=%f sleep=%i",s0,d,s1,delay);
 
 	goto rep;
-err1:
-	ERRno("v4l");
 err:
 	v4close();
-	DBG("v4l closed");
 	_unthread(2);
 }
 
+static int v4start(){
+	if (!v4mem) return 1;
+	for (int i = 0; i < v4nb; i++) {
+		v4buf0(i);
+		if (v4mem==V4L2_MEMORY_USERPTR) {
+			io.v4l.buf.m.userptr = (unsigned long)v4buf[i].start;
+			io.v4l.buf.length = v4buf[i].length;
+		}
+		if (!iocall(VIDIOC_QBUF,NULL)) return 0;
+	}
+	if (!v4call1(VIDIOC_STREAMON,NULL)) return 0;
+	return 1;
+}
 
 static int v4open(){
 	if ((threads&2) || !pa[p_v4l]) return 0;
 	unsigned int i,j,m1=0,m2=3;
 
+#ifdef V4L_NOBLOCK
 	v4fd = open(pa[p_v4l], O_RDWR | O_NONBLOCK, 0);
+#else
+	v4fd = open(pa[p_v4l], O_RDWR, 0);
+#endif
 	if (v4fd == -1) {
 err:
 		ERRno("v4l");
@@ -2313,21 +2397,13 @@ err1:
 		ERR("v4l memory alloc error");
 		goto err_;
 	}
+
+	if (!v4start()) goto err;
+
 	DBG("v4l %s format %ix%i %s %s buffers=%lu", pa[p_v4l],
 	    v4.fmt.pix.width,v4.fmt.pix.height,v4fmt2str(v4.fmt.pix.pixelformat),
 	    (!v4mem)?"read":(v4mem==V4L2_MEMORY_USERPTR)?"userptr":"mmap",v4nb);
 
-	if (!v4mem) goto ok;
-	for (i = 0; i < v4nb; i++) {
-		v4buf0(i);
-		if (v4mem==V4L2_MEMORY_USERPTR) {
-			io.v4l.buf.m.userptr = (unsigned long)v4buf[i].start;
-			io.v4l.buf.length = v4buf[i].length;
-		}
-		if (!iocall(VIDIOC_QBUF,NULL)) goto err;
-	}
-
-	if (!v4call1(VIDIOC_STREAMON,NULL)) goto err;
 
 	v4cset(V4L2_CID_EXPOSURE_AUTO,1);
 	v4cdefault(V4L2_CID_EXPOSURE_ABSOLUTE,1);
