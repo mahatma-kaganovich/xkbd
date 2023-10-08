@@ -2920,6 +2920,8 @@ _short stMapped = 0;
 
 static void chBL0(){
 	pr_set(xrp_bl,!(minf->obscured || minf->entered));
+	if (!pr->v.i != !pr->v1.i)
+	    scrONOFF();
 }
 
 static _short QPtr(int dev, Window *w, int *x, int *y){
@@ -3488,9 +3490,6 @@ static _short xrEvent() {
 			_pr_get(0);
 			xrPropFlush();
 pr_ret:
-#if _BACKLIGHT
-			if (e->property == a_xrp[xrp_bl]) scrONOFF();
-#endif
 			break;
 		    default:
 			oldShowPtr |= 8;
@@ -3851,6 +3850,9 @@ _on:
 		minf->win = 0;
 		oldShowPtr |= 16;
     }}
+#endif
+#if _BACKLIGHT
+	scrONOFF();
 #endif
 ret: {}
 //    if (_y > minf0.height) fixGeometry();
@@ -4852,9 +4854,6 @@ repeat:
 	if (oldShowPtr&8) {
 		oldShowPtr ^= 8;
 		xrMons0();
-#if _BACKLIGHT && defined(MINIMAL)
-		scrONOFF();
-#endif
 #if _BACKLIGHT == 2 && defined(XTG)
 		blm = 8;
 #endif
