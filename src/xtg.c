@@ -2280,7 +2280,7 @@ static int v4start(){
 }
 
 static int v4open(){
-	if ((threads&2) || !pa[p_v4l]) return 0;
+	if ((threads&2)) return 0;
 	unsigned int i,j,m1=0,m2=3;
 
 #ifdef V4L_NOBLOCK
@@ -2298,9 +2298,10 @@ err_:
 
 	if (!iocall(VIDIOC_QUERYCAP,&io.v4l.cap)) goto err;
 	if (!(io.v4l.cap.capabilities & V4L2_CAP_VIDEO_CAPTURE)) goto err;
-	if (!(io.v4l.cap.capabilities & V4L2_CAP_STREAMING)) m1=1;
+	if (!(io.v4l.cap.capabilities & V4L2_CAP_STREAMING)) m1=2;
 	if (!(io.v4l.cap.capabilities & V4L2_CAP_READWRITE)) m2=2;
 
+#ifndef MINIMAL
 	if (v4call1(VIDIOC_CROPCAP,&io.v4l.cropcap.bounds)) {
 		struct v4l2_rect c = io.v4l.cropcap.defrect;
 		if (!ioret && v4call1(VIDIOC_G_CROP,&io.v4l.crop.c) && memcmp(&io.v4l.crop.c,&c,sizeof(c))) {
@@ -2309,6 +2310,7 @@ err_:
 			}
 		}
 	}
+#endif
 
 	unsigned long len = 0xffffffff;
 	v4.fmt.pix.width = v4.fmt.pix.height = 0;
@@ -2322,18 +2324,29 @@ err_:
 	    do {
 		io.v4l.s.index=i;
 		io.v4l.s.pixel_format = formats[j];
+#if 0
+		// my
 		io.v4l.s.type = V4L2_FRMSIZE_TYPE_DISCRETE;
-//		io.v4l.s.type = V4L2_FRMSIZE_TYPE_STEPWISE;
 		if (!iocall(VIDIOC_ENUM_FRAMESIZES,&io.v4l.s.discrete)) break;
+#else
+		// lookup in ffmpeg & guvcview: 0
+		if (!iocall(VIDIOC_ENUM_FRAMESIZES,&io.v4l.s.type)) break;
+#endif
 		if (io.v4l.s.pixel_format != formats[j]) continue;
 		unsigned long w,h,l;
-		if (io.v4l.s.type == V4L2_FRMSIZE_TYPE_DISCRETE) {
+		switch (io.v4l.s.type) {
+		    case V4L2_FRMSIZE_TYPE_DISCRETE:
 			w=io.v4l.s.discrete.width;
 			h=io.v4l.s.discrete.height;
-		} else if (io.v4l.s.type == V4L2_FRMSIZE_TYPE_STEPWISE) {
+			break;
+		    case V4L2_FRMSIZE_TYPE_CONTINUOUS:
+		    case V4L2_FRMSIZE_TYPE_STEPWISE:
 			w=io.v4l.s.stepwise.min_width;
 			h=io.v4l.s.stepwise.min_height;
-		} else continue;
+			break;
+		    default:
+			continue;
+		}
 		l=w*h;
 		if (formats[j] != V4L2_PIX_FMT_GREY) l <<= 1;
 		if (l>=len) continue;
@@ -2617,7 +2630,7 @@ static void light_dev_ch() {
 }
 
 static void open_iio_light(){
-	if ((threads&2) || !pi[p_max_light]) return;
+	if ((threads&2)) return;
 	_buf = _buf?:malloc(_buf_len);
 	strcpy(_buf,"/sys/bus/iio/devices/iio:device*/");
 	char *type;
@@ -5340,9 +5353,12 @@ static void init(){
 #ifdef USE_MUTEX
 	xmutex_init(&mutex0);
 	xmutex_init(&mutex);
-	if (!pa[p_v4l] || (pi[p_Safe]&32))
-	    open_iio_light();
-	v4open();
+	if (pi[p_max_light]) {
+		if (!pa[p_v4l] || (pi[p_Safe]&32))
+		    open_iio_light();
+		if (pa[p_v4l])
+		    v4open();
+	}
 #endif
 
 }
