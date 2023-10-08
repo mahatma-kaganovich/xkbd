@@ -229,8 +229,8 @@ xmutex_rec mutex0;
 
 static void _xmutex_lock(){ if (threads) xmutex_lock(&mutex); }
 static void _xmutex_unlock(){ if (threads) xmutex_unlock(&mutex); }
-static void _xmutex_lock0(){ if (!threads) xmutex_lock(&mutex); }
-static void _xmutex_unlock0(){ if (!threads) xmutex_unlock(&mutex); }
+static void _xmutex_lock0(){ if (!threads) xmutex_lock(&mutex0); }
+static void _xmutex_unlock0(){ if (!threads) xmutex_unlock(&mutex0); }
 #endif
 
 typedef uint_fast8_t _short;
@@ -734,10 +734,11 @@ static void scrONOFF() {
 	static int frozen = 0;
 	if (xssState == 1 || !active_bl_()) {
 		if (threads) {
-			xmutex_lock(&mutex);
 			xmutex_lock(&mutex0);
 			frozen = threads;
 			threads = 0;
+			xmutex_unlock(&mutex0);
+			xmutex_lock(&mutex);
 #ifdef V4L_NOBLOCK
 			if (v4mem) v4call1(VIDIOC_STREAMOFF,NULL);
 #endif
@@ -746,6 +747,7 @@ static void scrONOFF() {
 #ifdef V4L_NOBLOCK
 		v4start();
 #endif
+		xmutex_lock(&mutex0);
 		threads = frozen;
 		frozen = 0;
 		xmutex_unlock(&mutex0);
