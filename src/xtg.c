@@ -2229,7 +2229,7 @@ rep1:
 	    case V4L2_MEMORY_MMAP:
 		if (ioctl(v4fd, VIDIOC_QBUF, &io.v4l.buf) == -1) switch (errno) {
 		    case EAGAIN:
-			sleep(1);
+			usleep(100000);
 		    case EINTR:
 			goto rep1;
 		    default:
@@ -2918,7 +2918,6 @@ _short stMapped = 0;
 
 static void chBL0(){
 	pr_set(xrp_bl,!(minf->obscured || minf->entered));
-	scrONOFF();
 }
 
 static _short QPtr(int dev, Window *w, int *x, int *y){
@@ -3478,14 +3477,18 @@ static _short xrEvent() {
 			// our waited change
 			if (!XRP_EQ(v,pr->v1)) {
 				pr->v1 = v;
-				return 1;
+				goto pr_ret;
 			}
 			// fast path ok & new value
 			_pr_get(1);
-			if (pr->en && !XRP_EQ(v,pr->v)) return 1;
+			if (pr->en && !XRP_EQ(v,pr->v)) goto pr_ret;
 #endif
 			_pr_get(0);
 			xrPropFlush();
+pr_ret:
+#if _BACKLIGHT
+			if (e->property == a_xrp[xrp_bl]) scrONOFF();
+#endif
 			break;
 		    default:
 			oldShowPtr |= 8;
@@ -4847,6 +4850,9 @@ repeat:
 	if (oldShowPtr&8) {
 		oldShowPtr ^= 8;
 		xrMons0();
+#if _BACKLIGHT && defined(MINIMAL)
+		scrONOFF();
+#endif
 #if _BACKLIGHT == 2 && defined(XTG)
 		blm = 8;
 #endif
