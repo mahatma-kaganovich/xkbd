@@ -213,7 +213,7 @@ pthread_attr_t *pth_attr = NULL;
 
 #ifdef USE_THREAD
 int inotify = -1;
-int _volatile threads = 0;
+int _volatile threads = 0, frozen = 0;
 #else
 #undef USE_MUTEX
 #endif
@@ -229,8 +229,8 @@ xmutex_rec mutex0;
 
 static void _xmutex_lock(){ if (threads) xmutex_lock(&mutex); }
 static void _xmutex_unlock(){ if (threads) xmutex_unlock(&mutex); }
-static void _xmutex_lock0(){ if (!threads) xmutex_lock(&mutex0); }
-static void _xmutex_unlock0(){ if (!threads) xmutex_unlock(&mutex0); }
+static void _xmutex_lock0(){ if (!(threads|frozen)) xmutex_lock(&mutex); }
+static void _xmutex_unlock0(){ if (!(threads|frozen)) xmutex_unlock(&mutex); }
 #endif
 
 typedef uint_fast8_t _short;
@@ -732,8 +732,8 @@ unsigned long v4mem = 0;
 static void scrONOFF() {
 #ifdef USE_MUTEX
 	static _short off = 0;
-	static int frozen = 0;
 	if (xssState == 1 || !active_bl_()) {
+//		if (threads) {
 		if (!off) {
 			off = 1;
 			xmutex_lock(&mutex0);
@@ -745,6 +745,7 @@ static void scrONOFF() {
 #endif
 			xmutex_unlock(&mutex0);
 		}
+//	} else if (frozen) {
 	} else if (off) {
 		off = 0;
 		xmutex_lock(&mutex0);
@@ -2157,20 +2158,6 @@ static void *thread_v4l(){
 	FD_SET(v4fd, &fds0);
 #endif
 
-	v4cset(V4L2_CID_EXPOSURE_AUTO,1);
-	v4cdefault(V4L2_CID_EXPOSURE_ABSOLUTE,1);
-	v4cset(V4L2_CID_EXPOSURE_AUTO_PRIORITY,0);
-	v4cdefault(V4L2_CID_EXPOSURE_AUTO,2);
-	if (!v4cget(V4L2_CID_BACKLIGHT_COMPENSATION))
-	    v4cset(V4L2_CID_BACKLIGHT_COMPENSATION,1);
-#if 0
-	v4ctrl_list();
-	DBG("v4l exposure auto=%lli absolute=%lli prio=%lli",
-	    v4cget(V4L2_CID_EXPOSURE_AUTO),
-	    v4cget(V4L2_CID_EXPOSURE_ABSOLUTE),
-	    v4cget(V4L2_CID_EXPOSURE_AUTO_PRIORITY));
-#endif
-
 rep0:
 	delay = V4MINDELAY;
 rep:
@@ -2451,6 +2438,20 @@ err1:
 	DBG("v4l %s format %ix%i %s %s buffers=%lu", pa[p_v4l],
 	    v4.fmt.pix.width,v4.fmt.pix.height,v4fmt2str(v4.fmt.pix.pixelformat),
 	    (!v4mem)?"read":(v4mem==V4L2_MEMORY_USERPTR)?"userptr":"mmap",v4nb);
+
+	v4cset(V4L2_CID_EXPOSURE_AUTO,1);
+	v4cdefault(V4L2_CID_EXPOSURE_ABSOLUTE,1);
+	v4cset(V4L2_CID_EXPOSURE_AUTO_PRIORITY,0);
+	v4cdefault(V4L2_CID_EXPOSURE_AUTO,2);
+	if (!v4cget(V4L2_CID_BACKLIGHT_COMPENSATION))
+	    v4cset(V4L2_CID_BACKLIGHT_COMPENSATION,1);
+#if 0
+	v4ctrl_list();
+	DBG("v4l exposure auto=%lli absolute=%lli prio=%lli",
+	    v4cget(V4L2_CID_EXPOSURE_AUTO),
+	    v4cget(V4L2_CID_EXPOSURE_ABSOLUTE),
+	    v4cget(V4L2_CID_EXPOSURE_AUTO_PRIORITY));
+#endif
 
 	_thread(2,&thread_v4l);
 	return 1; 
