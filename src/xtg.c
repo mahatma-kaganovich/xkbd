@@ -1,5 +1,5 @@
 /*
-	xtg v1.58 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.59 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -565,7 +565,15 @@ char *ph[MAX_PAR] = {
 	"			(vs. concurrent backlight & light sensor access)\n"
 	"		"_bit_
 #ifdef USE_THREAD
-			"try light sensor before camera"
+			"try light sensor before camera\n"
+#endif
+	"		"_bit_
+#ifdef USE_THREAD
+			"use V4L2_CID_AUTOBRIGHTNESS if possible\n"
+#endif
+	"		"_bit_
+#ifdef USE_THREAD
+			"try to use AUTOBRIGHTNESS + BRIGHTNESS as ALS"
 #endif
 	,
 #ifdef XSS
@@ -580,7 +588,7 @@ char *ph[MAX_PAR] = {
 	"		(not by design, but to reduce brightness)\n"
 	"		use IIO light sensors over sysfs\n"
 	"		0  - disable light sensor to backlight\n"
-	"		25 - my development default",
+	"		200 - my development default",
 	"camera device",
 #else
 	NULL,NULL,NULL,
@@ -2207,18 +2215,18 @@ err_r1:
 		goto err;
 	}
 	unsigned long long s = 0; // scale to byte
+	double dv = cnt;
 	switch (v4.fmt.pix.pixelformat) {
 	    case V4L2_PIX_FMT_GREY:
 		for (i=0; i<cnt; i++) s+=b[i];
 		break;
 	    case V4L2_PIX_FMT_YUYV:
 		for (i=0; i<cnt; i++) s+=b[i] & 0xf;
-		s<<=1;cnt>>=3;
+		dv /= 16;
 		break;
 	    case V4L2_PIX_FMT_UYVY:
 		for (i=0; i<cnt; i++) s+=b[i] >> 4;
-		//cnt>>=4;
-		s<<=1;cnt>>=3;
+		dv /= 16;
 		break;
 	    //case V4L2_PIX_FMT_SGRBG8:
 	}
@@ -2243,7 +2251,7 @@ rep1:
 		}
 	}
 
-	double s0=(s + .0)/cnt;
+	double s0=s/dv;
 	static double s1 = 100;
 	double d = ((s1>s0) ? (s1-s0)/s1 : (s0-s1)/s0);
 //	double d = ((s1>s0) ? (s1-s0) : (s0-s1))/256;
@@ -2263,7 +2271,7 @@ rep1:
 		xmutex_unlock(&mutex);
 	}
 #endif
-	//DBG("v4l OK %f d=%f s1=%f sleep=%i",s0,d,s1,delay);
+	//DBG("v4l OK %f d=%f s1=%f sleep=%i brightness=%i",s0,d,s1,delay,v4cget(V4L2_CID_BRIGHTNESS));
 
 	goto rep;
 err:
@@ -2271,7 +2279,53 @@ err:
 	_unthread(2);
 }
 
-static int v4start(){
+// try to use AUTOBRIGHTNESS as ALS
+// never tested
+#define TEST_V4L_BR 10
+static void *thread_v4l_br(){
+	io.v4l.qctrl.id = V4L2_CID_BRIGHTNESS;
+	if (!iocall(VIDIOC_QUERYCTRL,&io.v4l.qctrl)) goto err1;
+	unsigned int	bmin = io.v4l.qctrl.minimum,
+			bmax = io.v4l.qctrl.maximum,
+			bdef = io.v4l.qctrl.default_value,
+			i;
+	double bb = bmax - bmin;
+	if (bmin == bmax) goto err1;
+
+	unsigned long long br = bdef, br0 = bdef;
+	for (i=0; ;i++) {
+		xmutex_lock(&mutex); // use working mon
+		br = v4cget(V4L2_CID_BRIGHTNESS);
+		if (ioret == -1) goto err;
+		xmutex_unlock(&mutex);
+		if (br != bdef || i>TEST_V4L_BR) break;
+		usleep(1000000);
+	}
+	if (br == bdef) {
+		DBG("v4l brightness looks like no ALS-style");
+		goto err1;
+		
+	}
+	useconds_t delay = V4MINDELAY;
+rep:
+	usleep(delay);
+	xmutex_lock(&mutex);
+	br = v4cget(V4L2_CID_BRIGHTNESS);
+	if (ioret == -1) goto err;
+	chlight(br = 255*(br - bmin)/bb);
+	xmutex_unlock(&mutex);
+	double d = ((br>br0) ? (br-br0)/br : (br0-br)/br0);
+	br0 = br;
+	delay = V4MAXDELAY - (V4MAXDELAY-V4MINDELAY)*d;
+	goto rep;
+err:
+	xmutex_unlock(&mutex);
+err1:
+	v4close();
+	_unthread(2);
+}
+
+static int v4start() {
 	if (!v4mem) return 1;
 	for (int i = 0; i < v4nb; i++) {
 		v4buf0(i);
@@ -2300,6 +2354,28 @@ err:
 err_:
 		v4close();
 		return 0;
+	}
+
+	io.v4l.qctrl.id = V4L2_CID_AUTOBRIGHTNESS;
+	i = 0;
+	if (
+	    iocall(VIDIOC_QUERYCTRL,&io.v4l.qctrl) &&
+	    (pi[p_Safe]&64) &&
+	    (i = io.v4l.qctrl.maximum) &&
+	    (v4cget(V4L2_CID_AUTOBRIGHTNESS) == 1 || 
+	    (v4cset(V4L2_CID_AUTOBRIGHTNESS,1) &&
+	    v4cget(V4L2_CID_AUTOBRIGHTNESS) == 1))
+	    ) {
+		if ((pi[p_Safe]&128) && v4cget(V4L2_CID_BRIGHTNESS) != -1 && ioret != -1) {
+			DBG("trying to use AUTOBRIGHTNESS + BRIGHTNESS as ALS");
+			_thread(2,&thread_v4l_br);
+		} else {
+			DBG("use v4l AUTOBRIGHTNESS");
+			v4close();
+		}
+		return 1;
+	} else if (i) {
+		DBG("v4l AUTOBRIGHTNESS possible exists, but not used");
 	}
 
 	if (!iocall(VIDIOC_QUERYCAP,&io.v4l.cap)) goto err;
@@ -5512,7 +5588,7 @@ int main(int argc, char **argv){
 			break;
 		    case p_Y:
 			pi[p_safe] = 1+4+128+4096;
-			pi[p_Safe] = 1;
+			pi[p_Safe] = 1+64;
 			pa[p_content_type] = "Cinema";
 			pa[p_colorspace] = "DCI-P3_RGB_Theater";
 			break;
