@@ -2037,10 +2037,23 @@ ex:
 
 
 //video
-#define V4MAXDELAY 2000000
+#define V4MAXDELAY 2000000UL
 #define V4MINDELAY 1000
 #define V4EWMH 3
 #define V4BUFS 2
+#if 0
+static useconds_t _v4delay(float s0,float s1) {
+    return (V4MINDELAY + (useconds_t)((V4MAXDELAY-V4MINDELAY)*((s1>s0) ? (s0/s1) : (s1/s0))));
+}
+#else
+static useconds_t _v4delay(_int s0,_int s1) {
+	return V4MINDELAY + ((s1>s0)?
+		(((V4MAXDELAY-V4MINDELAY)*s0)/s1):
+		(((V4MAXDELAY-V4MINDELAY)*s1)/s0));
+}
+#endif)
+
+
 struct v4buffer {
 	void   *start;
 	size_t length;
@@ -2159,6 +2172,8 @@ static void *thread_v4l(){
 	unsigned char *b;
 	useconds_t delay;
 	max_light = pf[p_max_light];
+	float s0 = 100;
+	static float s1 = 100;
 #ifdef V4L_NOBLOCK
 	fd_set fds;
 	static fd_set fds0;
@@ -2222,11 +2237,12 @@ err_r1:
 		break;
 	    case V4L2_PIX_FMT_YUYV:
 		for (i=0; i<cnt; i++) s+=b[i] & 0xf;
-		dv /= 255./15;
+		//dv /= 255./15;
+		dv /= 51./3;
 		break;
 	    case V4L2_PIX_FMT_UYVY:
 		for (i=0; i<cnt; i++) s+=b[i] >> 4;
-		dv /= 255./15;
+		dv /= 51./3;
 		break;
 	    //case V4L2_PIX_FMT_SGRBG8:
 	}
@@ -2251,15 +2267,9 @@ rep1:
 		}
 	}
 
-	float s0=s/dv;
-	static float s1 = 100;
-	float d = ((s1>s0) ? (s1-s0)/s1 : (s0-s1)/s0);
-//	float d = ((s1>s0) ? (s1-s0) : (s0-s1))/256;
+	s0=s/dv;
 	unsigned long long l = s1 = (s1*(V4EWMH-1)+s0)/V4EWMH;
-
-//	delay = (V4MAXDELAY-V4MINDELAY)*(1-d) + V4MINDELAY;
-	delay = V4MAXDELAY - (V4MAXDELAY-V4MINDELAY)*d;
-
+	delay = _v4delay(s0,s1);
 	static unsigned long long l0 = 0xfff;
 #ifdef V4L_NOBLOCK
 	if (l != l0) chlight(l0 = l);
@@ -2271,7 +2281,7 @@ rep1:
 		xmutex_unlock(&mutex);
 	}
 #endif
-	//DBG("v4l OK %f d=%f s1=%f sleep=%i brightness=%i",s0,d,s1,delay,v4cget(V4L2_CID_BRIGHTNESS));
+	//DBG("v4l OK %f s1=%f sleep=%i brightness=%i",(float)s0,s1,delay,v4cget(V4L2_CID_BRIGHTNESS));
 
 	goto rep;
 err:
@@ -2314,9 +2324,8 @@ rep:
 	if (ioret == -1) goto err;
 	chlight(br = 255*(br - bmin)/bb);
 	xmutex_unlock(&mutex);
-	float d = ((br>br0) ? (br-br0+.0)/br : (br0-br+.0)/br0);
+	delay = _v4delay(br,br0);
 	br0 = br;
-	delay = V4MAXDELAY - (V4MAXDELAY-V4MINDELAY)*d;
 	goto rep;
 err:
 	xmutex_unlock(&mutex);
