@@ -1653,13 +1653,13 @@ static long _read_u__(int fd){
 	return _strtou(b,read(fd,b,buflong));
 }
 
-static double _read_ud(int fd){
+static float _read_uf(int fd){
 	char b[32];
 	ssize_t n = read(fd,&b,sizeof(b)-1);
 	if (n < 1 || n == sizeof(b)-1) return -1;
 	b[n] = '\n';
 	char *p;
-	double res = strtod(b,&p);
+	double res = strtof(b,&p);
 	if (*p != '\n') res = -1;
 	return res;
 }
@@ -1810,7 +1810,7 @@ un:
 #ifdef USE_MUTEX
 #undef min_light
 _short light_sign = 0;
-double light_scale;
+float light_scale;
 fd_set light_rs;
 #if !(LIGHT_SELECT&1)
 static void *thread_iio_light_wait(){
@@ -1833,7 +1833,7 @@ static int active_bl_(){
 	return 0;
 }
 
-double max_light;
+float max_light;
 static void chlight(const unsigned long long l){
 	minf_t *minf;
 	MINF(minf->blfd > 0 || minf->prop[xrp_bl].en) {
@@ -2215,18 +2215,18 @@ err_r1:
 		goto err;
 	}
 	unsigned long long s = 0; // scale to byte
-	double dv = cnt;
+	float dv = cnt;
 	switch (v4.fmt.pix.pixelformat) {
 	    case V4L2_PIX_FMT_GREY:
 		for (i=0; i<cnt; i++) s+=b[i];
 		break;
 	    case V4L2_PIX_FMT_YUYV:
 		for (i=0; i<cnt; i++) s+=b[i] & 0xf;
-		dv /= 16;
+		dv /= 255./15;
 		break;
 	    case V4L2_PIX_FMT_UYVY:
 		for (i=0; i<cnt; i++) s+=b[i] >> 4;
-		dv /= 16;
+		dv /= 255./15;
 		break;
 	    //case V4L2_PIX_FMT_SGRBG8:
 	}
@@ -2251,10 +2251,10 @@ rep1:
 		}
 	}
 
-	double s0=s/dv;
-	static double s1 = 100;
-	double d = ((s1>s0) ? (s1-s0)/s1 : (s0-s1)/s0);
-//	double d = ((s1>s0) ? (s1-s0) : (s0-s1))/256;
+	float s0=s/dv;
+	static float s1 = 100;
+	float d = ((s1>s0) ? (s1-s0)/s1 : (s0-s1)/s0);
+//	float d = ((s1>s0) ? (s1-s0) : (s0-s1))/256;
 	unsigned long long l = s1 = (s1*(V4EWMH-1)+s0)/V4EWMH;
 
 //	delay = (V4MAXDELAY-V4MINDELAY)*(1-d) + V4MINDELAY;
@@ -2271,7 +2271,7 @@ rep1:
 		xmutex_unlock(&mutex);
 	}
 #endif
-	//DBG("v4l OK %f d=%f s1=%f sleep=%i brightness=%i",s0,d,s1,delay,v4cget(V4L2_CID_BRIGHTNESS));
+	DBG("v4l OK %f d=%f s1=%f sleep=%i brightness=%i",s0,d,s1,delay,v4cget(V4L2_CID_BRIGHTNESS));
 
 	goto rep;
 err:
@@ -2289,7 +2289,7 @@ static void *thread_v4l_br(){
 			bmax = io.v4l.qctrl.maximum,
 			bdef = io.v4l.qctrl.default_value,
 			i;
-	double bb = bmax - bmin;
+	float bb = bmax - bmin;
 	if (bmin == bmax) goto err1;
 
 	unsigned long long br = bdef, br0 = bdef;
@@ -2314,7 +2314,7 @@ rep:
 	if (ioret == -1) goto err;
 	chlight(br = 255*(br - bmin)/bb);
 	xmutex_unlock(&mutex);
-	double d = ((br>br0) ? (br-br0)/br : (br0-br)/br0);
+	float d = ((br>br0) ? (br-br0+.0)/br : (br0-br+.0)/br0);
 	br0 = br;
 	delay = V4MAXDELAY - (V4MAXDELAY-V4MINDELAY)*d;
 	goto rep;
@@ -2723,7 +2723,7 @@ static void open_iio_light(){
 	int typelen = strlen(type);
 
 	if (pi[p_Y]) pi[p_Safe] |= 16;
-	light_scale = _read_ud(fd2);
+	light_scale = _read_uf(fd2);
 	close(fd2);
 	if (light_scale <= 0.) light_scale = 1;
 //	if (_read_d(fd_light) < 0) { close(fd_light); return;}
