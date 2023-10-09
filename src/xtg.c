@@ -2154,6 +2154,20 @@ static void *thread_v4l(){
 	FD_SET(v4fd, &fds0);
 #endif
 
+	v4cset(V4L2_CID_EXPOSURE_AUTO,1);
+	v4cdefault(V4L2_CID_EXPOSURE_ABSOLUTE,1);
+	v4cset(V4L2_CID_EXPOSURE_AUTO_PRIORITY,0);
+	v4cdefault(V4L2_CID_EXPOSURE_AUTO,2);
+	if (!v4cget(V4L2_CID_BACKLIGHT_COMPENSATION))
+	    v4cset(V4L2_CID_BACKLIGHT_COMPENSATION,1);
+#if 0
+	v4ctrl_list();
+	DBG("v4l exposure auto=%lli absolute=%lli prio=%lli",
+	    v4cget(V4L2_CID_EXPOSURE_AUTO),
+	    v4cget(V4L2_CID_EXPOSURE_ABSOLUTE),
+	    v4cget(V4L2_CID_EXPOSURE_AUTO_PRIORITY));
+#endif
+
 rep0:
 	delay = V4MINDELAY;
 rep:
@@ -2435,21 +2449,6 @@ err1:
 	    v4.fmt.pix.width,v4.fmt.pix.height,v4fmt2str(v4.fmt.pix.pixelformat),
 	    (!v4mem)?"read":(v4mem==V4L2_MEMORY_USERPTR)?"userptr":"mmap",v4nb);
 
-
-	v4cset(V4L2_CID_EXPOSURE_AUTO,1);
-	v4cdefault(V4L2_CID_EXPOSURE_ABSOLUTE,1);
-	v4cset(V4L2_CID_EXPOSURE_AUTO_PRIORITY,0);
-	v4cdefault(V4L2_CID_EXPOSURE_AUTO,2);
-	if (!v4cget(V4L2_CID_BACKLIGHT_COMPENSATION))
-	    v4cset(V4L2_CID_BACKLIGHT_COMPENSATION,1);
-#if 0
-	v4ctrl_list();
-	DBG("v4l exposure auto=%lli absolute=%lli prio=%lli",
-	    v4cget(V4L2_CID_EXPOSURE_AUTO),
-	    v4cget(V4L2_CID_EXPOSURE_ABSOLUTE),
-	    v4cget(V4L2_CID_EXPOSURE_AUTO_PRIORITY));
-#endif
-ok:
 	_thread(2,&thread_v4l);
 	return 1; 
 }
