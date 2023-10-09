@@ -731,27 +731,30 @@ unsigned long v4mem = 0;
 // todo: stop ALS streaming too
 static void scrONOFF() {
 #ifdef USE_MUTEX
+	static _short off = 0;
 	static int frozen = 0;
 	if (xssState == 1 || !active_bl_()) {
-		if (threads) {
+		if (!off) {
+			off = 1;
 			xmutex_lock(&mutex0);
-			frozen = threads;
-			threads = 0;
-			xmutex_unlock(&mutex0);
 			xmutex_lock(&mutex);
+			frozen |= threads;
+			threads = 0;
 #ifdef V4L_NOBLOCK
 			if (v4mem) v4call1(VIDIOC_STREAMOFF,NULL);
 #endif
+			xmutex_unlock(&mutex0);
 		}
-	} else if (frozen) {
+	} else if (off) {
+		off = 0;
+		xmutex_lock(&mutex0);
+		threads |= frozen;
+		frozen = 0;
 #ifdef V4L_NOBLOCK
 		v4start();
 #endif
-		xmutex_lock(&mutex0);
-		threads = frozen;
-		frozen = 0;
-		xmutex_unlock(&mutex0);
 		xmutex_unlock(&mutex);
+		xmutex_unlock(&mutex0);
 	}
 #endif
 }
