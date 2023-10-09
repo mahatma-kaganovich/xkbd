@@ -2271,7 +2271,7 @@ rep1:
 		xmutex_unlock(&mutex);
 	}
 #endif
-	DBG("v4l OK %f d=%f s1=%f sleep=%i brightness=%i",s0,d,s1,delay,v4cget(V4L2_CID_BRIGHTNESS));
+	//DBG("v4l OK %f d=%f s1=%f sleep=%i brightness=%i",s0,d,s1,delay,v4cget(V4L2_CID_BRIGHTNESS));
 
 	goto rep;
 err:
