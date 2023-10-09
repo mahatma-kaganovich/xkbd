@@ -229,8 +229,8 @@ xmutex_rec mutex0;
 
 static void _xmutex_lock(){ if (threads) xmutex_lock(&mutex); }
 static void _xmutex_unlock(){ if (threads) xmutex_unlock(&mutex); }
-static void _xmutex_lock0(){ if (!(threads|frozen)) xmutex_lock(&mutex); }
-static void _xmutex_unlock0(){ if (!(threads|frozen)) xmutex_unlock(&mutex); }
+static void _xmutex_lock0(){ if (!(threads)) xmutex_lock(&mutex); }
+static void _xmutex_unlock0(){ if (!(threads)) xmutex_unlock(&mutex); }
 #endif
 
 typedef uint_fast8_t _short;
@@ -729,11 +729,10 @@ static int v4start();
 unsigned long v4mem = 0;
 #endif
 // todo: stop ALS streaming too
-static void scrONOFF() {
+static void scrONOFF(_short force) {
 #ifdef USE_MUTEX
 	static _short off = 0;
-	if (xssState == 1 || !active_bl_()) {
-//		if (threads) {
+	if (!force && (xssState == 1 || !active_bl_())) {
 		if (!off) {
 			off = 1;
 			xmutex_lock(&mutex0);
@@ -745,17 +744,18 @@ static void scrONOFF() {
 #endif
 			xmutex_unlock(&mutex0);
 		}
-//	} else if (frozen) {
-	} else if (off) {
-		off = 0;
-		xmutex_lock(&mutex0);
-		threads |= frozen;
-		frozen = 0;
+	} else {
+		if (off) {
+			off = 0;
+			xmutex_lock(&mutex0);
+			threads |= frozen;
+			frozen = 0;
 #ifdef V4L_NOBLOCK
-		v4start();
+			v4start();
 #endif
-		xmutex_unlock(&mutex);
-		xmutex_unlock(&mutex0);
+			xmutex_unlock(&mutex);
+			xmutex_unlock(&mutex0);
+		}
 	}
 #endif
 }
@@ -766,7 +766,7 @@ static void xssStateSet(_short s){
 #else
 	xssState = s;
 #endif
-	scrONOFF();
+	scrONOFF(0);
 }
 #else
 static void xssStateSet(_short s){
@@ -783,7 +783,7 @@ static void xssStateSet(_short s){
 	    default:
 		    xssState = 3; break; // or dpms
 	}
-	scrONOFF();
+	scrONOFF(0);
 }
 #endif
 static _short xss_state(){
@@ -2809,6 +2809,7 @@ open:	opened = 1;
 		_mon_sysfs_name_len = strlen(_mon_sysfs_name);
 	}
 	_SYSFS_FREE();
+	scrONOFF(1);
 	_xmutex_lock0();
 	fd = _sysfs_open(0);
 	_xmutex_unlock0();
@@ -2924,7 +2925,7 @@ _short stMapped = 0;
 static void chBL0(){
 	pr_set(xrp_bl,!(minf->obscured || minf->entered));
 	if (!pr->v.i != !pr->v1.i)
-	    scrONOFF();
+	    scrONOFF(0);
 }
 
 static _short QPtr(int dev, Window *w, int *x, int *y){
@@ -3855,7 +3856,7 @@ _on:
     }}
 #endif
 #if _BACKLIGHT
-	scrONOFF();
+	scrONOFF(0);
 #endif
 ret: {}
 //    if (_y > minf0.height) fixGeometry();
