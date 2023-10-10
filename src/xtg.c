@@ -2038,18 +2038,29 @@ ex:
 
 //video
 #define V4MAXDELAY 2000000UL
-#define V4MINDELAY 1000
-#define V4EWMH 3
+#define V4MINDELAY 100000
+#define V4EWMH 5
 #define V4BUFS 2
 #if 0
 static useconds_t _v4delay(float s0,float s1) {
     return (V4MINDELAY + (useconds_t)((V4MAXDELAY-V4MINDELAY)*((s1>s0) ? (s0/s1) : (s1/s0))));
 }
-#else
+#elif 0
 static useconds_t _v4delay(_int s0,_int s1) {
 	return V4MINDELAY + ((s1>s0)?
 		(((V4MAXDELAY-V4MINDELAY)*s0)/s1):
 		(((V4MAXDELAY-V4MINDELAY)*s1)/s0));
+}
+#else
+static useconds_t _v4delay(_int s0,_int s1) {
+	int x = ((s1>s0)?
+		(100UL*s0/s1):
+		(100UL*s1/s0));
+	return (x>95) ? V4MAXDELAY :
+		(x>90) ? V4MAXDELAY/2 :
+		(x>80) ? V4MAXDELAY/4 :
+//		(x>70) ? V4MAXDELAY/8 :
+		 V4MINDELAY;
 }
 #endif)
 
@@ -2172,8 +2183,7 @@ static void *thread_v4l(){
 	unsigned char *b;
 	useconds_t delay;
 	max_light = pf[p_max_light];
-	float s0 = 100;
-	static float s1 = 100;
+	float s0,s1 = 255*pi[p_min_backlight]/100;
 #ifdef V4L_NOBLOCK
 	fd_set fds;
 	static fd_set fds0;
@@ -2302,7 +2312,7 @@ static void *thread_v4l_br(){
 	float bb = bmax - bmin;
 	if (bmin == bmax) goto err1;
 
-	unsigned long long br = bdef, br0 = bdef;
+	unsigned long long br, br0 = bdef;
 	for (i=0; ;i++) {
 		xmutex_lock(&mutex); // use working mon
 		br = v4cget(V4L2_CID_BRIGHTNESS);
