@@ -2181,11 +2181,11 @@ static void v4cdefault(__u32 id, int i) {
 }
 
 static void *thread_v4l(){
-	unsigned long index, cnt, i;
+	unsigned long index, cnt, i, cnt0 = 0;
 	unsigned char *b;
 	useconds_t delay;
 	max_light = pf[p_max_light];
-	float s0,s1, smin;
+	float s0,s1, smin, dv = 1;
 	s1 = smin = 51*(pi[p_min_backlight]?:1)/20.;
 #ifdef V4L_NOBLOCK
 	fd_set fds;
@@ -2243,19 +2243,21 @@ err_r1:
 		goto err;
 	}
 	unsigned long long s = 0; // scale to byte
-	float dv = cnt;
 	switch (v4.fmt.pix.pixelformat) {
 	    case V4L2_PIX_FMT_GREY:
 		for (i=0; i<cnt; i++) s+=b[i];
+		dv = cnt;
 		break;
 	    case V4L2_PIX_FMT_YUYV:
 		for (i=0; i<cnt; i++) s+=b[i] & 0xf;
-		//dv /= 255./15;
-		dv /= 51./3;
+		//dv = cnt/(255./15);
+		// dont want! to do  early as cnt=width*height*2
+		if (cnt != cnt0) dv = (cnt0 = cnt)/(51./3);
 		break;
 	    case V4L2_PIX_FMT_UYVY:
 		for (i=0; i<cnt; i++) s+=b[i] >> 4;
-		dv /= 51./3;
+		//dv = cnt/(255./15);
+		if (cnt != cnt0) dv = (cnt0 = cnt)/(51./3);
 		break;
 	    //case V4L2_PIX_FMT_SGRBG8:
 	}
