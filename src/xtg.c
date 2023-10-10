@@ -2186,7 +2186,7 @@ static void *thread_v4l(){
 	useconds_t delay;
 	max_light = pf[p_max_light];
 	float s0,s1, smin;
-	s1 = smin = 255*(pi[p_min_backlight]?:1)/100;
+	s1 = smin = 51*(pi[p_min_backlight]?:1)/20.;
 #ifdef V4L_NOBLOCK
 	fd_set fds;
 	static fd_set fds0;
