@@ -2181,7 +2181,7 @@ static void v4cdefault(__u32 id, int i) {
 }
 
 static void *thread_v4l(){
-	unsigned long index, cnt, i, cnt0 = 0;
+	unsigned long index, cnt, i, cnt0 = 1;
 	unsigned char *b;
 	useconds_t delay;
 	max_light = pf[p_max_light];
@@ -2288,7 +2288,13 @@ rep1:
 	}
 
 	// dont want! to do  early as cnt=width*height*2
-	if (cnt != cnt0) dv = (cnt0 = cnt)/dv0;
+	if (cnt != cnt0) {
+		if (!cnt) {
+			DBG("v4r read zero buffer");
+			goto err;
+		}
+		dv = (cnt0 = cnt)/dv0;
+	}
 	s0=s/dv;
 	//if (!(s0>0)) s0 = 1;
 	if (s0<smin) s0 = smin;
