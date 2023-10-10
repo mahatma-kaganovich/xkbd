@@ -2185,8 +2185,8 @@ static void *thread_v4l(){
 	unsigned char *b;
 	useconds_t delay;
 	max_light = pf[p_max_light];
-	float s0,s1 = 255*(pi[p_min_backlight]?:1)/100;
-	unsigned int minlt = s1;
+	float s0,s1, smin;
+	s1 = smin = 255*(pi[p_min_backlight]?:1)/100;
 #ifdef V4L_NOBLOCK
 	fd_set fds;
 	static fd_set fds0;
@@ -2282,7 +2282,7 @@ rep1:
 
 	s0=s/dv;
 	//if (!(s0>0)) s0 = 1;
-	if (!(s0>minlt)) s0 = minlt; // /0
+	if (s0<smin) s0 = smin;
 	unsigned long long l = s1 = (s1*(V4EWMH-1)+s0)/V4EWMH;
 	delay = _v4delay(s0,s1);
 	static unsigned long long l0 = 0xfff;
