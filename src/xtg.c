@@ -2185,7 +2185,7 @@ static void *thread_v4l(){
 	unsigned char *b;
 	useconds_t delay;
 	max_light = pf[p_max_light];
-	float s0,s1, smin, dv = 1;
+	float s0,s1, smin, dv = 1, dv0;
 	s1 = smin = 51*(pi[p_min_backlight]?:1)/20.;
 #ifdef V4L_NOBLOCK
 	fd_set fds;
@@ -2193,6 +2193,17 @@ static void *thread_v4l(){
 	FD_ZERO(&fds0);
 	FD_SET(v4fd, &fds0);
 #endif
+
+	switch (v4.fmt.pix.pixelformat) {
+	    case V4L2_PIX_FMT_GREY:
+		dv0 = 1;
+		break;
+	    case V4L2_PIX_FMT_YUYV:
+	    case V4L2_PIX_FMT_UYVY:
+		dv0 = 51./3;
+		break;
+	    //case V4L2_PIX_FMT_SGRBG8:
+	}
 
 rep0:
 	delay = V4MINDELAY;
@@ -2246,18 +2257,12 @@ err_r1:
 	switch (v4.fmt.pix.pixelformat) {
 	    case V4L2_PIX_FMT_GREY:
 		for (i=0; i<cnt; i++) s+=b[i];
-		dv = cnt;
 		break;
 	    case V4L2_PIX_FMT_YUYV:
 		for (i=0; i<cnt; i++) s+=b[i] & 0xf;
-		//dv = cnt/(255./15);
-		// dont want! to do  early as cnt=width*height*2
-		if (cnt != cnt0) dv = (cnt0 = cnt)/(51./3);
 		break;
 	    case V4L2_PIX_FMT_UYVY:
 		for (i=0; i<cnt; i++) s+=b[i] >> 4;
-		//dv = cnt/(255./15);
-		if (cnt != cnt0) dv = (cnt0 = cnt)/(51./3);
 		break;
 	    //case V4L2_PIX_FMT_SGRBG8:
 	}
@@ -2282,6 +2287,8 @@ rep1:
 		}
 	}
 
+	// dont want! to do  early as cnt=width*height*2
+	if (cnt != cnt0) dv = (cnt0 = cnt)/dv0;
 	s0=s/dv;
 	//if (!(s0>0)) s0 = 1;
 	if (s0<smin) s0 = smin;
