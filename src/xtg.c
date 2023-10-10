@@ -2043,7 +2043,7 @@ ex:
 #define V4BUFS 2
 #if 0
 static useconds_t _v4delay(float s0,float s1) {
-    return (V4MINDELAY + (useconds_t)((V4MAXDELAY-V4MINDELAY)*((s1>s0) ? (s0/s1) : (s1/s0))));
+	return V4MINDELAY + (useconds_t)((V4MAXDELAY-V4MINDELAY)*((s1>s0) ? (s0/s1) : (s0/s1)));;
 }
 #elif 0
 static useconds_t _v4delay(_int s0,_int s1) {
@@ -2052,14 +2052,16 @@ static useconds_t _v4delay(_int s0,_int s1) {
 		(((V4MAXDELAY-V4MINDELAY)*s1)/s0));
 }
 #else
-static useconds_t _v4delay(_int s0,_int s1) {
-	int x = ((s1>s0)?
-		(100UL*s0/s1):
-		(100UL*s1/s0));
-	return (x>95) ? V4MAXDELAY :
-		(x>90) ? V4MAXDELAY/2 :
-		(x>80) ? V4MAXDELAY/4 :
-//		(x>70) ? V4MAXDELAY/8 :
+static useconds_t _v4delay(unsigned int s0,unsigned int s1) {
+#define _sper 8
+#define _sper1(x) ((x<<_sper)/100)
+	unsigned int x = (s1>s0)?
+		((s0<<_sper)/s1):
+		((s1<<_sper)/s0);
+	return (x>_sper1(95)) ? V4MAXDELAY :
+		(x>_sper1(90)) ? V4MAXDELAY/2 :
+		(x>_sper1(80)) ? V4MAXDELAY/4 :
+//		(x>_sper1(70)) ? V4MAXDELAY/8 :
 		 V4MINDELAY;
 }
 #endif)
@@ -2183,7 +2185,8 @@ static void *thread_v4l(){
 	unsigned char *b;
 	useconds_t delay;
 	max_light = pf[p_max_light];
-	float s0,s1 = 255*pi[p_min_backlight]/100;
+	float s0,s1 = 255*(pi[p_min_backlight]?:1)/100;
+	unsigned int minlt = s1;
 #ifdef V4L_NOBLOCK
 	fd_set fds;
 	static fd_set fds0;
@@ -2278,6 +2281,8 @@ rep1:
 	}
 
 	s0=s/dv;
+	//if (!(s0>0)) s0 = 1;
+	if (!(s0>minlt)) s0 = minlt; // /0
 	unsigned long long l = s1 = (s1*(V4EWMH-1)+s0)/V4EWMH;
 	delay = _v4delay(s0,s1);
 	static unsigned long long l0 = 0xfff;
@@ -2309,6 +2314,7 @@ static void *thread_v4l_br(){
 			bmax = io.v4l.qctrl.maximum,
 			bdef = io.v4l.qctrl.default_value,
 			i;
+	if (bmax <= bmin) goto err1;
 	float bb = bmax - bmin;
 	if (bmin == bmax) goto err1;
 
@@ -2330,7 +2336,7 @@ static void *thread_v4l_br(){
 rep:
 	usleep(delay);
 	xmutex_lock(&mutex);
-	br = v4cget(V4L2_CID_BRIGHTNESS);
+	br = v4cget(V4L2_CID_BRIGHTNESS)?:1;
 	if (ioret == -1) goto err;
 	chlight(br = 255*(br - bmin)/bb);
 	xmutex_unlock(&mutex);
