@@ -2143,14 +2143,6 @@ close:
 	}
 }
 
-static void v4ctrl_list(){
-	io.v4l.qctrl.id = V4L2_CTRL_FLAG_NEXT_CTRL;
-	while (iocall(VIDIOC_QUERYCTRL,&io.v4l.qctrl)){
-		printf("v4l ctrl 0x%x 0x%x '%s' %i..%i %i\n",io.v4l.qctrl.id-V4L2_CID_BASE,io.v4l.qctrl.id-V4L2_CID_CAMERA_CLASS_BASE,io.v4l.qctrl.name,io.v4l.qctrl.minimum,io.v4l.qctrl.maximum,io.v4l.qctrl.default_value);
-		io.v4l.qctrl.id |= V4L2_CTRL_FLAG_NEXT_CTRL;
-	};
-}
-
 static long long v4cget(__u32 id) {
 	io.v4l.ctrl.id=id;
 	io.v4l.ctrl.value=0;
@@ -2166,9 +2158,16 @@ static int v4cset(__u32 id,__u32 value) {
 
 static int v4cinfo(__u32 id) {
 	io.v4l.qctrl.id = id;
-	return iocall(VIDIOC_QUERYCTRL,&io.v4l.qctrl);
+	return iocall(VIDIOC_QUERYCTRL,&io.v4l.qctrl.type);
 }
 
+static void v4ctrl_list(){
+	io.v4l.qctrl.id = V4L2_CTRL_FLAG_NEXT_CTRL;
+	while (iocall(VIDIOC_QUERYCTRL,&io.v4l.qctrl.type)){
+		printf("v4l ctrl 0x%x 0x%x '%s' %i..%i %i\n",io.v4l.qctrl.id-V4L2_CID_BASE,io.v4l.qctrl.id-V4L2_CID_CAMERA_CLASS_BASE,io.v4l.qctrl.name,io.v4l.qctrl.minimum,io.v4l.qctrl.maximum,io.v4l.qctrl.default_value);
+		io.v4l.qctrl.id |= V4L2_CTRL_FLAG_NEXT_CTRL;
+	};
+}
 
 // 0 = default, 1 = min. 2 = max
 static void v4cdefault(__u32 id, int i) {
@@ -2204,6 +2203,7 @@ static void *thread_v4l(){
 
 rep0:
 	delay = V4MINDELAY;
+loop:
 	usleep(delay);
 again:
 #ifdef V4L_NOBLOCK
@@ -2296,7 +2296,7 @@ rep1:
 	if (l != l0) chlight(l0 = l);
 	//DBG("v4l OK %f s1=%f sleep=%i brightness=%i",(float)s0,s1,delay,v4cget(V4L2_CID_BRIGHTNESS));
 
-	goto rep;
+	goto loop;
 err1:
 	xmutex_unlock(&mutex2);
 err:
@@ -2307,33 +2307,22 @@ err:
 // try to use AUTOBRIGHTNESS as ALS
 // never tested
 #define TEST_V4L_BR 10
+struct v4l2_queryctrl v4br;
 static void *thread_v4l_br(){
-	io.v4l.qctrl.id = V4L2_CID_BRIGHTNESS;
-	if (!iocall(VIDIOC_QUERYCTRL,&io.v4l.qctrl))  goto err;
+	__u32 br, br0 = v4br.default_value;
+	float bb = v4br.maximum - v4br.minimum;
+	useconds_t delay = V4MINDELAY;
 
-	unsigned int	bmin = io.v4l.qctrl.minimum,
-			bmax = io.v4l.qctrl.maximum,
-			bdef = io.v4l.qctrl.default_value,
-			i;
-	unsigned long long br, br0 = bdef;
-
-	if (bmax <= bmin) goto err;
-	float bb = bmax - bmin;
-	if (bmin == bmax) goto err;
-	for (i=0; ;i++) {
+	for (int i=0; ;i++) {
 		br = v4cget(V4L2_CID_BRIGHTNESS);
 		if (ioret == -1) goto err;
-		if (br != bdef || i>TEST_V4L_BR) break;
+		if (br != v4br.default_value || i>TEST_V4L_BR) break;
 		usleep(1000000);
 	}
-	if (br == bdef) {
-		DBG("v4l brightness looks like no ALS-style");
-		goto err;
-		
-	}
-	useconds_t delay = V4MINDELAY;
+	if (br == v4br.default_value) goto err1;
 rep:
-	br = 255*(br - bmin)/bb;
+	if (br < v4br.minimum) goto err1;
+	br = 255*(br - v4br.minimum)/bb;
 	if (br != br0) chlight(br);
 	delay = _v4delay(br,br0);
 	br0 = br;
@@ -2342,6 +2331,8 @@ rep:
 	br = v4cget(V4L2_CID_BRIGHTNESS)?:1;
 	if (ioret == -1) goto err;
 	goto rep;
+err1:
+	DBG("v4l brightness looks like not ALS-style");
 err:
 	v4close();
 	_unthread(2);
@@ -2363,7 +2354,7 @@ static int v4start() {
 
 static int v4open(){
 	if ((threads&2)) return 0;
-	unsigned int i,j,m1=0,m2=3;
+	unsigned long i,j,m1=0,m2=3;
 
 #ifdef V4L_NOBLOCK
 	v4fd = open(pa[p_v4l], O_RDWR | O_NONBLOCK, 0);
@@ -2378,18 +2369,22 @@ err_:
 		return 0;
 	}
 
-	io.v4l.qctrl.id = V4L2_CID_AUTOBRIGHTNESS;
 	i = 0;
 	if (
-	    iocall(VIDIOC_QUERYCTRL,&io.v4l.qctrl) &&
-	    (pi[p_Safe]&64) &&
+	    v4cinfo(V4L2_CID_AUTOBRIGHTNESS) &&
 	    (i = io.v4l.qctrl.maximum) &&
+	    ((pi[p_Safe]&64) &&
 	    (v4cget(V4L2_CID_AUTOBRIGHTNESS) == 1 || 
 	    (v4cset(V4L2_CID_AUTOBRIGHTNESS,1) &&
 	    v4cget(V4L2_CID_AUTOBRIGHTNESS) == 1))
-	    ) {
-		if ((pi[p_Safe]&128) && v4cget(V4L2_CID_BRIGHTNESS) != -1 && ioret != -1) {
+	    )) {
+		if ((pi[p_Safe]&128) &&
+		    v4cinfo(V4L2_CID_BRIGHTNESS) &&
+		    (io.v4l.qctrl.minimum < io.v4l.qctrl.maximum) &&
+		    v4cget(V4L2_CID_BRIGHTNESS) != -1 &&
+		    ioret != -1) {
 			DBG("trying to use AUTOBRIGHTNESS + BRIGHTNESS as ALS");
+			v4br = io.v4l.qctrl;
 			_thread(2,&thread_v4l_br);
 		} else {
 			DBG("use v4l AUTOBRIGHTNESS");
@@ -2397,7 +2392,7 @@ err_:
 		}
 		return 1;
 	} else if (i) {
-		DBG("v4l AUTOBRIGHTNESS possible exists, but not used");
+	    DBG("v4l AUTOBRIGHTNESS possible exists, but not used");
 	}
 
 	if (!iocall(VIDIOC_QUERYCAP,&io.v4l.cap)) goto err;
