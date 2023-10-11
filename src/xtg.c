@@ -2189,8 +2189,8 @@ static void *thread_v4l(){
 	unsigned long cnt, i, cnt0 = 1;
 	unsigned char *b;
 	useconds_t delay;
+	float s0,s1, smin, dv = 1, dv0 = 1;
 	max_light = pf[p_max_light];
-	float s0,s1, smin, dv = 1, dv0;
 	s1 = smin = 51*(pi[p_min_backlight]?:1)/20.;
 #ifdef V4L_NOBLOCK
 	fd_set fds;
@@ -2200,14 +2200,10 @@ static void *thread_v4l(){
 #endif
 
 	switch (v4.fmt.pix.pixelformat) {
-	    case V4L2_PIX_FMT_GREY:
-		dv0 = 1;
-		break;
 	    case V4L2_PIX_FMT_YUYV:
 	    case V4L2_PIX_FMT_UYVY:
-		dv0 = 51./3;
+		dv0 = 255./15;
 		break;
-	    //case V4L2_PIX_FMT_SGRBG8:
 	}
 
 rep0:
@@ -2253,16 +2249,15 @@ err_r:
 	}
 	unsigned long long s = 0; // scale to byte
 	switch (v4.fmt.pix.pixelformat) {
-	    case V4L2_PIX_FMT_GREY:
-		for (i=0; i<cnt; i++) s+=b[i];
-		break;
 	    case V4L2_PIX_FMT_YUYV:
 		for (i=0; i<cnt; i++) s+=b[i] & 0xf;
 		break;
 	    case V4L2_PIX_FMT_UYVY:
 		for (i=0; i<cnt; i++) s+=b[i] >> 4;
 		break;
-	    //case V4L2_PIX_FMT_SGRBG8:
+	    default:
+		for (i=0; i<cnt; i++) s+=b[i];
+		break;
 	}
 rep1:
 	switch (v4mem) {
@@ -2423,10 +2418,11 @@ err_:
 	unsigned long len = 0xffffffff;
 	v4.fmt.pix.width = v4.fmt.pix.height = 0;
 	__u32 formats[] = {V4L2_PIX_FMT_GREY,
+		V4L2_PIX_FMT_SGRBG8,
 		V4L2_PIX_FMT_YUYV,
 		V4L2_PIX_FMT_UYVY,
-		//V4L2_PIX_FMT_SGRBG8,
 		0};
+	unsigned char sizes[] = {1,1,2,2};
 	for(j=0;formats[j];j++) {
 	    i=0;
 	    do {
@@ -2455,8 +2451,7 @@ err_:
 		    default:
 			continue;
 		}
-		l=w*h;
-		if (formats[j] != V4L2_PIX_FMT_GREY) l <<= 1;
+		l=w*h*sizes[j];
 		if (l>=len) continue;
 		v4.fmt.pix.width = w;
 		v4.fmt.pix.height = h;
