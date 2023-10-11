@@ -2178,7 +2178,7 @@ static void v4cdefault(__u32 id, int i) {
 }
 
 static void *thread_v4l(){
-	unsigned long index, cnt, i, cnt0 = 1;
+	unsigned long cnt, i, cnt0 = 1;
 	unsigned char *b;
 	useconds_t delay;
 	max_light = pf[p_max_light];
@@ -2204,12 +2204,10 @@ static void *thread_v4l(){
 
 rep0:
 	delay = V4MINDELAY;
-rep:
 	usleep(delay);
 again:
 #ifdef V4L_NOBLOCK
 select:
-	_xmutex_lock2();
 	fds = fds0;
 	if (Select(v4fd + 1, &fds, NULL, NULL, NULL) == -1) switch (errno) {
 		    case EINTR: goto select;
@@ -2219,15 +2217,15 @@ select:
 			goto err;
 	}
 #endif
+	xmutex_lock(&mutex2);
+rep:
 	if (v4mem) {
 		v4buf0(0);
 		if (ioctl(v4fd, VIDIOC_DQBUF, &io.v4l.buf) == -1) goto err_r;
-		if (io.v4l.buf.index >= v4nb) goto err_r1;
+		if (io.v4l.buf.index >= v4nb) goto err1;
 		cnt = io.v4l.buf.bytesused;
 		b = v4buf[io.v4l.buf.index].start;
 	} else if ((ioret = read(v4fd, v4buf[0].start, v4buf[0].length)) != -1 ){
-		if (ioret != v4buf[0].length) goto err_r1;
-		index = 0;
 		cnt = v4buf[0].length;
 		b = v4buf[0].start;
 	} else {
@@ -2237,12 +2235,12 @@ err_r:
 			goto rep;
 		    case EAGAIN: // DPMS OFF/screen ON
 			//DBG("EAGAIN");
+			xmutex_unlock(&mutex2);
 			goto again;
 		    default:
 			ERRno("v4l read");
+			goto err1;
 		}
-err_r1:
-		goto err;
 	}
 	unsigned long long s = 0; // scale to byte
 	switch (v4.fmt.pix.pixelformat) {
@@ -2265,18 +2263,21 @@ rep1:
 			&& io.v4l.buf.length == v4buf[i].length)
 			    break;
 		if (!(i < v4nb)) {
-			goto err;
+			goto err1;
 		}
 	    case V4L2_MEMORY_MMAP:
 		if (ioctl(v4fd, VIDIOC_QBUF, &io.v4l.buf) == -1) switch (errno) {
 		    case EAGAIN:
-			usleep(100000);
+			xmutex_unlock(&mutex2);
+			usleep(V4MAXDELAY);
+			xmutex_lock(&mutex2);
 		    case EINTR:
 			goto rep1;
 		    default:
-			goto err;
+			goto err1;
 		}
 	}
+	xmutex_unlock(&mutex2);
 
 	// dont want! to do  early as cnt=width*height*2
 	if (cnt != cnt0) {
@@ -2296,6 +2297,8 @@ rep1:
 	//DBG("v4l OK %f s1=%f sleep=%i brightness=%i",(float)s0,s1,delay,v4cget(V4L2_CID_BRIGHTNESS));
 
 	goto rep;
+err1:
+	xmutex_unlock(&mutex2);
 err:
 	v4close();
 	_unthread(2);
@@ -2306,16 +2309,17 @@ err:
 #define TEST_V4L_BR 10
 static void *thread_v4l_br(){
 	io.v4l.qctrl.id = V4L2_CID_BRIGHTNESS;
-	if (!iocall(VIDIOC_QUERYCTRL,&io.v4l.qctrl)) goto err1;
+	if (!iocall(VIDIOC_QUERYCTRL,&io.v4l.qctrl))  goto err;
+
 	unsigned int	bmin = io.v4l.qctrl.minimum,
 			bmax = io.v4l.qctrl.maximum,
 			bdef = io.v4l.qctrl.default_value,
 			i;
-	if (bmax <= bmin) goto err1;
-	float bb = bmax - bmin;
-	if (bmin == bmax) goto err1;
-
 	unsigned long long br, br0 = bdef;
+
+	if (bmax <= bmin) goto err;
+	float bb = bmax - bmin;
+	if (bmin == bmax) goto err;
 	for (i=0; ;i++) {
 		br = v4cget(V4L2_CID_BRIGHTNESS);
 		if (ioret == -1) goto err;
@@ -2324,22 +2328,21 @@ static void *thread_v4l_br(){
 	}
 	if (br == bdef) {
 		DBG("v4l brightness looks like no ALS-style");
-		goto err1;
+		goto err;
 		
 	}
 	useconds_t delay = V4MINDELAY;
 rep:
+	br = 255*(br - bmin)/bb;
+	if (br != br0) chlight(br);
+	delay = _v4delay(br,br0);
+	br0 = br;
 	usleep(delay);
 	_xmutex_lock2();
 	br = v4cget(V4L2_CID_BRIGHTNESS)?:1;
 	if (ioret == -1) goto err;
-	chlight(br = 255*(br - bmin)/bb);
-	delay = _v4delay(br,br0);
-	br0 = br;
 	goto rep;
 err:
-	xmutex_unlock(&mutex);
-err1:
 	v4close();
 	_unthread(2);
 }
