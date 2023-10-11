@@ -213,7 +213,7 @@ pthread_attr_t *pth_attr = NULL;
 
 #ifdef USE_THREAD
 int inotify = -1;
-int _volatile threads = 0, frozen = 0;
+int _volatile threads = 0;
 #else
 #undef USE_MUTEX
 #endif
@@ -223,14 +223,17 @@ int _volatile threads = 0, frozen = 0;
 #define _xmutex_unlock()
 #define _xmutex_lock0()
 #define _xmutex_unlock0()
+#define _xmutex_lock2()
 #else
 xmutex_rec mutex;
 xmutex_rec mutex0;
+xmutex_rec mutex2;
 
 static void _xmutex_lock(){ if (threads) xmutex_lock(&mutex); }
 static void _xmutex_unlock(){ if (threads) xmutex_unlock(&mutex); }
 static void _xmutex_lock0(){ if (!(threads)) xmutex_lock(&mutex); }
 static void _xmutex_unlock0(){ if (!(threads)) xmutex_unlock(&mutex); }
+static void _xmutex_lock2(){ xmutex_lock(&mutex2); xmutex_unlock(&mutex2); }
 #endif
 
 typedef uint_fast8_t _short;
@@ -737,32 +740,24 @@ static int v4start();
 unsigned long v4mem = 0;
 #endif
 // todo: stop ALS streaming too
-static void scrONOFF(_short force) {
+static void scrONOFF() {
 #ifdef USE_MUTEX
 	static _short off = 0;
-	if (!force && (xssState == 1 || !active_bl_())) {
+	if (xssState == 1 || !active_bl_()) {
 		if (!off) {
 			off = 1;
-			xmutex_lock(&mutex0);
-			xmutex_lock(&mutex);
-			frozen |= threads;
-			threads = 0;
+			xmutex_lock(&mutex2);
 #ifdef V4L_NOBLOCK
 			if (v4mem) v4call1(VIDIOC_STREAMOFF,NULL);
 #endif
-			xmutex_unlock(&mutex0);
 		}
 	} else {
 		if (off) {
 			off = 0;
-			xmutex_lock(&mutex0);
-			threads |= frozen;
-			frozen = 0;
 #ifdef V4L_NOBLOCK
 			v4start();
 #endif
-			xmutex_unlock(&mutex);
-			xmutex_unlock(&mutex0);
+			xmutex_unlock(&mutex2);
 		}
 	}
 #endif
@@ -774,7 +769,7 @@ static void xssStateSet(_short s){
 #else
 	xssState = s;
 #endif
-	scrONOFF(0);
+	scrONOFF();
 }
 #else
 static void xssStateSet(_short s){
@@ -791,7 +786,7 @@ static void xssStateSet(_short s){
 	    default:
 		    xssState = 3; break; // or dpms
 	}
-	scrONOFF(0);
+	scrONOFF();
 }
 #endif
 static _short xss_state(){
@@ -1836,6 +1831,7 @@ static int active_bl_(){
 float max_light;
 static void chlight(const unsigned long long l){
 	minf_t *minf;
+	xmutex_lock(&mutex);
 	MINF(minf->blfd > 0 || minf->prop[xrp_bl].en) {
 		pinf_t *pr = &minf->prop[xrp_bl];
 		long l1 = pr->p->values[1];
@@ -1867,6 +1863,7 @@ static void chlight(const unsigned long long l){
 		oldShowPtr |= 128;
 #endif
 	}
+	xmutex_unlock(&mutex);
 }
 
 
@@ -1913,6 +1910,7 @@ close_dev:
 		light_ch = 1;
 	}
 err_dev:
+	_xmutex_lock2();
 	if (light_ch) light_dev_ch();
 	bb = 0;
 	b = (void*)&b2[0];
@@ -1936,6 +1934,7 @@ sw:
 	DBG("iio over /%s",light_fmt?"dev":"sys");
 	while(1) {
 		if (light_ch) goto err_dev; // goto close_dev to reopen
+		_xmutex_lock2();
 		if (light_fmt) {
 #if (LIGHT_SELECT&2)
 		    tv.tv_sec = 10;
@@ -2026,9 +2025,7 @@ sw:
 				else l.l <<= light_shift;
 			}
 		}
-		xmutex_lock(&mutex);
 		chlight(l.l);
-		xmutex_unlock(&mutex);
 	}
 ex:
 	_unthread(2);
@@ -2212,6 +2209,7 @@ rep:
 again:
 #ifdef V4L_NOBLOCK
 select:
+	_xmutex_lock2();
 	fds = fds0;
 	if (Select(v4fd + 1, &fds, NULL, NULL, NULL) == -1) switch (errno) {
 		    case EINTR: goto select;
@@ -2220,7 +2218,6 @@ select:
 			ERRno("v4l select");
 			goto err;
 	}
-	xmutex_lock(&mutex);
 #endif
 	if (v4mem) {
 		v4buf0(0);
@@ -2240,17 +2237,11 @@ err_r:
 			goto rep;
 		    case EAGAIN: // DPMS OFF/screen ON
 			//DBG("EAGAIN");
-#ifdef V4L_NOBLOCK
-			xmutex_unlock(&mutex);
-#endif
 			goto again;
 		    default:
 			ERRno("v4l read");
 		}
 err_r1:
-#ifdef V4L_NOBLOCK
-		xmutex_unlock(&mutex);
-#endif
 		goto err;
 	}
 	unsigned long long s = 0; // scale to byte
@@ -2301,16 +2292,7 @@ rep1:
 	unsigned long long l = s1 = (s1*(V4EWMH-1)+s0)/V4EWMH;
 	delay = _v4delay(s0,s1);
 	static unsigned long long l0 = 0xfff;
-#ifdef V4L_NOBLOCK
 	if (l != l0) chlight(l0 = l);
-	xmutex_unlock(&mutex);
-#else
-	if (l != l0) {
-		xmutex_lock(&mutex);
-		chlight(l0 = l);
-		xmutex_unlock(&mutex);
-	}
-#endif
 	//DBG("v4l OK %f s1=%f sleep=%i brightness=%i",(float)s0,s1,delay,v4cget(V4L2_CID_BRIGHTNESS));
 
 	goto rep;
@@ -2335,10 +2317,8 @@ static void *thread_v4l_br(){
 
 	unsigned long long br, br0 = bdef;
 	for (i=0; ;i++) {
-		xmutex_lock(&mutex); // use working mon
 		br = v4cget(V4L2_CID_BRIGHTNESS);
 		if (ioret == -1) goto err;
-		xmutex_unlock(&mutex);
 		if (br != bdef || i>TEST_V4L_BR) break;
 		usleep(1000000);
 	}
@@ -2350,11 +2330,10 @@ static void *thread_v4l_br(){
 	useconds_t delay = V4MINDELAY;
 rep:
 	usleep(delay);
-	xmutex_lock(&mutex);
+	_xmutex_lock2();
 	br = v4cget(V4L2_CID_BRIGHTNESS)?:1;
 	if (ioret == -1) goto err;
 	chlight(br = 255*(br - bmin)/bb);
-	xmutex_unlock(&mutex);
 	delay = _v4delay(br,br0);
 	br0 = br;
 	goto rep;
@@ -2925,7 +2904,6 @@ open:	opened = 1;
 		_mon_sysfs_name_len = strlen(_mon_sysfs_name);
 	}
 	_SYSFS_FREE();
-	scrONOFF(1);
 	_xmutex_lock0();
 	fd = _sysfs_open(0);
 	_xmutex_unlock0();
@@ -3041,7 +3019,7 @@ _short stMapped = 0;
 static void chBL0(){
 	pr_set(xrp_bl,!(minf->obscured || minf->entered));
 	if (!pr->v.i != !pr->v1.i)
-	    scrONOFF(0);
+	    scrONOFF();
 }
 
 static _short QPtr(int dev, Window *w, int *x, int *y){
@@ -3972,7 +3950,7 @@ _on:
     }}
 #endif
 #if _BACKLIGHT
-	scrONOFF(0);
+	scrONOFF();
 #endif
 ret: {}
 //    if (_y > minf0.height) fixGeometry();
