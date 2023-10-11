@@ -2085,6 +2085,7 @@ union {
 	struct v4l2_buffer buf;
 
 	struct v4l2_queryctrl qctrl;
+	struct v4l2_query_ext_ctrl qxctrl;
 	struct v4l2_ctrl_hdr10_cll_info light;
 	struct v4l2_control ctrl; 
     } v4l;
@@ -2146,11 +2147,11 @@ close:
 static long long v4cget(__u32 id) {
 	io.v4l.ctrl.id=id;
 	io.v4l.ctrl.value=0;
-	if (!iocall(VIDIOC_G_CTRL,NULL)) return -1;
+	iocall(VIDIOC_G_CTRL,NULL);
 	return io.v4l.ctrl.value; 
 }
 
-static int v4cset(__u32 id,__u32 value) {
+static int v4cset(__u32 id,__s32 value) {
 	io.v4l.ctrl.id=id;
 	io.v4l.ctrl.value=value;
 	return iocall(VIDIOC_S_CTRL,NULL);
@@ -2163,8 +2164,16 @@ static int v4cinfo(__u32 id) {
 
 static void v4ctrl_list(){
 	io.v4l.qctrl.id = V4L2_CTRL_FLAG_NEXT_CTRL;
-	while (iocall(VIDIOC_QUERYCTRL,&io.v4l.qctrl.type)){
-		printf("v4l ctrl 0x%x 0x%x '%s' %i..%i %i\n",io.v4l.qctrl.id-V4L2_CID_BASE,io.v4l.qctrl.id-V4L2_CID_CAMERA_CLASS_BASE,io.v4l.qctrl.name,io.v4l.qctrl.minimum,io.v4l.qctrl.maximum,io.v4l.qctrl.default_value);
+	while (iocall(VIDIOC_QUERYCTRL,&io.v4l.qxctrl.type)){
+		printf("v4l ctrl %u 0x%x 0x%x '%s' %i..%i/%i =%i\n",io.v4l.qctrl.type,io.v4l.qctrl.id-V4L2_CID_BASE,io.v4l.qctrl.id-V4L2_CID_CAMERA_CLASS_BASE,io.v4l.qctrl.name,io.v4l.qctrl.minimum,io.v4l.qctrl.maximum,io.v4l.qctrl.step,io.v4l.qctrl.default_value);
+		io.v4l.qctrl.id |= V4L2_CTRL_FLAG_NEXT_CTRL;
+	};
+}
+
+static void v4xctrl_list(){
+	io.v4l.qctrl.id = V4L2_CTRL_FLAG_NEXT_CTRL;
+	while (iocall(VIDIOC_QUERY_EXT_CTRL,&io.v4l.qxctrl.type)){
+		printf("v4l ctrl %u 0x%x 0x%x 0x%x '%s' %lli..%lli/%lli %lli\n",io.v4l.qxctrl.type,io.v4l.qxctrl.id,io.v4l.qxctrl.id-V4L2_CID_BASE,io.v4l.qxctrl.id-V4L2_CID_CAMERA_CLASS_BASE,io.v4l.qxctrl.name,io.v4l.qxctrl.minimum,io.v4l.qxctrl.maximum,io.v4l.qxctrl.step,io.v4l.qxctrl.default_value);
 		io.v4l.qctrl.id |= V4L2_CTRL_FLAG_NEXT_CTRL;
 	};
 }
@@ -2309,7 +2318,7 @@ err:
 #define TEST_V4L_BR 10
 struct v4l2_queryctrl v4br;
 static void *thread_v4l_br(){
-	__u32 br, br0 = v4br.default_value;
+	__s32 br, br0 = v4br.default_value;
 	float bb = v4br.maximum - v4br.minimum;
 	useconds_t delay = V4MINDELAY;
 
@@ -2372,6 +2381,7 @@ err_:
 	i = 0;
 	if (
 	    v4cinfo(V4L2_CID_AUTOBRIGHTNESS) &&
+	    io.v4l.qctrl.type == V4L2_CTRL_TYPE_BOOLEAN &&
 	    (i = io.v4l.qctrl.maximum) &&
 	    ((pi[p_Safe]&64) &&
 	    (v4cget(V4L2_CID_AUTOBRIGHTNESS) == 1 || 
@@ -2380,9 +2390,8 @@ err_:
 	    )) {
 		if ((pi[p_Safe]&128) &&
 		    v4cinfo(V4L2_CID_BRIGHTNESS) &&
-		    (io.v4l.qctrl.minimum < io.v4l.qctrl.maximum) &&
-		    v4cget(V4L2_CID_BRIGHTNESS) != -1 &&
-		    ioret != -1) {
+		    io.v4l.qctrl.type == V4L2_CTRL_TYPE_INTEGER &&
+		    (io.v4l.qctrl.minimum < io.v4l.qctrl.maximum)) {
 			DBG("trying to use AUTOBRIGHTNESS + BRIGHTNESS as ALS");
 			v4br = io.v4l.qctrl;
 			_thread(2,&thread_v4l_br);
