@@ -2045,21 +2045,22 @@ ex:
 //video
 #if 0
 static useconds_t _v4delay(float s0,float s1) {
-	return V4MINDELAY + (useconds_t)((V4MAXDELAY-V4MINDELAY)*((s1>s0) ? (s0/s1) : (s0/s1)));;
+	return V4MINDELAY + (useconds_t)((V4MAXDELAY-V4MINDELAY)*((s1>s0) ? (s0/s1) :  (s1<s0) ?(s0/s1))) : 1;;
 }
 #elif 0
 static useconds_t _v4delay(_int s0,_int s1) {
 	return V4MINDELAY + ((s1>s0)?
-		(((V4MAXDELAY-V4MINDELAY)*s0)/s1):
-		(((V4MAXDELAY-V4MINDELAY)*s1)/s0));
+		(((V4MAXDELAY-V4MINDELAY)*s0)/s1):(s1<s0)?
+		(((V4MAXDELAY-V4MINDELAY)*s1)/s0)):
+		(V4MAXDELAY-V4MINDELAY);
 }
 #else
 static useconds_t _v4delay(unsigned int s0,unsigned int s1) {
 #define _sper 8
 #define _sper1(x) ((x<<_sper)/100)
 	unsigned int x = (s1>s0)?
-		((s0<<_sper)/s1):
-		((s1<<_sper)/s0);
+		((s0<<_sper)/s1):(s1<s0)?
+		((s1<<_sper)/s0):(1<<_sper);
 	return (x>_sper1(95)) ? V4MAXDELAY :
 		(x>_sper1(90)) ? V4MAXDELAY/2 :
 		(x>_sper1(80)) ? V4MAXDELAY/4 :
@@ -2200,9 +2201,8 @@ static void v4cdefault(__u32 id, int i) {
 static void *thread_v4l(){
 	unsigned long cnt, i, cnt0 = 1;
 	unsigned char *b;
-	float s0,s1, smin, dv = 1, dv0 = 1;
+	float s0,s1=0, dv = 1, dv0 = 1;
 	max_light = pf[p_max_light];
-	s1 = smin = 51*(pi[p_min_backlight]?:1)/20.;
 #ifdef V4L_NOBLOCK
 	fd_set fds;
 	static fd_set fds0;
@@ -2301,10 +2301,9 @@ rep1:
 			goto err;
 		}
 		dv = (cnt0 = cnt)/dv0;
+		s1 = s/dv;
 	}
 	s0=s/dv;
-	//if (!(s0>0)) s0 = 1;
-	if (s0<smin) s0 = smin;
 	unsigned long long l = s1 = (s1*(V4EWMH-1)+s0)/V4EWMH;
 	v4delay = _v4delay(s0,s1);
 	static unsigned long long l0 = 0xfff;
