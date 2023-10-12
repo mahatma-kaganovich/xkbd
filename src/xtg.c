@@ -151,9 +151,15 @@
 #ifdef USE_THREAD
 // iio format
 #include <endian.h>
+
 // v4l
 #include <sys/mman.h>
 #include <linux/videodev2.h>
+#define V4MAXDELAY 2000000UL
+#define V4MINDELAY 100000
+#define V4EWMH 5
+#define V4BUFS 2
+
 #ifndef be64toh
 #include <arpa/inet.h>
 #endif
@@ -735,9 +741,11 @@ static void chTerm(){
 _short xssState = 3;
 #ifdef USE_THREAD
 static int active_bl_();
-static int v4call1(int req, void *of);
+//static int iocall(int req);
+static int v4call1(int req);
 static int v4start();
 unsigned long v4mem = 0;
+useconds_t v4delay = V4MINDELAY;
 #endif
 // todo: stop ALS streaming too
 static void scrONOFF() {
@@ -748,12 +756,13 @@ static void scrONOFF() {
 			off = 1;
 			xmutex_lock(&mutex2);
 #ifdef V4L_NOBLOCK
-			if (v4mem) v4call1(VIDIOC_STREAMOFF,NULL);
+			if (v4mem) v4call1(VIDIOC_STREAMOFF);
 #endif
 		}
 	} else {
 		if (off) {
 			off = 0;
+			v4delay = 0;
 #ifdef V4L_NOBLOCK
 			v4start();
 #endif
@@ -2034,10 +2043,6 @@ ex:
 
 
 //video
-#define V4MAXDELAY 2000000UL
-#define V4MINDELAY 100000
-#define V4EWMH 5
-#define V4BUFS 2
 #if 0
 static useconds_t _v4delay(float s0,float s1) {
 	return V4MINDELAY + (useconds_t)((V4MAXDELAY-V4MINDELAY)*((s1>s0) ? (s0/s1) : (s0/s1)));;
@@ -2061,7 +2066,7 @@ static useconds_t _v4delay(unsigned int s0,unsigned int s1) {
 //		(x>_sper1(70)) ? V4MAXDELAY/8 :
 		 V4MINDELAY;
 }
-#endif)
+#endif
 
 
 struct v4buffer {
@@ -2073,22 +2078,23 @@ unsigned long v4nb = 0;
 struct v4l2_format v4 = {};
 int nv4ldves = 0;
 
+#define IOD(s) io.s = (struct s)
 union {
-    union {
-	struct v4l2_capability cap;
-	struct v4l2_cropcap cropcap;
-	struct v4l2_crop crop;
-	struct v4l2_frmsizeenum s;
-	struct v4l2_format f;
-	struct v4l2_fmtdesc fmt;
-	struct v4l2_requestbuffers req;
-	struct v4l2_buffer buf;
+	int i;
+#define struct1(s) struct s s;
+	struct1(v4l2_capability)
+	struct1(v4l2_cropcap)
+	struct1(v4l2_crop)
+	struct1(v4l2_frmsizeenum)
+	struct1(v4l2_format)
+	struct1(v4l2_fmtdesc)
+	struct1(v4l2_requestbuffers)
+	struct1(v4l2_buffer)
 
-	struct v4l2_queryctrl qctrl;
-	struct v4l2_query_ext_ctrl qxctrl;
-	struct v4l2_ctrl_hdr10_cll_info light;
-	struct v4l2_control ctrl; 
-    } v4l;
+	struct1(v4l2_queryctrl)
+	struct1(v4l2_query_ext_ctrl)
+	struct1(v4l2_ctrl_hdr10_cll_info)
+	struct1(v4l2_control)
 } io;
 
 static char *v4fmt2str(__u32 f){
@@ -2099,8 +2105,7 @@ static char *v4fmt2str(__u32 f){
 }
 
 int ioret;
-static int iocall(int req, void *of){
-	if (of) memset(of,0,of-(void *)&io);
+static int iocall(int req){
 rep:
 	ioret = ioctl(v4fd, req, &io);
 	if (ioret == -1) {
@@ -2112,22 +2117,23 @@ rep:
 	return 1;
 }
 
-static int v4call1(int req, void *of){
-	io.v4l.cropcap.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	return iocall(req,of);
+static int v4call1(int req){
+	io.i = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	return iocall(req);
 }
 
 static void v4buf0(unsigned index){
-	memset(&io.v4l.buf,0,sizeof(io.v4l.buf));
-	io.v4l.buf.index = index;
-	io.v4l.buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	io.v4l.buf.memory = v4mem;
+	IOD(v4l2_buffer) {
+		.index = index,
+		.type = V4L2_BUF_TYPE_VIDEO_CAPTURE,
+		.memory = v4mem,
+	};
 }
 
 static void v4close(){
 	DBG("v4close");
 	if (!v4buf) goto close;
-	if (v4mem) v4call1(VIDIOC_STREAMOFF,NULL);
+	if (v4mem) v4call1(VIDIOC_STREAMOFF);
 	while(v4nb--) {
 	    if (v4buf[v4nb].length) {
 		if (v4mem==V4L2_MEMORY_MMAP) munmap(v4buf[v4nb].start,v4buf[v4nb].length);
@@ -2145,50 +2151,55 @@ close:
 }
 
 static long long v4cget(__u32 id) {
-	io.v4l.ctrl.id=id;
-	io.v4l.ctrl.value=0;
-	iocall(VIDIOC_G_CTRL,NULL);
-	return io.v4l.ctrl.value; 
+	io.v4l2_control.id=id;
+	io.v4l2_control.value=0;
+	iocall(VIDIOC_G_CTRL);
+	return io.v4l2_control.value; 
 }
 
 static int v4cset(__u32 id,__s32 value) {
-	io.v4l.ctrl.id=id;
-	io.v4l.ctrl.value=value;
-	return iocall(VIDIOC_S_CTRL,NULL);
+	io.v4l2_control.id=id;
+	io.v4l2_control.value=value;
+	return iocall(VIDIOC_S_CTRL);
 }
 
 static int v4cinfo(__u32 id) {
-	io.v4l.qctrl.id = id;
-	return iocall(VIDIOC_QUERYCTRL,&io.v4l.qctrl.type);
+	IOD(v4l2_queryctrl) {.id = id,};
+	return iocall(VIDIOC_QUERYCTRL);
 }
 
-static void v4ctrl_list(){
-	io.v4l.qctrl.id = V4L2_CTRL_FLAG_NEXT_CTRL;
-	while (iocall(VIDIOC_QUERYCTRL,&io.v4l.qxctrl.type)){
-		printf("v4l ctrl %u 0x%x 0x%x '%s' %i..%i/%i =%i\n",io.v4l.qctrl.type,io.v4l.qctrl.id-V4L2_CID_BASE,io.v4l.qctrl.id-V4L2_CID_CAMERA_CLASS_BASE,io.v4l.qctrl.name,io.v4l.qctrl.minimum,io.v4l.qctrl.maximum,io.v4l.qctrl.step,io.v4l.qctrl.default_value);
-		io.v4l.qctrl.id |= V4L2_CTRL_FLAG_NEXT_CTRL;
+static void v4ctrl_list(){\
+	__u32 id = V4L2_CTRL_FLAG_NEXT_CTRL;;
+	while (v4cinfo(id)){
+		printf("v4l ctrl %u 0x%x 0x%x '%s' %i..%i/%i =%i\n",io.v4l2_queryctrl.type,io.v4l2_queryctrl.id-V4L2_CID_BASE,io.v4l2_queryctrl.id-V4L2_CID_CAMERA_CLASS_BASE,io.v4l2_queryctrl.name,io.v4l2_queryctrl.minimum,io.v4l2_queryctrl.maximum,io.v4l2_queryctrl.step,io.v4l2_queryctrl.default_value);
+		id |= V4L2_CTRL_FLAG_NEXT_CTRL;
 	};
 }
 
-static void v4xctrl_list(){
-	io.v4l.qctrl.id = V4L2_CTRL_FLAG_NEXT_CTRL;
-	while (iocall(VIDIOC_QUERY_EXT_CTRL,&io.v4l.qxctrl.type)){
-		printf("v4l ctrl %u 0x%x 0x%x 0x%x '%s' %lli..%lli/%lli %lli\n",io.v4l.qxctrl.type,io.v4l.qxctrl.id,io.v4l.qxctrl.id-V4L2_CID_BASE,io.v4l.qxctrl.id-V4L2_CID_CAMERA_CLASS_BASE,io.v4l.qxctrl.name,io.v4l.qxctrl.minimum,io.v4l.qxctrl.maximum,io.v4l.qxctrl.step,io.v4l.qxctrl.default_value);
-		io.v4l.qctrl.id |= V4L2_CTRL_FLAG_NEXT_CTRL;
+static int v4xcinfo(__u32 id) {
+	IOD(v4l2_query_ext_ctrl) {.id = id,};
+	return iocall(VIDIOC_QUERYCTRL);
+}
+
+
+static void v4xctrl_list(){\
+	__u32 id = V4L2_CTRL_FLAG_NEXT_CTRL;;
+	while (v4xcinfo(id)){
+		printf("v4l ctrl %u 0x%x 0x%x 0x%x '%s' %lli..%lli/%lli %lli\n",io.v4l2_query_ext_ctrl.type,io.v4l2_query_ext_ctrl.id,io.v4l2_query_ext_ctrl.id-V4L2_CID_BASE,io.v4l2_query_ext_ctrl.id-V4L2_CID_CAMERA_CLASS_BASE,io.v4l2_query_ext_ctrl.name,io.v4l2_query_ext_ctrl.minimum,io.v4l2_query_ext_ctrl.maximum,io.v4l2_query_ext_ctrl.step,io.v4l2_query_ext_ctrl.default_value);
+		id |= V4L2_CTRL_FLAG_NEXT_CTRL;
 	};
 }
 
 // 0 = default, 1 = min. 2 = max
 static void v4cdefault(__u32 id, int i) {
 	if (v4cinfo(id)) {
-	    v4cset(id,(i==0)?io.v4l.qctrl.default_value:(i==1)?io.v4l.qctrl.minimum:io.v4l.qctrl.maximum);
+	    v4cset(id,(i==0)?io.v4l2_queryctrl.default_value:(i==1)?io.v4l2_queryctrl.minimum:io.v4l2_queryctrl.maximum);
 	}
 }
 
 static void *thread_v4l(){
 	unsigned long cnt, i, cnt0 = 1;
 	unsigned char *b;
-	useconds_t delay;
 	float s0,s1, smin, dv = 1, dv0 = 1;
 	max_light = pf[p_max_light];
 	s1 = smin = 51*(pi[p_min_backlight]?:1)/20.;
@@ -2207,9 +2218,9 @@ static void *thread_v4l(){
 	}
 
 rep0:
-	delay = V4MINDELAY;
+	v4delay = V4MINDELAY;
 loop:
-	usleep(delay);
+	usleep(v4delay);
 again:
 #ifdef V4L_NOBLOCK
 select:
@@ -2226,10 +2237,10 @@ select:
 rep:
 	if (v4mem) {
 		v4buf0(0);
-		if (ioctl(v4fd, VIDIOC_DQBUF, &io.v4l.buf) == -1) goto err_r;
-		if (io.v4l.buf.index >= v4nb) goto err1;
-		cnt = io.v4l.buf.bytesused;
-		b = v4buf[io.v4l.buf.index].start;
+		if (ioctl(v4fd, VIDIOC_DQBUF, &io.v4l2_buffer) == -1) goto err_r;
+		if (io.v4l2_buffer.index >= v4nb) goto err1;
+		cnt = io.v4l2_buffer.bytesused;
+		b = v4buf[io.v4l2_buffer.index].start;
 	} else if ((ioret = read(v4fd, v4buf[0].start, v4buf[0].length)) != -1 ){
 		cnt = v4buf[0].length;
 		b = v4buf[0].start;
@@ -2263,14 +2274,14 @@ rep1:
 	switch (v4mem) {
 	    case V4L2_MEMORY_USERPTR:
 		for (i=0; i<v4nb; i++)
-		    if (io.v4l.buf.m.userptr == (unsigned long)v4buf[i].start
-			&& io.v4l.buf.length == v4buf[i].length)
+		    if (io.v4l2_buffer.m.userptr == (unsigned long)v4buf[i].start
+			&& io.v4l2_buffer.length == v4buf[i].length)
 			    break;
 		if (!(i < v4nb)) {
 			goto err1;
 		}
 	    case V4L2_MEMORY_MMAP:
-		if (ioctl(v4fd, VIDIOC_QBUF, &io.v4l.buf) == -1) switch (errno) {
+		if (ioctl(v4fd, VIDIOC_QBUF, &io.v4l2_buffer) == -1) switch (errno) {
 		    case EAGAIN:
 			xmutex_unlock(&mutex2);
 			usleep(V4MAXDELAY);
@@ -2295,10 +2306,10 @@ rep1:
 	//if (!(s0>0)) s0 = 1;
 	if (s0<smin) s0 = smin;
 	unsigned long long l = s1 = (s1*(V4EWMH-1)+s0)/V4EWMH;
-	delay = _v4delay(s0,s1);
+	v4delay = _v4delay(s0,s1);
 	static unsigned long long l0 = 0xfff;
 	if (l != l0) chlight(l0 = l);
-	//DBG("v4l OK %f s1=%f sleep=%i brightness=%i",(float)s0,s1,delay,v4cget(V4L2_CID_BRIGHTNESS));
+	//DBG("v4l OK %f s1=%f sleep=%lli brightness=%i",(float)s0,s1,v4delay,v4cget(V4L2_CID_BRIGHTNESS));
 
 	goto loop;
 err1:
@@ -2315,7 +2326,6 @@ struct v4l2_queryctrl v4br;
 static void *thread_v4l_br(){
 	__s32 br, br0 = v4br.default_value;
 	float bb = v4br.maximum - v4br.minimum;
-	useconds_t delay = V4MINDELAY;
 
 	for (int i=0; ;i++) {
 		br = v4cget(V4L2_CID_BRIGHTNESS);
@@ -2328,9 +2338,9 @@ rep:
 	if (br < v4br.minimum) goto err1;
 	br = 255*(br - v4br.minimum)/bb;
 	if (br != br0) chlight(br);
-	delay = _v4delay(br,br0);
+	v4delay = _v4delay(br,br0);
 	br0 = br;
-	usleep(delay);
+	usleep(v4delay);
 	_xmutex_lock2();
 	br = v4cget(V4L2_CID_BRIGHTNESS)?:1;
 	if (ioret == -1) goto err;
@@ -2347,12 +2357,12 @@ static int v4start() {
 	for (int i = 0; i < v4nb; i++) {
 		v4buf0(i);
 		if (v4mem==V4L2_MEMORY_USERPTR) {
-			io.v4l.buf.m.userptr = (unsigned long)v4buf[i].start;
-			io.v4l.buf.length = v4buf[i].length;
+			io.v4l2_buffer.m.userptr = (unsigned long)v4buf[i].start;
+			io.v4l2_buffer.length = v4buf[i].length;
 		}
-		if (!iocall(VIDIOC_QBUF,NULL)) return 0;
+		if (!iocall(VIDIOC_QBUF)) return 0;
 	}
-	if (!v4call1(VIDIOC_STREAMON,NULL)) return 0;
+	if (!v4call1(VIDIOC_STREAMON)) return 0;
 	return 1;
 }
 
@@ -2376,8 +2386,8 @@ err_:
 	i = 0;
 	if (
 	    v4cinfo(V4L2_CID_AUTOBRIGHTNESS) &&
-	    io.v4l.qctrl.type == V4L2_CTRL_TYPE_BOOLEAN &&
-	    (i = io.v4l.qctrl.maximum) &&
+	    io.v4l2_queryctrl.type == V4L2_CTRL_TYPE_BOOLEAN &&
+	    (i = io.v4l2_queryctrl.maximum) &&
 	    ((pi[p_Safe]&64) &&
 	    (v4cget(V4L2_CID_AUTOBRIGHTNESS) == 1 || 
 	    (v4cset(V4L2_CID_AUTOBRIGHTNESS,1) &&
@@ -2385,10 +2395,10 @@ err_:
 	    )) {
 		if ((pi[p_Safe]&128) &&
 		    v4cinfo(V4L2_CID_BRIGHTNESS) &&
-		    io.v4l.qctrl.type == V4L2_CTRL_TYPE_INTEGER &&
-		    (io.v4l.qctrl.minimum < io.v4l.qctrl.maximum)) {
+		    io.v4l2_queryctrl.type == V4L2_CTRL_TYPE_INTEGER &&
+		    (io.v4l2_queryctrl.minimum < io.v4l2_queryctrl.maximum)) {
 			DBG("trying to use AUTOBRIGHTNESS + BRIGHTNESS as ALS");
-			v4br = io.v4l.qctrl;
+			v4br = io.v4l2_queryctrl;
 			_thread(2,&thread_v4l_br);
 		} else {
 			DBG("use v4l AUTOBRIGHTNESS");
@@ -2399,17 +2409,20 @@ err_:
 	    DBG("v4l AUTOBRIGHTNESS possible exists, but not used");
 	}
 
-	if (!iocall(VIDIOC_QUERYCAP,&io.v4l.cap)) goto err;
-	if (!(io.v4l.cap.capabilities & V4L2_CAP_VIDEO_CAPTURE)) goto err;
-	if (!(io.v4l.cap.capabilities & V4L2_CAP_STREAMING)) m1=2;
-	if (!(io.v4l.cap.capabilities & V4L2_CAP_READWRITE)) m2=2;
+	IOD(v4l2_capability){};
+	if (!iocall(VIDIOC_QUERYCAP)) goto err;
+	if (!(io.v4l2_capability.capabilities & V4L2_CAP_VIDEO_CAPTURE)) goto err;
+	if (!(io.v4l2_capability.capabilities & V4L2_CAP_STREAMING)) m1=2;
+	if (!(io.v4l2_capability.capabilities & V4L2_CAP_READWRITE)) m2=2;
 
 #ifndef MINIMAL
-	if (v4call1(VIDIOC_CROPCAP,&io.v4l.cropcap.bounds)) {
-		struct v4l2_rect c = io.v4l.cropcap.defrect;
-		if (!ioret && v4call1(VIDIOC_G_CROP,&io.v4l.crop.c) && memcmp(&io.v4l.crop.c,&c,sizeof(c))) {
-			io.v4l.crop.c = c;
-			if (!v4call1(VIDIOC_S_CROP,NULL)){
+	IOD(v4l2_cropcap) {.type = V4L2_BUF_TYPE_VIDEO_CAPTURE};
+	if (iocall(VIDIOC_CROPCAP)) {
+		struct v4l2_rect c = io.v4l2_cropcap.defrect;
+		IOD(v4l2_crop) {.type = V4L2_BUF_TYPE_VIDEO_CAPTURE};
+		if (!ioret && iocall(VIDIOC_G_CROP) && memcmp(&io.v4l2_crop.c,&c,sizeof(c))) {
+			IOD(v4l2_crop) {.type = V4L2_BUF_TYPE_VIDEO_CAPTURE, .c = c};
+			if (!iocall(VIDIOC_S_CROP)){
 			}
 		}
 	}
@@ -2426,27 +2439,23 @@ err_:
 	for(j=0;formats[j];j++) {
 	    i=0;
 	    do {
-		io.v4l.s.index=i;
-		io.v4l.s.pixel_format = formats[j];
-#if 0
-		// my
-		io.v4l.s.type = V4L2_FRMSIZE_TYPE_DISCRETE;
-		if (!iocall(VIDIOC_ENUM_FRAMESIZES,&io.v4l.s.discrete)) break;
-#else
-		// lookup in ffmpeg & guvcview: 0
-		if (!iocall(VIDIOC_ENUM_FRAMESIZES,&io.v4l.s.type)) break;
-#endif
-		if (io.v4l.s.pixel_format != formats[j]) continue;
+		IOD(v4l2_frmsizeenum) {
+			.index=i,
+			.pixel_format = formats[j],
+			//.type = V4L2_FRMSIZE_TYPE_DISCRETE,
+		};
+		if (!iocall(VIDIOC_ENUM_FRAMESIZES)) break;
+		if (io.v4l2_frmsizeenum.pixel_format != formats[j]) continue;
 		unsigned long w,h,l;
-		switch (io.v4l.s.type) {
+		switch (io.v4l2_frmsizeenum.type) {
 		    case V4L2_FRMSIZE_TYPE_DISCRETE:
-			w=io.v4l.s.discrete.width;
-			h=io.v4l.s.discrete.height;
+			w=io.v4l2_frmsizeenum.discrete.width;
+			h=io.v4l2_frmsizeenum.discrete.height;
 			break;
 		    case V4L2_FRMSIZE_TYPE_CONTINUOUS:
 		    case V4L2_FRMSIZE_TYPE_STEPWISE:
-			w=io.v4l.s.stepwise.min_width;
-			h=io.v4l.s.stepwise.min_height;
+			w=io.v4l2_frmsizeenum.stepwise.min_width;
+			h=io.v4l2_frmsizeenum.stepwise.min_height;
 			break;
 		    default:
 			continue;
@@ -2465,25 +2474,29 @@ err_:
 #ifndef MINIMAL
 		i=0;
 		do {
-			io.v4l.fmt.index = i;
-			io.v4l.fmt.type =  V4L2_BUF_TYPE_VIDEO_CAPTURE;
-			if (!iocall(VIDIOC_ENUM_FMT,&io.v4l.fmt.flags)) break;
-			fprintf(stderr," %s",v4fmt2str(io.v4l.fmt.pixelformat));
+			IOD(v4l2_fmtdesc) {
+				.index = i,
+				.type =  V4L2_BUF_TYPE_VIDEO_CAPTURE,
+			};
+			if (!iocall(VIDIOC_ENUM_FMT)) break;
+			fprintf(stderr," %s",v4fmt2str(io.v4l2_fmtdesc.pixelformat));
 		} while ((++i)&&0xffff);
 #endif
 		fprintf(stderr,"\n");
 		goto err_;
 	}
 
-	io.v4l.f = v4;
-	if (!v4call1(VIDIOC_S_FMT,NULL)) goto err;
+	io.v4l2_format = v4;
+	io.v4l2_format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	if (!iocall(VIDIOC_S_FMT)) goto err;
 
-	if (!v4call1(VIDIOC_G_FMT,&io.v4l.f.fmt.pix)) goto err;
-	if (io.v4l.f.fmt.pix.pixelformat != v4.fmt.pix.pixelformat) {
-		ERR("v4l %s format unsupported",v4fmt2str(io.v4l.f.fmt.pix.pixelformat));
+	IOD(v4l2_format) {.type = V4L2_BUF_TYPE_VIDEO_CAPTURE,};
+	if (!iocall(VIDIOC_G_FMT)) goto err;
+	if (io.v4l2_format.fmt.pix.pixelformat != v4.fmt.pix.pixelformat) {
+		ERR("v4l %s format unsupported",v4fmt2str(io.v4l2_format.fmt.pix.pixelformat));
 		goto err_;
 	}
-	v4 = io.v4l.f;
+	v4 = io.v4l2_format;
 	v4.type =  V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
 	// try in order: mmap, userptr, read
@@ -2494,11 +2507,13 @@ err_:
 		switch (v4mem) {
 		    case V4L2_MEMORY_MMAP:
 		    case V4L2_MEMORY_USERPTR:
-			io.v4l.req.count = V4BUFS;
-			io.v4l.req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-			io.v4l.req.memory = v4mem;
-			if (!iocall(VIDIOC_REQBUFS, &io.v4l.req.capabilities)) continue;
-			if ((n = io.v4l.req.count) < 1) continue;
+			IOD(v4l2_requestbuffers) {
+				.count = V4BUFS,
+				.type = V4L2_BUF_TYPE_VIDEO_CAPTURE,
+				.memory = v4mem,
+			};
+			if (!iocall(VIDIOC_REQBUFS)) continue;
+			if ((n = io.v4l2_requestbuffers.count) < 1) continue;
 		}
 		v4buf = calloc(n, sizeof(*v4buf));
 		if (!v4buf) continue;
@@ -2506,10 +2521,10 @@ err_:
 		    case V4L2_MEMORY_MMAP:
 			for (v4nb = 0; v4nb < n; v4nb++) {
 				v4buf0(v4nb);
-				if (!iocall(VIDIOC_QUERYBUF, NULL)) goto err;
-				v4buf[v4nb].start = mmap(NULL,io.v4l.buf.length,PROT_READ | PROT_WRITE,MAP_SHARED,v4fd,io.v4l.buf.m.offset);
+				if (!iocall(VIDIOC_QUERYBUF)) goto err;
+				v4buf[v4nb].start = mmap(NULL,io.v4l2_buffer.length,PROT_READ | PROT_WRITE,MAP_SHARED,v4fd,io.v4l2_buffer.m.offset);
 				if (v4buf[v4nb].start == MAP_FAILED) goto err1;
-				v4buf[v4nb].length = io.v4l.buf.length;
+				v4buf[v4nb].length = io.v4l2_buffer.length;
 			}
 			break;
 		    case V4L2_MEMORY_USERPTR:
