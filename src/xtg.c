@@ -2075,7 +2075,7 @@ struct v4buffer {
 } *v4buf = NULL;
 int v4fd = -1;
 unsigned long v4nb = 0;
-struct v4l2_format v4 = {};
+struct v4l2_format v4 = {.type = V4L2_BUF_TYPE_VIDEO_CAPTURE};
 int nv4ldves = 0;
 
 #define IOD(s) io.s = (struct s)
@@ -2429,7 +2429,6 @@ err_:
 #endif
 
 	unsigned long len = 0xffffffff;
-	v4.fmt.pix.width = v4.fmt.pix.height = 0;
 	__u32 formats[] = {V4L2_PIX_FMT_GREY,
 		V4L2_PIX_FMT_SGRBG8,
 		V4L2_PIX_FMT_YUYV,
@@ -2487,7 +2486,6 @@ err_:
 	}
 
 	io.v4l2_format = v4;
-	io.v4l2_format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	if (!iocall(VIDIOC_S_FMT)) goto err;
 
 	IOD(v4l2_format) {.type = V4L2_BUF_TYPE_VIDEO_CAPTURE,};
@@ -2497,7 +2495,6 @@ err_:
 		goto err_;
 	}
 	v4 = io.v4l2_format;
-	v4.type =  V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
 	// try in order: mmap, userptr, read
 	static unsigned mems[] = {V4L2_MEMORY_MMAP,V4L2_MEMORY_USERPTR,0};
