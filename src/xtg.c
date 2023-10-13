@@ -2327,7 +2327,7 @@ rep1:
 	xmutex_unlock(&mutex2);
 	chlight(l);
 
-	DBG("v4l OK %f s1=%f sleep=%lli brightness=%i",(float)s0,s1,v4delay,v4cget(V4L2_CID_BRIGHTNESS));
+	//DBG("v4l OK %f s1=%f sleep=%lli brightness=%i",(float)s0,s1,v4delay,v4cget(V4L2_CID_BRIGHTNESS));
 
 	goto loop;
 err:
