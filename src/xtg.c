@@ -2039,24 +2039,25 @@ ex:
 
 
 //video
+
+// _v4delay: max(s0,s1)!=0 AKA s0!=s1 - check before call
 #if 0
 static useconds_t _v4delay(float s0,float s1) {
-	return V4MINDELAY + (useconds_t)((V4MAXDELAY-V4MINDELAY)*((s1>s0) ? (s0/s1) :  (s1<s0) ?(s0/s1))) : 1;;
+	return V4MINDELAY + (useconds_t)((V4MAXDELAY-V4MINDELAY)*((s1>s0) ? (s0/s1) : (s0/s1)));;
 }
 #elif 0
 static useconds_t _v4delay(_int s0,_int s1) {
 	return V4MINDELAY + ((s1>s0)?
-		(((V4MAXDELAY-V4MINDELAY)*s0)/s1):(s1<s0)?
-		(((V4MAXDELAY-V4MINDELAY)*s1)/s0)):
-		(V4MAXDELAY-V4MINDELAY);
+		(((V4MAXDELAY-V4MINDELAY)*s0)/s1):
+		(((V4MAXDELAY-V4MINDELAY)*s1)/s0));
 }
 #else
 static useconds_t _v4delay(unsigned int s0,unsigned int s1) {
 #define _sper 8
 #define _sper1(x) ((x<<_sper)/100)
 	unsigned int x = (s1>s0)?
-		((s0<<_sper)/s1):(s1<s0)?
-		((s1<<_sper)/s0):(1<<_sper);
+		((s0<<_sper)/s1):
+		((s1<<_sper)/s0);
 	return (x>_sper1(95)) ? V4MAXDELAY :
 		(x>_sper1(90)) ? V4MAXDELAY/2 :
 		(x>_sper1(80)) ? V4MAXDELAY/4 :
@@ -2108,19 +2109,26 @@ static char *v4fmt2str(__u32 f){
 }
 
 int ioret;
-static int iocall(int req){
+static int iocall(unsigned long req){
 rep:
 	ioret = ioctl(v4fd, req, &io);
 	if (ioret == -1) {
 		if (errno == EINTR) goto rep;
-		if (errno != EINVAL)
-		    ERRno("ioctl %i\n",req);
+		if (errno == EINVAL) switch (req) {
+		    case VIDIOC_ENUM_FMT:
+		    case VIDIOC_ENUM_FRAMESIZES:
+		    case VIDIOC_CROPCAP:
+		    case VIDIOC_QUERYCTRL:
+			return 0;
+		}
+		ERRno("ioctl 0x%lx",req);
 		return 0;
 	}
+	if (!ioret) return 2;
 	return 1;
 }
 
-static int v4call1(int req){
+static int v4call1(unsigned long req){
 	io.i = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	return iocall(req);
 }
@@ -2175,8 +2183,10 @@ static int v4cinfo(__u32 id) {
 static void v4ctrl_list(){\
 	__u32 id = V4L2_CTRL_FLAG_NEXT_CTRL;;
 	while (v4cinfo(id)){
-		printf("v4l ctrl %u 0x%x 0x%x '%s' %i..%i/%i =%i\n",io.v4l2_queryctrl.type,io.v4l2_queryctrl.id-V4L2_CID_BASE,io.v4l2_queryctrl.id-V4L2_CID_CAMERA_CLASS_BASE,io.v4l2_queryctrl.name,io.v4l2_queryctrl.minimum,io.v4l2_queryctrl.maximum,io.v4l2_queryctrl.step,io.v4l2_queryctrl.default_value);
-		id |= V4L2_CTRL_FLAG_NEXT_CTRL;
+		printf("v4l ctrl %u 0x%x '%s' %i..%i/%i =%i\n",
+		io.v4l2_queryctrl.type,io.v4l2_queryctrl.id, io.v4l2_queryctrl.name,
+		io.v4l2_queryctrl.minimum,io.v4l2_queryctrl.maximum,io.v4l2_queryctrl.step,io.v4l2_queryctrl.default_value);
+		id = io.v4l2_queryctrl.id|V4L2_CTRL_FLAG_NEXT_CTRL;
 	};
 }
 
@@ -2189,8 +2199,10 @@ static int v4xcinfo(__u32 id) {
 static void v4xctrl_list(){\
 	__u32 id = V4L2_CTRL_FLAG_NEXT_CTRL;;
 	while (v4xcinfo(id)){
-		printf("v4l ctrl %u 0x%x 0x%x 0x%x '%s' %lli..%lli/%lli %lli\n",io.v4l2_query_ext_ctrl.type,io.v4l2_query_ext_ctrl.id,io.v4l2_query_ext_ctrl.id-V4L2_CID_BASE,io.v4l2_query_ext_ctrl.id-V4L2_CID_CAMERA_CLASS_BASE,io.v4l2_query_ext_ctrl.name,io.v4l2_query_ext_ctrl.minimum,io.v4l2_query_ext_ctrl.maximum,io.v4l2_query_ext_ctrl.step,io.v4l2_query_ext_ctrl.default_value);
-		id |= V4L2_CTRL_FLAG_NEXT_CTRL;
+		printf("v4l ctrl %u 0x%x '%s' %lli..%lli/%lli %lli\n",
+		io.v4l2_query_ext_ctrl.type,io.v4l2_query_ext_ctrl.id,
+		io.v4l2_query_ext_ctrl.name,io.v4l2_query_ext_ctrl.minimum,io.v4l2_query_ext_ctrl.maximum,io.v4l2_query_ext_ctrl.step,io.v4l2_query_ext_ctrl.default_value);
+		id = io.v4l2_queryctrl.id|V4L2_CTRL_FLAG_NEXT_CTRL;
 	};
 }
 
@@ -2205,6 +2217,7 @@ static void v4cdefault(__u32 id, int i) {
 static void *thread_v4l(){
 	unsigned long cnt, i, cnt0 = 1;
 	unsigned char *b;
+	unsigned long long l0, l = 0xfff;
 	float s0,s1=0, dv = 1, dv0 = 1;
 	max_light = pf[p_max_light];
 #ifdef V4L_NOBLOCK
@@ -2223,6 +2236,7 @@ static void *thread_v4l(){
 rep0:
 	v4delay = V4MINDELAY;
 loop:
+	l0 = l;
 	usleep(v4delay);
 again:
 #ifdef V4L_NOBLOCK
@@ -2302,16 +2316,18 @@ rep1:
 			goto err1;
 		}
 		dv = (cnt0 = cnt)/dv0;
-		s1 = s/dv;
-	}
+		l = s0 = s1 = s/dv;
+		v4delay = V4MINDELAY;
+	} else if ((s0 = s/dv) == s1 ||
+	    (l = s1 = (s1*(V4EWMH-1)+s0)/V4EWMH) == l0) {
+		v4delay = V4MAXDELAY;
+		xmutex_unlock(&mutex2);
+		goto loop;
+	} else v4delay = _v4delay(s0,s1);
 	xmutex_unlock(&mutex2);
+	chlight(l);
 
-	s0=s/dv;
-	unsigned long long l = s1 = (s1*(V4EWMH-1)+s0)/V4EWMH;
-	v4delay = _v4delay(s0,s1);
-	static unsigned long long l0 = 0xfff;
-	if (l != l0) chlight(l0 = l);
-	//DBG("v4l OK %f s1=%f sleep=%lli brightness=%i",(float)s0,s1,v4delay,v4cget(V4L2_CID_BRIGHTNESS));
+	DBG("v4l OK %f s1=%f sleep=%lli brightness=%i",(float)s0,s1,v4delay,v4cget(V4L2_CID_BRIGHTNESS));
 
 	goto loop;
 err:
@@ -2341,9 +2357,13 @@ static void *thread_v4l_br(){
 rep:
 	if (br < io0.qc.minimum) goto err1;
 	br = 255*(br - io0.qc.minimum)/bb;
-	if (br != br0) chlight(br);
-	v4delay = _v4delay(br,br0);
-	br0 = br;
+	if (br != br0) {
+		chlight(br);
+		v4delay = _v4delay(br,br0);
+		br0 = br;
+	} else {
+		v4delay = V4MAXDELAY; 
+	}
 	usleep(v4delay);
 	xmutex_lock(&mutex2);
 	br = v4cget(V4L2_CID_BRIGHTNESS)?:1;
@@ -2424,7 +2444,7 @@ err_:
 
 #ifndef MINIMAL
 	IOD(v4l2_cropcap) {.type = V4L2_BUF_TYPE_VIDEO_CAPTURE};
-	if (iocall(VIDIOC_CROPCAP)) {
+	if (iocall(VIDIOC_CROPCAP) == 1) {
 		struct v4l2_rect c = io.v4l2_cropcap.defrect;
 		IOD(v4l2_crop) {.type = V4L2_BUF_TYPE_VIDEO_CAPTURE};
 		if (!ioret && iocall(VIDIOC_G_CROP) && memcmp(&io.v4l2_crop.c,&c,sizeof(c))) {
@@ -2549,25 +2569,35 @@ err1:
 		goto err_;
 	}
 
-	if (!v4start()) goto err;
+	// defaults
+	v4cdefault(V4L2_CID_EXPOSURE_AUTO,0);
+	v4cdefault(V4L2_CID_EXPOSURE_ABSOLUTE,0);
+	v4cdefault(V4L2_CID_EXPOSURE_AUTO_PRIORITY,0);
+	v4cdefault(V4L2_CID_BACKLIGHT_COMPENSATION,0);
 
+	v4cset(V4L2_CID_EXPOSURE_AUTO,V4L2_EXPOSURE_MANUAL);
+	v4cset(V4L2_CID_BACKLIGHT_COMPENSATION,0);
+	v4cset(V4L2_CID_EXPOSURE_AUTO_PRIORITY,0);
+	v4cdefault(V4L2_CID_EXPOSURE_ABSOLUTE,0);
+#if 1
+	// I have result here
+	v4cset(V4L2_CID_EXPOSURE_AUTO,V4L2_EXPOSURE_APERTURE_PRIORITY); // auto exposure time
+#endif
+
+#if 0
+	v4ctrl_list();
+	DBG("v4l exposure auto(%x)=%lli absolute(%x)=%lli prio(%x)=%lli",
+	    V4L2_CID_EXPOSURE_AUTO,v4cget(V4L2_CID_EXPOSURE_AUTO),
+	    V4L2_CID_EXPOSURE_ABSOLUTE,v4cget(V4L2_CID_EXPOSURE_ABSOLUTE),
+	    V4L2_CID_EXPOSURE_AUTO_PRIORITY,v4cget(V4L2_CID_EXPOSURE_AUTO_PRIORITY));
+#endif
+
+#ifndef V4L_NOBLOCK
+	if (!v4start()) goto err;
+#endif
 	DBG("v4l %s format %ix%i %s %s buffers=%lu", pa[p_v4l],
 	    v4.fmt.pix.width,v4.fmt.pix.height,v4fmt2str(v4.fmt.pix.pixelformat),
 	    (!io0.buf.memory)?"read":(io0.buf.memory==V4L2_MEMORY_USERPTR)?"userptr":"mmap",v4nb);
-
-	v4cset(V4L2_CID_EXPOSURE_AUTO,1);
-	v4cdefault(V4L2_CID_EXPOSURE_ABSOLUTE,1);
-	v4cset(V4L2_CID_EXPOSURE_AUTO_PRIORITY,0);
-	v4cdefault(V4L2_CID_EXPOSURE_AUTO,2);
-	if (!v4cget(V4L2_CID_BACKLIGHT_COMPENSATION))
-	    v4cset(V4L2_CID_BACKLIGHT_COMPENSATION,1);
-#if 0
-	v4ctrl_list();
-	DBG("v4l exposure auto=%lli absolute=%lli prio=%lli",
-	    v4cget(V4L2_CID_EXPOSURE_AUTO),
-	    v4cget(V4L2_CID_EXPOSURE_ABSOLUTE),
-	    v4cget(V4L2_CID_EXPOSURE_AUTO_PRIORITY));
-#endif
 
 	_thread(2,&thread_v4l);
 	return 1; 
