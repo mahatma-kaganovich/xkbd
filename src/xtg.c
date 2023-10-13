@@ -741,11 +741,8 @@ static void chTerm(){
 _short xssState = 3;
 #ifdef USE_THREAD
 static int active_bl_();
-//static int iocall(int req);
-static int v4call1(int req);
 static int v4start();
-unsigned long v4mem = 0;
-useconds_t v4delay = V4MINDELAY;
+static void v4stop();
 #endif
 // todo: stop ALS streaming too
 static void scrONOFF() {
@@ -756,13 +753,12 @@ static void scrONOFF() {
 			off = 1;
 			xmutex_lock(&mutex2);
 #ifdef V4L_NOBLOCK
-			if (v4mem) v4call1(VIDIOC_STREAMOFF);
+			v4stop();
 #endif
 		}
 	} else {
 		if (off) {
 			off = 0;
-			v4delay = 0;
 #ifdef V4L_NOBLOCK
 			v4start();
 #endif
@@ -2078,6 +2074,7 @@ int v4fd = -1;
 unsigned long v4nb = 0;
 struct v4l2_format v4 = {.type = V4L2_BUF_TYPE_VIDEO_CAPTURE};
 int nv4ldves = 0;
+useconds_t v4delay = V4MINDELAY;
 
 #define IOD(s) io.s = (struct s)
 union {
@@ -2097,6 +2094,11 @@ union {
 	struct1(v4l2_ctrl_hdr10_cll_info)
 	struct1(v4l2_control)
 } io;
+
+union {
+	struct v4l2_buffer buf;
+	struct v4l2_queryctrl qc;
+} io0 = {.buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE,};
 
 static char *v4fmt2str(__u32 f){
 	static unsigned char s[5];
@@ -2124,26 +2126,27 @@ static int v4call1(int req){
 }
 
 static void v4buf0(unsigned index){
-	IOD(v4l2_buffer) {
-		.index = index,
-		.type = V4L2_BUF_TYPE_VIDEO_CAPTURE,
-		.memory = v4mem,
-	};
+	io.v4l2_buffer = io0.buf;
+	io.v4l2_buffer.index = index;
+}
+
+static void v4stop(){
+	if (io0.buf.memory) v4call1(VIDIOC_STREAMOFF);
 }
 
 static void v4close(){
 	DBG("v4close");
 	if (!v4buf) goto close;
-	if (v4mem) v4call1(VIDIOC_STREAMOFF);
+	v4stop();
 	while(v4nb--) {
 	    if (v4buf[v4nb].length) {
-		if (v4mem==V4L2_MEMORY_MMAP) munmap(v4buf[v4nb].start,v4buf[v4nb].length);
+		if (io0.buf.memory==V4L2_MEMORY_MMAP) munmap(v4buf[v4nb].start,v4buf[v4nb].length);
 		else free(v4buf[v4nb].start);
 	    }
 	};
 	free(v4buf);
 	v4buf = NULL;
-	v4mem = 0;
+	io0.buf.memory = 0;
 close:
 	if (v4fd != -1) {
 		close(v4fd);
@@ -2198,6 +2201,7 @@ static void v4cdefault(__u32 id, int i) {
 	}
 }
 
+
 static void *thread_v4l(){
 	unsigned long cnt, i, cnt0 = 1;
 	unsigned char *b;
@@ -2216,7 +2220,6 @@ static void *thread_v4l(){
 		dv0 = 255./15;
 		break;
 	}
-
 rep0:
 	v4delay = V4MINDELAY;
 loop:
@@ -2235,8 +2238,8 @@ select:
 #endif
 	xmutex_lock(&mutex2);
 rep:
-	if (v4mem) {
-		v4buf0(0);
+	if (io0.buf.memory) {
+		io.v4l2_buffer = io0.buf;
 		if (ioctl(v4fd, VIDIOC_DQBUF, &io.v4l2_buffer) == -1) goto err_r;
 		if (io.v4l2_buffer.index >= v4nb) goto err1;
 		cnt = io.v4l2_buffer.bytesused;
@@ -2271,7 +2274,7 @@ err_r:
 		break;
 	}
 rep1:
-	switch (v4mem) {
+	switch (io0.buf.memory) {
 	    case V4L2_MEMORY_USERPTR:
 		for (i=0; i<v4nb; i++)
 		    if (io.v4l2_buffer.m.userptr == (unsigned long)v4buf[i].start
@@ -2292,17 +2295,17 @@ rep1:
 			goto err1;
 		}
 	}
-	xmutex_unlock(&mutex2);
-
 	// dont want! to do  early as cnt=width*height*2
 	if (cnt != cnt0) {
 		if (!cnt) {
 			DBG("v4r read zero buffer");
-			goto err;
+			goto err1;
 		}
 		dv = (cnt0 = cnt)/dv0;
 		s1 = s/dv;
 	}
+	xmutex_unlock(&mutex2);
+
 	s0=s/dv;
 	unsigned long long l = s1 = (s1*(V4EWMH-1)+s0)/V4EWMH;
 	v4delay = _v4delay(s0,s1);
@@ -2311,51 +2314,56 @@ rep1:
 	//DBG("v4l OK %f s1=%f sleep=%lli brightness=%i",(float)s0,s1,v4delay,v4cget(V4L2_CID_BRIGHTNESS));
 
 	goto loop;
-err1:
-	xmutex_unlock(&mutex2);
 err:
+	xmutex_lock(&mutex2);
+err1:
 	v4close();
+	xmutex_unlock(&mutex2);
 	_unthread(2);
 }
 
 // try to use AUTOBRIGHTNESS as ALS
 // never tested
 #define TEST_V4L_BR 10
-struct v4l2_queryctrl v4br;
 static void *thread_v4l_br(){
-	__s32 br, br0 = v4br.default_value;
-	float bb = v4br.maximum - v4br.minimum;
+	__s32 br, br0 = io0.qc.default_value;
+	float bb = io0.qc.maximum - io0.qc.minimum;
 
 	for (int i=0; ;i++) {
+		xmutex_lock(&mutex2);
 		br = v4cget(V4L2_CID_BRIGHTNESS);
 		if (ioret == -1) goto err;
-		if (br != v4br.default_value || i>TEST_V4L_BR) break;
+		xmutex_unlock(&mutex2);
+		if (br != io0.qc.default_value || i>TEST_V4L_BR) break;
 		usleep(1000000);
 	}
-	if (br == v4br.default_value) goto err1;
+	if (br == io0.qc.default_value) goto err1;
 rep:
-	if (br < v4br.minimum) goto err1;
-	br = 255*(br - v4br.minimum)/bb;
+	if (br < io0.qc.minimum) goto err1;
+	br = 255*(br - io0.qc.minimum)/bb;
 	if (br != br0) chlight(br);
 	v4delay = _v4delay(br,br0);
 	br0 = br;
 	usleep(v4delay);
-	_xmutex_lock2();
+	xmutex_lock(&mutex2);
 	br = v4cget(V4L2_CID_BRIGHTNESS)?:1;
 	if (ioret == -1) goto err;
+	xmutex_unlock(&mutex2);
 	goto rep;
 err1:
 	DBG("v4l brightness looks like not ALS-style");
+	xmutex_lock(&mutex2);
 err:
 	v4close();
+	xmutex_unlock(&mutex2);
 	_unthread(2);
 }
 
 static int v4start() {
-	if (!v4mem) return 1;
+	if (!io0.buf.memory) return 1;
 	for (int i = 0; i < v4nb; i++) {
 		v4buf0(i);
-		if (v4mem==V4L2_MEMORY_USERPTR) {
+		if (io0.buf.memory==V4L2_MEMORY_USERPTR) {
 			io.v4l2_buffer.m.userptr = (unsigned long)v4buf[i].start;
 			io.v4l2_buffer.length = v4buf[i].length;
 		}
@@ -2397,7 +2405,7 @@ err_:
 		    io.v4l2_queryctrl.type == V4L2_CTRL_TYPE_INTEGER &&
 		    (io.v4l2_queryctrl.minimum < io.v4l2_queryctrl.maximum)) {
 			DBG("trying to use AUTOBRIGHTNESS + BRIGHTNESS as ALS");
-			v4br = io.v4l2_queryctrl;
+			io0.qc = io.v4l2_queryctrl;
 			_thread(2,&thread_v4l_br);
 		} else {
 			DBG("use v4l AUTOBRIGHTNESS");
@@ -2499,21 +2507,21 @@ err_:
 	static unsigned mems[] = {V4L2_MEMORY_MMAP,V4L2_MEMORY_USERPTR,0};
 	for (i=m1; i<m2; i++) {
 		unsigned long n = 1;
-		v4mem = mems[i];
-		switch (v4mem) {
+		io0.buf.memory = mems[i];
+		switch (io0.buf.memory) {
 		    case V4L2_MEMORY_MMAP:
 		    case V4L2_MEMORY_USERPTR:
 			IOD(v4l2_requestbuffers) {
 				.count = V4BUFS,
 				.type = V4L2_BUF_TYPE_VIDEO_CAPTURE,
-				.memory = v4mem,
+				.memory = io0.buf.memory,
 			};
 			if (!iocall(VIDIOC_REQBUFS)) continue;
 			if ((n = io.v4l2_requestbuffers.count) < 1) continue;
 		}
 		v4buf = calloc(n, sizeof(*v4buf));
 		if (!v4buf) continue;
-		switch (v4mem) {
+		switch (io0.buf.memory) {
 		    case V4L2_MEMORY_MMAP:
 			for (v4nb = 0; v4nb < n; v4nb++) {
 				v4buf0(v4nb);
@@ -2545,7 +2553,7 @@ err1:
 
 	DBG("v4l %s format %ix%i %s %s buffers=%lu", pa[p_v4l],
 	    v4.fmt.pix.width,v4.fmt.pix.height,v4fmt2str(v4.fmt.pix.pixelformat),
-	    (!v4mem)?"read":(v4mem==V4L2_MEMORY_USERPTR)?"userptr":"mmap",v4nb);
+	    (!io0.buf.memory)?"read":(io0.buf.memory==V4L2_MEMORY_USERPTR)?"userptr":"mmap",v4nb);
 
 	v4cset(V4L2_CID_EXPOSURE_AUTO,1);
 	v4cdefault(V4L2_CID_EXPOSURE_ABSOLUTE,1);
