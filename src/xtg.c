@@ -2090,6 +2090,7 @@ union {
 	struct1(v4l2_fmtdesc)
 	struct1(v4l2_requestbuffers)
 	struct1(v4l2_buffer)
+	struct1(v4l2_input)
 
 	struct1(v4l2_queryctrl)
 	struct1(v4l2_query_ext_ctrl)
@@ -2116,6 +2117,7 @@ rep:
 	if (ioret == -1) {
 		if (errno == EINTR) goto rep;
 		if (errno == EINVAL) switch (req) {
+		    case VIDIOC_ENUMINPUT:
 		    case VIDIOC_ENUM_FMT:
 		    case VIDIOC_ENUM_FRAMESIZES:
 		    case VIDIOC_CROPCAP:
@@ -2398,6 +2400,7 @@ static int v4open(){
 	if ((threads&2)) return 0;
 	unsigned long i,j,m1=0,m2=3;
 
+	DBG("v4l open '%s'",pa[p_v4l]);
 #ifdef V4L_NOBLOCK
 	v4fd = open(pa[p_v4l], O_RDWR | O_NONBLOCK, 0);
 #else
@@ -2410,6 +2413,29 @@ err_:
 		v4close();
 		return 0;
 	}
+
+	i=0;
+	j=0xffff;
+	do {
+		IOD(v4l2_input){.index = i};
+		if (!iocall(VIDIOC_ENUMINPUT)) break;
+		DBG("v4l input %i '%s' type %i",i,io.v4l2_input.name,io.v4l2_input.type);
+		if (io.v4l2_input.type == V4L2_INPUT_TYPE_CAMERA && j == 0xffff) j=i;
+		//if (io.v4l2_input.type == V4L2_INPUT_TYPE_TOUCH) {};
+	} while((++i)&0xfff);
+	if (j == 0xffff) {
+		//if (!i) goto skip_input;
+		ERR("no v4l camera");
+		goto err_;
+	}
+	io.i = 0;
+	if (!iocall(VIDIOC_G_INPUT)) goto err;
+	if (io.i != j) {
+		io.i = j;
+		DBG("v4l switch input to %i",j);
+		if (!iocall(VIDIOC_S_INPUT)) goto err;
+	}
+skip_input:
 
 	i = 0;
 	if (
@@ -2437,6 +2463,7 @@ err_:
 	    DBG("v4l AUTOBRIGHTNESS possible exists, but not used");
 	}
 
+	i=0;
 	IOD(v4l2_capability){};
 	if (!iocall(VIDIOC_QUERYCAP)) goto err;
 	if (!(io.v4l2_capability.capabilities & V4L2_CAP_VIDEO_CAPTURE)) goto err;
@@ -2599,7 +2626,7 @@ err1:
 #ifndef V4L_NOBLOCK
 	if (!v4start()) goto err;
 #endif
-	DBG("v4l %s format %ix%i %s %s buffers=%lu", pa[p_v4l],
+	DBG("v4l format %ix%i %s %s buffers=%lu",
 	    v4.fmt.pix.width,v4.fmt.pix.height,v4fmt2str(v4.fmt.pix.pixelformat),
 	    (!io0.buf.memory)?"read":(io0.buf.memory==V4L2_MEMORY_USERPTR)?"userptr":"mmap",v4nb);
 
