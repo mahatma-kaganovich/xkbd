@@ -747,8 +747,7 @@ static void v4stop();
 // todo: stop ALS streaming too
 static void scrONOFF() {
 #ifdef USE_MUTEX
-	static _short off = 1;
-	if ((threads&2)) {
+	static _short off = 0;
 	if (xssState == 1 || !active_bl_()) {
 		if (!off) {
 			off = 1;
@@ -758,6 +757,7 @@ static void scrONOFF() {
 #endif
 		}
 	} else {
+//		if (off && (threads&2)) {
 		if (off) {
 			off = 0;
 #ifdef V4L_NOBLOCK
@@ -765,7 +765,6 @@ static void scrONOFF() {
 #endif
 			xmutex_unlock(&mutex2);
 		}
-	}
 	}
 #endif
 }
@@ -2573,14 +2572,17 @@ err1:
 
 	// defaults
 	v4cdefault(V4L2_CID_EXPOSURE_AUTO,0);
-	v4cdefault(V4L2_CID_EXPOSURE_ABSOLUTE,0);
-	v4cdefault(V4L2_CID_EXPOSURE_AUTO_PRIORITY,0);
-	v4cdefault(V4L2_CID_BACKLIGHT_COMPENSATION,0);
-
 	v4cset(V4L2_CID_EXPOSURE_AUTO,V4L2_EXPOSURE_MANUAL);
-	v4cset(V4L2_CID_BACKLIGHT_COMPENSATION,0);
+
+	v4cdefault(V4L2_CID_EXPOSURE_AUTO_PRIORITY,0);
 	v4cset(V4L2_CID_EXPOSURE_AUTO_PRIORITY,0);
+
 	v4cdefault(V4L2_CID_EXPOSURE_ABSOLUTE,0);
+	v4cdefault(V4L2_CID_EXPOSURE_ABSOLUTE,0);
+
+	v4cdefault(V4L2_CID_BACKLIGHT_COMPENSATION,0);
+	v4cset(V4L2_CID_BACKLIGHT_COMPENSATION,0);
+
 #if 1
 	// I have result here
 	v4cset(V4L2_CID_EXPOSURE_AUTO,V4L2_EXPOSURE_APERTURE_PRIORITY); // auto exposure time
@@ -5289,6 +5291,11 @@ static void init(){
 	int evmask = PropertyChangeMask;
 	int ierr;
 
+#ifdef USE_MUTEX
+	xmutex_init(&mutex0);
+	xmutex_init(&mutex);
+	xmutex_init(&mutex2);
+#endif
 	screen = DefaultScreen(dpy);
 	root = DefaultRootWindow(dpy);
 //	XGetWindowAttributes(dpy, root, &wa);
@@ -5509,9 +5516,8 @@ static void init(){
 		pth_attr = &_pth_attr;
 #endif
 #ifdef USE_MUTEX
-	xmutex_init(&mutex0);
-	xmutex_init(&mutex);
 	if (pi[p_max_light]) {
+		scrONOFF();
 		if (!pa[p_v4l] || (pi[p_Safe]&32))
 		    open_iio_light();
 		if (pa[p_v4l])
