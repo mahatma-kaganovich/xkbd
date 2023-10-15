@@ -747,7 +747,8 @@ static void v4stop();
 // todo: stop ALS streaming too
 static void scrONOFF() {
 #ifdef USE_MUTEX
-	static _short off = 0;
+	static _short off = 1;
+	if ((threads&2)) {
 	if (xssState == 1 || !active_bl_()) {
 		if (!off) {
 			off = 1;
@@ -764,6 +765,7 @@ static void scrONOFF() {
 #endif
 			xmutex_unlock(&mutex2);
 		}
+	}
 	}
 #endif
 }
