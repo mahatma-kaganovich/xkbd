@@ -297,6 +297,10 @@ unsigned char *ret;
 static inline _int _min(_int x,_int y){ return x<y?x:y; }
 static inline _int _max(_int x,_int y){ return x>y?x:y; }
 
+#define floatFmt 32
+#define winFmt 32
+#define atomFmt 32
+
 #ifdef XTG
 int devid = 0;
 int xiopcode=0, xfopcode=0, xfevent=-100, vXR = 0;
@@ -304,9 +308,6 @@ Atom aFloat,aMatrix,aABS,aDevMon;
 XRRScreenResources *xrrr = NULL;
 _short showPtr, curShow;
 _short _volatile oldShowPtr = 0;
-int floatFmt = 32;
-int atomFmt = 32;
-int winFmt = 32;
 _short useRawTouch = 0, useRawButton = 0;
 int bits_per_rgb = 0;
 
@@ -651,8 +652,10 @@ static Bool getRules(){
 
 static int getWProp(Window w, Atom prop, Atom type, int size){
 	_free(ret);
-	if (!(XGetWindowProperty(dpy,w,prop,0,1024,False,type,&pr_t,&pr_f,&n,&pr_b,&ret)==Success && pr_f>>3 == size && ret))
+	int re;
+	if (!((re=XGetWindowProperty(dpy,w,prop,0,1024,False,type,&pr_t,&pr_f,&n,&pr_b,&ret)==Success) && pr_f == size && ret)) {
 		n=0;
+	};
 	return n;
 }
 
@@ -935,7 +938,7 @@ static void WMState(Atom state, _short op){
 		break;
 	    default:
 		noXSS1 = 0;
-		getWProp(win,aWMState,XA_ATOM,sizeof(Atom));
+		getWProp(win,aWMState,XA_ATOM,atomFmt);
 		for (i=0; i<n; i++) if (((Atom*)ret)[i]==aFullScreen) {
 			noXSS1 = 1;
 			break;
@@ -4744,7 +4747,7 @@ static void getHierarchy(){
 			// type |= o_kbd|o_master;
 			if (!kbdDev) {
 				kbdDev = devid;
-				if (!getWProp(root,aActWin,XA_WINDOW,sizeof(Window)))
+				if (!getWProp(root,aActWin,XA_WINDOW,winFmt))
 					xiSetMask(ximask0,XI_FocusIn);
 			}
 			continue;
@@ -5184,7 +5187,7 @@ static void _scr_size(){
 #endif
 
 static void getPropWin1(){
-	if (getWProp(root,aActWin,XA_WINDOW,sizeof(Window)))
+	if (getWProp(root,aActWin,XA_WINDOW,winFmt))
 		win1 = *(Window*)ret;
 }
 
@@ -5201,7 +5204,7 @@ static void getWinGrp(){
 	}
 	win = win1;
 	grp1 = 0;
-	if (win!=root && getWProp(win,aKbdGrp,XA_CARDINAL,sizeof(CARD32)))
+	if (win!=root && getWProp(win,aKbdGrp,XA_CARDINAL,32))
 		grp1 = *(CARD32*)ret;
 	while (grp1 != grp && XkbLockGroup(dpy, XkbUseCoreKbd, grp1)!=Success && grp1) {
 		XDeleteProperty(dpy,win,aKbdGrp);
