@@ -297,14 +297,11 @@ unsigned char *ret;
 static inline _int _min(_int x,_int y){ return x<y?x:y; }
 static inline _int _max(_int x,_int y){ return x>y?x:y; }
 
-#define floatFmt 32
-#define winFmt 32
-#define atomFmt 32
 
 #ifdef XTG
 int devid = 0;
 int xiopcode=0, xfopcode=0, xfevent=-100, vXR = 0;
-Atom aFloat,aMatrix,aABS,aDevMon;
+Atom aMatrix,aABS,aDevMon;
 XRRScreenResources *xrrr = NULL;
 _short showPtr, curShow;
 _short _volatile oldShowPtr = 0;
@@ -329,7 +326,6 @@ _short _wait_mask = _w_none|_w_init;
 #define DPI_EQ(w,h) {if (!(pi[p_safe]&512)) { if (h > w) w = h; else h = w; }}
 
 #define prop_int int
-int intFmt = 32;
 #ifdef USE_EVDEV
 Atom aNode;
 #endif
@@ -650,12 +646,29 @@ static Bool getRules(){
 	return False;
 }
 
-static int getWProp(Window w, Atom prop, Atom type, int size){
+#define floatFmt 32
+#define winFmt 32
+#define atomFmt 32
+#define intFmt 32
+#ifdef XTG
+Atom aFloat;
+#endif
+
+static int fmtOf(Atom type,int def){
+	return (type==XA_STRING
+//		||type==XA_CARDINAL
+		)?8:
+#ifdef XTG
+		(type==aFloat)?floatFmt:
+#endif
+		(type==XA_ATOM)?atomFmt:(type==XA_INTEGER)?intFmt:(type==XA_WINDOW)?winFmt:def;
+}
+
+
+static int getWProp(Window w, Atom prop, Atom type){
 	_free(ret);
-	int re;
-	if (!((re=XGetWindowProperty(dpy,w,prop,0,1024,False,type,&pr_t,&pr_f,&n,&pr_b,&ret)==Success) && pr_f == size && ret)) {
+	if (!(XGetWindowProperty(dpy,w,prop,0,1024,False,type,&pr_t,&pr_f,&n,&pr_b,&ret)==Success && pr_f == fmtOf(type,32) && ret))
 		n=0;
-	};
 	return n;
 }
 
@@ -938,7 +951,7 @@ static void WMState(Atom state, _short op){
 		break;
 	    default:
 		noXSS1 = 0;
-		getWProp(win,aWMState,XA_ATOM,atomFmt);
+		getWProp(win,aWMState,XA_ATOM);
 		for (i=0; i<n; i++) if (((Atom*)ret)[i]==aFullScreen) {
 			noXSS1 = 1;
 			break;
@@ -1178,12 +1191,6 @@ static int _delay(Time delay){
 #endif
 	fd_set rs = dpy_rs;
 	return !Select(dpy_fd1, &rs, 0, 0, &dpy_tv1);
-}
-
-static int fmtOf(Atom type,int def){
-	return (type==XA_STRING
-//		||type==XA_CARDINAL
-		)?8:(type==aFloat)?floatFmt:(type==XA_ATOM)?atomFmt:(type==XA_INTEGER)?intFmt:(type==XA_WINDOW)?winFmt:def;
 }
 
 #ifdef PROP_FMT
@@ -4747,7 +4754,7 @@ static void getHierarchy(){
 			// type |= o_kbd|o_master;
 			if (!kbdDev) {
 				kbdDev = devid;
-				if (!getWProp(root,aActWin,XA_WINDOW,winFmt))
+				if (!getWProp(root,aActWin,XA_WINDOW))
 					xiSetMask(ximask0,XI_FocusIn);
 			}
 			continue;
@@ -5187,7 +5194,7 @@ static void _scr_size(){
 #endif
 
 static void getPropWin1(){
-	if (getWProp(root,aActWin,XA_WINDOW,winFmt))
+	if (getWProp(root,aActWin,XA_WINDOW))
 		win1 = *(Window*)ret;
 }
 
@@ -5204,7 +5211,7 @@ static void getWinGrp(){
 	}
 	win = win1;
 	grp1 = 0;
-	if (win!=root && getWProp(win,aKbdGrp,XA_CARDINAL,32))
+	if (win!=root && getWProp(win,aKbdGrp,XA_CARDINAL))
 		grp1 = *(CARD32*)ret;
 	while (grp1 != grp && XkbLockGroup(dpy, XkbUseCoreKbd, grp1)!=Success && grp1) {
 		XDeleteProperty(dpy,win,aKbdGrp);
