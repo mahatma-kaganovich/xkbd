@@ -325,7 +325,6 @@ _short _wait_mask = _w_none|_w_init;
 #define INCH 25.4
 #define DPI_EQ(w,h) {if (!(pi[p_safe]&512)) { if (h > w) w = h; else h = w; }}
 
-#define prop_int int
 #ifdef USE_EVDEV
 Atom aNode;
 #endif
@@ -835,11 +834,11 @@ static _short dpms_state(){
 #ifdef XTG
 
 typedef union _xrp_ {
-	prop_int i;
+	long i;
 	Atom a;
 } _xrp_t;
 
-#define XRP_EQ(x,y) ((sizeof(prop_int) == sizeof(Atom) || type_xrp[prI] == XA_ATOM) ? (x.a == y.a) : (x.i == y.i))
+#define XRP_EQ(x,y) ((sizeof(x.i) == sizeof(x.a) || type_xrp[prI] == XA_ATOM) ? (x.a == y.a) : (x.i == y.i))
 
 typedef enum {
 	xrp_non_desktop,
@@ -1205,10 +1204,10 @@ static void *fmt2fmt(void *from,Atom fromT,int fromF,void *to,Atom toT,int toF,u
 	default: return NULL;
 	}
 	switch (toF) {
+	case 32: sz = 8; break;
 	case 64:
-	case 32:
 	case 16:
-	case 8: break;
+	case 8: sz = toF>>3;break;
 	default: return NULL;
 	}
 
@@ -1216,19 +1215,19 @@ static void *fmt2fmt(void *from,Atom fromT,int fromF,void *to,Atom toT,int toF,u
 	long long x;
 	void *ret1 = ret;
 
-	if (!to) to = ret = malloc((toF>>3)*cnt);
+	if (!to) to = ret = malloc(sz*cnt);
 	for (i=0; i<cnt; i++) {
 		if (fromT == XA_INTEGER) {
 			switch (fromF) {
 			case 64: x = ((int64_t*)from)[i]; break;
-			case 32: x = ((int32_t*)from)[i]; break;
+			case 32: x = ((long*)from)[i]; break;
 			case 16: x = ((int16_t*)from)[i]; break;
 			case 8: x = ((int8_t*)from)[i]; break;
 			}
 		} else {
 			switch (fromF) {
 			case 64: x = ((uint64_t*)from)[i]; break;
-			case 32: x = ((uint32_t*)from)[i]; break;
+			case 32: x = ((unsigned long*)from)[i]; break;
 			case 16: x = ((uint16_t*)from)[i]; break;
 			case 8: x = ((uint8_t*)from)[i]; break;
 			}
@@ -1236,14 +1235,14 @@ static void *fmt2fmt(void *from,Atom fromT,int fromF,void *to,Atom toT,int toF,u
 		if (toT == XA_INTEGER) {
 			switch (toF) {
 			case 64: ((int64_t*)to)[i] = x; break;
-			case 32: ((int32_t*)to)[i] = x; break;
+			case 32: ((long*)to)[i] = x; break;
 			case 16: ((int16_t*)to)[i] = x; break;
 			case 8: ((int8_t*)to)[i] = x; break;
 			}
 		} else {
 			switch (toF) {
 			case 64: ((uint64_t*)to)[i] = x; break;
-			case 32: ((uint32_t*)to)[i] = x; break;
+			case 32: ((unsigned long*)to)[i] = x; break;
 			case 16: ((uint16_t*)to)[i] = x; break;
 			case 8: ((uint8_t*)to)[i] = x; break;
 			}
@@ -1283,7 +1282,7 @@ err:
 	}
 	if (*data) {
 		if (type == XA_STRING) pr_n++;
-		pr_n*=(f>>3);
+		pr_n*=(f==32)?8:(f>>3);
 		if (chk && !memcmp(*data,ret,pr_n)) return 2;
 		else if (chk<2) memcpy(*data,ret,pr_n);
 		else return 0;
@@ -3459,15 +3458,15 @@ static _short _pr_chk(_xrp_t *v){
 		_short rr = 0;
 		if (v == &val_xrp[xrp_bpc]) {
 			if ((pi[p_Safe]&2) || !bits_per_rgb) return 0;
-			*(prop_int*)v = bits_per_rgb;
+			v->i = bits_per_rgb;
 			rr = 1;
 		}
-		if (*(prop_int*)v < p->values[0]) {
-			if (rr) *(prop_int*)v = p->values[0];
+		if (v->i < p->values[0]) {
+			if (rr) v->i = p->values[0];
 			else return 0;
 		}
-		if (*(prop_int*)v > p->values[1]) {
-			if (rr) *(prop_int*)v = p->values[1];
+		if (v->i > p->values[1]) {
+			if (rr) v->i = p->values[1];
 			else return 0;
 		}
 		return 1;
