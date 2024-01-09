@@ -294,7 +294,7 @@ int sig[8];
 Atom aStrut,aStrutPartial;
 static void setSize(int x, int y, int width, int height, int resize){
 	resize*=UNSIZE;
-	CARD32 prop[12];
+	int prop[12];
 	memset(&prop,0,sizeof(prop));
 	if (dock & 2) {
 		if (top) {
@@ -1043,14 +1043,14 @@ re_crts:
 //      Atom version = 4;
 //      __prop(32,"XdndAware",XA_ATOM,&version,1);
       if (dock&512) {
-	CARD32 dsks = 0xffffffff;
+	int dsks = 0xffffffff;
 	_propCard32(_atom("_NET_WM_DESKTOP"),&dsks,1);
       }
       if (dock&1024)
 	_propAtom32(astate,"_NET_WM_STATE_SKIP_PAGER");
 
       Atom mwm_atom = _atom("_MOTIF_WM_HINTS");
-      static CARD32 prop5[5] = {2, 0, 0, 0, 0};
+      static int prop5[5] = {2, 0, 0, 0, 0};
       XChangeProperty(display,win, mwm_atom, mwm_atom,32,PropModeReplace,(unsigned char *)&prop5,5);
 
       static XWMHints wm_hints = { .input = False, .flags = InputHint };
