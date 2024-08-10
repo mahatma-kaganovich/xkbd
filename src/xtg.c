@@ -5548,7 +5548,7 @@ static void init(){
 #if defined(USE_THREAD) && defined(PTHREAD_STACK_MIN)
 	static pthread_attr_t _pth_attr;
 	if (!pthread_attr_init(&_pth_attr) &&
-	    !pthread_attr_setstacksize(&_pth_attr,PTHREAD_STACK_MIN))
+	    !pthread_attr_setstacksize(&_pth_attr,PTHREAD_STACK_MIN + 1024))
 		pth_attr = &_pth_attr;
 #endif
 #ifdef USE_MUTEX
