@@ -5,7 +5,7 @@
 : ${CFLAGS:="-O2 -pipe -Wmaybe-uninitialized"}
 
 CFLAGS+=" -fwhole-program"
-LDLAGS+=" -Wl,--strip-all"
+LDFLAGS+=" -Wl,--strip-all"
 
 e(){
 	echo "${@//\"/\\\"}"

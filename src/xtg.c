@@ -31,6 +31,7 @@
 
 	(C) 2019-2023 Denis Kaganovich, Anarchy license
 */
+//#define KB_CAPS 1
 #ifndef NO_ALL
 #define XSS
 #define XTG
@@ -671,6 +672,12 @@ static int getWProp(Window w, Atom prop, Atom type){
 	return n;
 }
 
+#ifndef KB_CAPS
+#define KB_CAPS 0
+#endif
+#if KB_CAPS
+short kcaps = 0;
+#endif
 static void printGrp(){
 	int i, n2 = 0;
 	unsigned char *s, *p, c;
@@ -701,6 +708,13 @@ static void printGrp(){
 		s--;
 		c = *s;
 		*s = '\0';
+#if KB_CAPS
+		if (kcaps) {
+			if (*p >= 'a' && *p <= 'z') (*p)-=32;
+		} else {
+			if (*p >= 'A' && *p <= 'Z') (*p)+=32;
+		}
+#endif
 		fprintf(stdout,"%s\n",p);
 		*s = c;
 	} else {
@@ -1897,7 +1911,7 @@ static void *thread_iio_light(){
 		uint32_t u32;
 		int64_t s64;
 		uint64_t u64;
-	} buf = {.u64 = 0};
+	} buf = {};
 	max_light = pf[p_max_light]/light_scale;
 	unsigned long long l0 = 0;
 	unsigned long long max_sens1 = max_light + .1;
@@ -5366,7 +5380,7 @@ static void init(){
 //		|XkbNewKeyboardNotifyMask
 		);
 	XkbSelectEventDetails(dpy,XkbUseCoreKbd,XkbStateNotify,
-		XkbAllStateComponentsMask,XkbGroupStateMask);
+		XkbAllStateComponentsMask,XkbGroupStateMask|(KB_CAPS*XkbModifierStateMask));
 #ifdef XTG
 	getBPC();
 	aFloat = XInternAtom(dpy, "FLOAT", False);
@@ -6507,6 +6521,12 @@ evfree1:
 #define e (((XkbEvent)ev).state)
 				    case XkbStateNotify:
 					grp1 = e.group;
+#if KB_CAPS
+					if (kcaps != (e.mods^(e.mods>>1))&1) {
+						kcaps = !kcaps;
+						grp = NO_GRP;
+					}
+#endif
 					break;
 				    //case XkbNewKeyboardNotify:
 					//break;
