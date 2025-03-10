@@ -1,5 +1,5 @@
 /*
-	xtg v1.59 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.60 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -1957,7 +1957,7 @@ sw:
 #endif
 	n1 = -2;
 #if !(LIGHT_SELECT&1)
-	if (light_fmt0 && !light_fmt) _thread(4,&thread_iio_light_wait);
+	if (light_fmt0 && !light_fmt) _thread(4,(void*)&thread_iio_light_wait);
 #endif
 	rs = light_rs;
 	DBG("iio over /%s",light_fmt?"dev":"sys");
@@ -2476,7 +2476,7 @@ skip_input:
 		    (io.v4l2_queryctrl.minimum < io.v4l2_queryctrl.maximum)) {
 			DBG("trying to use AUTOBRIGHTNESS + BRIGHTNESS as ALS");
 			io0.qc = io.v4l2_queryctrl;
-			_thread(2,&thread_v4l_br);
+			_thread(2,(void*)&thread_v4l_br);
 		} else {
 			DBG("use v4l AUTOBRIGHTNESS");
 			v4close();
@@ -2653,7 +2653,7 @@ err1:
 	    v4.fmt.pix.width,v4.fmt.pix.height,v4fmt2str(v4.fmt.pix.pixelformat),
 	    (!io0.buf.memory)?"read":(io0.buf.memory==V4L2_MEMORY_USERPTR)?"userptr":"mmap",v4nb);
 
-	_thread(2,&thread_v4l);
+	_thread(2,(void*)&thread_v4l);
 	return 1; 
 }
 
@@ -2684,7 +2684,7 @@ static int _inotify(char *file, uint32_t mask){
 		goto ex;
 	}
 	inotify = in;
-	_thread(1,&thread_inotify);
+	_thread(1,(void*)&thread_inotify);
 ex:
 #endif
 	return res;
@@ -2913,7 +2913,7 @@ nofmt:
 	if (!light_fmt0) DBG("unsupported IIO format: %s",b);
 th:
 #endif
-	_thread(2,&thread_iio_light);
+	_thread(2,(void*)&thread_iio_light);
 }
 #endif
 

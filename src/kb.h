@@ -30,7 +30,7 @@ Bool kb_do_repeat(keyboard *kb, button *b);
 button * kb_find_button(keyboard *kb, int x, int y);
 unsigned int kb_sync_state(keyboard *kb, unsigned int mods, unsigned int locked_mods, int group);
 
-int kb_load_keymap();
+int kb_load_keymap(Display *);
 
 #endif
 
