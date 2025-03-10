@@ -1911,7 +1911,7 @@ static void *thread_iio_light(){
 		uint32_t u32;
 		int64_t s64;
 		uint64_t u64;
-	} buf = {};
+	} buf = {.u64 = 0};
 	max_light = pf[p_max_light]/light_scale;
 	unsigned long long l0 = 0;
 	unsigned long long max_sens1 = max_light + .1;
