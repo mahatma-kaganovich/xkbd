@@ -1,5 +1,5 @@
 /*
-	xtg v1.60 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.61 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -2239,12 +2239,12 @@ static void v4cdefault(__u32 id, int i) {
 	}
 }
 
-
 static void *thread_v4l(){
 	unsigned long cnt, i, cnt0 = 1;
 	unsigned char *b;
 	unsigned long long l0, l = 0xfff;
-	float s0,s1=0, dv = 1, dv0 = 1;
+	float s0,s1=0, dv = 1, dv0
+	;
 	max_light = pf[p_max_light];
 #ifdef V4L_NOBLOCK
 	fd_set fds;
@@ -2256,7 +2256,10 @@ static void *thread_v4l(){
 	switch (v4.fmt.pix.pixelformat) {
 	    case V4L2_PIX_FMT_YUYV:
 	    case V4L2_PIX_FMT_UYVY:
-		dv0 = 255./15;
+		dv0 = 2;
+		break;
+	    default:
+		dv0 = 1;
 		break;
 	}
 rep0:
@@ -2304,10 +2307,10 @@ err_r:
 	unsigned long long s = 0; // scale to byte
 	switch (v4.fmt.pix.pixelformat) {
 	    case V4L2_PIX_FMT_YUYV:
-		for (i=0; i<cnt; i++) s+=b[i] & 0xf;
+		for (i=0; i<cnt; i+=2) s+=b[i];
 		break;
 	    case V4L2_PIX_FMT_UYVY:
-		for (i=0; i<cnt; i++) s+=b[i] >> 4;
+		for (i=1; i<cnt; i+=2) s+=b[i];
 		break;
 	    default:
 		for (i=0; i<cnt; i++) s+=b[i];
