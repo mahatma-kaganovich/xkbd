@@ -2340,8 +2340,8 @@ rep1:
 	}
 	// dont want! to do  early as cnt=width*height*2
 	if (cnt != cnt0) {
+		DBG("v4r read buffer size %lu x%lu",cnt,cnt/v4.fmt.pix.width/v4.fmt.pix.height);
 		if (!cnt) {
-			DBG("v4r read zero buffer");
 			goto err1;
 		}
 		dv = (cnt0 = cnt)/dv0;
@@ -2515,7 +2515,6 @@ skip_input:
 		V4L2_PIX_FMT_YUYV,
 		V4L2_PIX_FMT_UYVY,
 		0};
-	unsigned char sizes[] = {1,1,2,2};
 	for(j=0;formats[j];j++) {
 	    i=0;
 	    do {
@@ -2540,7 +2539,13 @@ skip_input:
 		    default:
 			continue;
 		}
-		l=w*h*sizes[j];
+		l=w*h;
+		switch (formats[j]) {
+		    case V4L2_PIX_FMT_YUYV:
+		    case V4L2_PIX_FMT_UYVY:
+			l<<=1;
+			break;
+		}
 		if (l>=len) continue;
 		v4.fmt.pix.width = w;
 		v4.fmt.pix.height = h;
