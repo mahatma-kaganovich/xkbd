@@ -360,7 +360,6 @@ unsigned int kb_sync_state(keyboard *kb, unsigned int mods, unsigned int locked_
 #ifdef USE_XFT
 #define _set_color_fg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,xc)
 static void __set_color_fg(keyboard *kb, char *txt,GC *gc, XftColor *xc){
-	XRenderColor colortmp;
 #else
 #define _set_color_fg(kb,c,gc,xc)  __set_color_fg(kb,c,gc)
 static void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
@@ -395,10 +394,12 @@ static void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
 
 #ifdef USE_XFT
 	if (xc) {
-		colortmp.red   = col.red;
-		colortmp.green = col.green;
-		colortmp.blue  = col.blue;
-		colortmp.alpha = 0xFFFF;
+		XRenderColor colortmp = {
+			.red   = col.red,
+			.green = col.green,
+			.blue  = col.blue,
+			.alpha = 0xFFFF,
+		};
 		XftColorAllocValue(dpy,
 			kb->visual,
 			kb->colormap,
@@ -406,8 +407,8 @@ static void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
 	}
 	//else
 #endif
-	{
-		if (gc && !*gc) *gc = _createGC(kb,0);
+	if (gc) { 
+		if (!*gc)  *gc = _createGC(kb,0);
 		XSetForeground(dpy, *gc, col.pixel );
 	}
 }
