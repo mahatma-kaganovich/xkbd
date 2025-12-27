@@ -290,7 +290,7 @@ int button_render(button *b, int mode)
 	tmp_col  = b->col_rev;
 #endif
      } else {
-	gc_txt   = kb->txt_gc;
+	gc_txt   = b->txt_gc;
 #ifdef USE_XFT
 	tmp_col = b->col;
 #endif
@@ -307,7 +307,7 @@ int button_render(button *b, int mode)
   else  /* BUTTON_RELEASED */
     {
       gc_solid = b->bg_gc;
-      gc_txt   = kb->txt_gc;
+      gc_txt   = b->txt_gc;
 #ifdef USE_XFT
       tmp_col = b->col;
 #endif
@@ -441,6 +441,7 @@ button* button_new(keyboard *k)
 
   b->fg_gc      = k->gc;
   b->bg_gc      = k->rev_gc;
+  b->txt_gc     = k->txt_gc;
   b->col = k->color;
   b->col_rev = k->color_rev;
 

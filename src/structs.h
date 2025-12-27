@@ -209,6 +209,7 @@ typedef struct _keyboard
   GC txt_gc;   /* gc's for button txt */
   GC txt_rev_gc;
   GC bdr_gc;
+  GC txt_sym_gc;
 
   GC grey_gc;
   GC kp_gc;
@@ -233,6 +234,7 @@ typedef struct _keyboard
   XftDraw *xftdraw;   /* xft aa bits */
   XftColor color;
   XftColor color_rev;
+  XftColor color_sym;;
 #endif
 
   int def_width;
@@ -311,6 +313,8 @@ typedef struct _button
 
   GC fg_gc;       /* gc's for 'general' button cols */
   GC bg_gc;
+  GC txt_gc;
+  
 
   signed int layout_switch; /* Signals the button switches layout
 			       set to -1 for no switch            */
