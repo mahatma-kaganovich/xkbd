@@ -384,6 +384,7 @@ static void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
 				col.green = atoi(txt1) * 257;
 				txt1 = strsep(&txt, delim);
 				col.blue = atoi(txt1) * 257;
+				col.flags = DoRed | DoGreen | DoBlue;
 				r=XAllocColor(dpy, kb->colormap, &col);
 			}
 		}
