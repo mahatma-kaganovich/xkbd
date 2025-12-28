@@ -104,8 +104,9 @@ static void load_font(keyboard *kb, char **loaded, char *fnt, FNTYPE *f){
 
 static void button_update(button *b) {
 	int l,l1;
-	int group = b->kb->total_layouts-1;
-	Display *dpy = b->kb->display;
+	keyboard *kb = b->kb;
+	int group = kb->total_layouts-1;
+	Display *dpy = kb->display;
 	char buf[1];
 	int n;
 	char *txt;
@@ -194,10 +195,10 @@ found:
                 }
 	}
 
-	if (is_sym && b->kb->txt_sym_gc) {
-		b->txt_gc = b->kb->txt_sym_gc;
+	if (is_sym && kb->txt_sym_gc) {
+		b->txt_gc = kb->txt_sym_gc;
 #ifdef USE_XFT
-		b->col = b->kb->color_sym;
+		b->col = kb->color_sym;
 #endif
 	}
 
@@ -205,13 +206,13 @@ found:
 	if (b->ks[0]>=0xff80 && b->ks[0]<=0xffb9) {
 		// KP_
 //		for(l=0;l<LEVELS;l++) b->mods[l]&=~(STATE(KBIT_ALT)|STATE(KBIT_MOD));
-		if (b->bg_gc == b->kb->rev_gc) b->bg_gc = b->kb->kp_gc;
-		if (b->kb->kp_width) w = b->kb->kp_width;
+		if (b->bg_gc == kb->rev_gc) b->bg_gc = kb->kp_gc;
+		if (kb->kp_width) w = kb->kp_width;
 	} else if ( b->bg_gc == b->kb->rev_gc && (b->modifier || !b->ks[0] || !is_sym))
-		b->bg_gc = b->kb->grey_gc;
+		b->bg_gc = kb->grey_gc;
 
-	if(!b->width) b->width = w?:b->kb->def_width;
-	if(!b->height) b->height = b->kb->def_height;
+	if(!b->width) b->width = w?:kb->def_width;
+	if(!b->height) b->height = kb->def_height;
 	if(b->width==-1) b->width = 0;
 	if(b->height==-1) b->height = 0;
 
@@ -359,7 +360,6 @@ unsigned int kb_sync_state(keyboard *kb, unsigned int mods, unsigned int locked_
 #ifdef USE_XFT
 #define _set_color_fg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,xc)
 static void __set_color_fg(keyboard *kb, char *txt,GC *gc, XftColor *xc){
-	XRenderColor colortmp;
 #else
 #define _set_color_fg(kb,c,gc,xc)  __set_color_fg(kb,c,gc)
 static void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
@@ -383,6 +383,7 @@ static void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
 				col.green = atoi(txt1) * 257;
 				txt1 = strsep(&txt, delim);
 				col.blue = atoi(txt1) * 257;
+				col.flags = DoRed | DoGreen | DoBlue;
 				r=XAllocColor(dpy, kb->colormap, &col);
 			}
 		}
@@ -393,10 +394,12 @@ static void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
 
 #ifdef USE_XFT
 	if (xc) {
-		colortmp.red   = col.red;
-		colortmp.green = col.green;
-		colortmp.blue  = col.blue;
-		colortmp.alpha = 0xFFFF;
+		XRenderColor colortmp = {
+			.red   = col.red,
+			.green = col.green,
+			.blue  = col.blue,
+			.alpha = 0xFFFF,
+		};
 		XftColorAllocValue(dpy,
 			kb->visual,
 			kb->colormap,
@@ -404,14 +407,14 @@ static void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
 	}
 	//else
 #endif
-	{
-		if (gc && !*gc) *gc = _createGC(kb,0);
+	if (gc) { 
+		if (!*gc)  *gc = _createGC(kb,0);
 		XSetForeground(dpy, *gc, col.pixel );
 	}
 }
 
 static box *_clone_box(box *vbox){
-	box *b = stalloc(sizeof(box));
+	box *b = malloc(sizeof(box));
 	memcpy(b,vbox,sizeof(box));
 	b->root_kid = b->tail_kid =NULL;
 	return b;
@@ -430,7 +433,7 @@ static box *clone_box(Display *dpy, box *vbox, int group){
 		box_add_box(bx, bx1=_clone_box((box *)listp->data));
 		for (ip = ((box *)listp->data)->root_kid; ip; ip = ip->next) {
 			b0 = (button *)ip->data;
-			memcpy(b=stalloc(sizeof(button)),b0,sizeof(button));
+			memcpy(b=malloc(sizeof(button)),b0,sizeof(button));
 			box_add_button(bx1,b);
 			// new layout
 			// in first look same code must be used to reconfigure 1 layout,
@@ -487,7 +490,7 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
   ks2unicode_init();
 #endif
 
-  kb = stalloc(sizeof(keyboard));
+  kb = calloc(1,sizeof(keyboard));
   kb->win = win;
   kb->display = display;
   kb->screen = screen;
@@ -1907,3 +1910,22 @@ button * kb_find_button(keyboard *kb, int x, int y)
 	return but;
 }
 
+
+
+void kb_destroy(keyboard *kb)
+{
+  XFreeGC(kb->display, kb->gc);
+  /* -- to do -- somwthing like this
+  while (listp != NULL)
+    {
+
+
+      button *tmp_but = NULL;
+      box = (box *)listp->data;
+      box_destroy(box) -- this will destroy the buttons
+
+    }
+  */
+
+  free(kb);
+}

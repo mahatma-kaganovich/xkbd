@@ -24,6 +24,7 @@ void kb_send_keypress(button *b, unsigned int next_state, unsigned int press);
 void kb_size(keyboard *kb);
 void kb_repaint(keyboard *kb);
 void kb_resize(keyboard *kb, int width, int height);
+void kb_destroy(keyboard *kb);
 button *kb_handle_events(keyboard *kb, _ushort type, const int x, const int y, const z_t z, unsigned int ptr, int dev, Time time, unsigned char *mask, int mask_len);
 Bool kb_do_repeat(keyboard *kb, button *b);
 button * kb_find_button(keyboard *kb, int x, int y);

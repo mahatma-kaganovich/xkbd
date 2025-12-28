@@ -26,8 +26,6 @@
 #include <X11/Xft/Xft.h>
 #endif
 
-#include "stalloc.h"
-
 #define DEFAULT_FONT "Monospace-%i|-%i|sans-%i|fixed-%i|fixed"
 
 typedef uint_fast8_t _ushort;
