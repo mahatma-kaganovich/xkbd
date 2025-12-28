@@ -1,0 +1,1 @@
+void *stalloc(int l);
