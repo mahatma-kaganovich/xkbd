@@ -25,7 +25,7 @@
 
 box* box_new(void)
 {
-  return calloc(1, sizeof(box));
+  return calloc1(box);
 }
 
 button *box_add_button(box *bx, button *but)
@@ -36,7 +36,7 @@ button *box_add_button(box *bx, button *but)
 
   if (bx->root_kid == NULL) /* new list */
     {
-      bx->root_kid = (list *)malloc(sizeof(list));
+      bx->root_kid = (list *)malloc1(list);
       bx->root_kid->next = NULL;
       bx->tail_kid = bx->root_kid;
       bx->root_kid->data = but;
@@ -46,7 +46,7 @@ button *box_add_button(box *bx, button *but)
     }
 
   new_ptr = bx->tail_kid;
-  new_ptr->next = malloc(sizeof(list));
+  new_ptr->next = malloc1(list);
   new_ptr->next->next = NULL;
   new_ptr->next->data = but;
   new_ptr->next->type = WIDGET_BUTTON;
@@ -64,7 +64,7 @@ box *box_add_box(box *bx, box *b)
 
   if (bx->root_kid == NULL) /* new list */
     {
-      bx->root_kid = (list *)malloc(sizeof(list));
+      bx->root_kid = (list *)malloc1(list);
       bx->root_kid->next = NULL;
       bx->tail_kid = bx->root_kid;
       bx->root_kid->data = b;
@@ -73,7 +73,7 @@ box *box_add_box(box *bx, box *b)
     }
 
   new_ptr = bx->tail_kid;
-  new_ptr->next = malloc(sizeof(list));
+  new_ptr->next = malloc1(list);
   new_ptr->next->next = NULL;
   new_ptr->next->data = b;
   new_ptr->next->type = WIDGET_BOX;

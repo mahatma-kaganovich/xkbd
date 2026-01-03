@@ -414,7 +414,7 @@ static void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
 }
 
 static box *_clone_box(box *vbox){
-	box *b = malloc(sizeof(box));
+	box *b = malloc1(box);
 	memcpy(b,vbox,sizeof(box));
 	b->root_kid = b->tail_kid =NULL;
 	return b;
@@ -433,7 +433,7 @@ static box *clone_box(Display *dpy, box *vbox, int group){
 		box_add_box(bx, bx1=_clone_box((box *)listp->data));
 		for (ip = ((box *)listp->data)->root_kid; ip; ip = ip->next) {
 			b0 = (button *)ip->data;
-			memcpy(b=malloc(sizeof(button)),b0,sizeof(button));
+			memcpy(b=malloc1(button),b0,sizeof(button));
 			box_add_button(bx1,b);
 			// new layout
 			// in first look same code must be used to reconfigure 1 layout,
@@ -490,7 +490,7 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
   ks2unicode_init();
 #endif
 
-  kb = calloc(1,sizeof(keyboard));
+  kb = calloc1(keyboard);
   kb->win = win;
   kb->display = display;
   kb->screen = screen;
@@ -1910,22 +1910,3 @@ button * kb_find_button(keyboard *kb, int x, int y)
 	return but;
 }
 
-
-
-void kb_destroy(keyboard *kb)
-{
-  XFreeGC(kb->display, kb->gc);
-  /* -- to do -- somwthing like this
-  while (listp != NULL)
-    {
-
-
-      button *tmp_but = NULL;
-      box = (box *)listp->data;
-      box_destroy(box) -- this will destroy the buttons
-
-    }
-  */
-
-  free(kb);
-}

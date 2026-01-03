@@ -4,7 +4,7 @@ LDADD = @X_LIBS@ -lX11 -lXtst
 AM_CFLAGS = -O2 -DDEFAULTCONFIG=\"$(DEFAULT_CONFIG)\" -Dprefix=\"${prefix}\" -Wmaybe-uninitialized
 
 bin_PROGRAMS = xkbd xssevent xkbdd xkbdd-xss xtg xkbswitch
-xkbd_SOURCES = xkbd.c box.c button.c kb.c ks2unicode.c \
+xkbd_SOURCES = xkbd.c box.c button.c kb.c ks2unicode.c stalloc.c \
                       structs.h box.h  button.h  kb.h  ks2unicode.h
 
 xkbdd_SOURCES = xtg.c

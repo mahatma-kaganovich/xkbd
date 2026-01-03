@@ -436,7 +436,7 @@ int button_get_abs_y(button *b)
 
 button* button_new(keyboard *k)
 {
-  button *b = calloc(1, sizeof(button));
+  button *b = calloc1(button);
   b->kb = k;
 
   b->fg_gc      = k->gc;
