@@ -1,6 +1,6 @@
 
-// 64-bit alignment everywhere
-#define STALLOC 3
+// 128-bit alignment everywhere
+#define STALLOC 4
 
 void *stalloc(int l);
 

@@ -1,5 +1,8 @@
 #include <stdlib.h>
-#include <stdio.h>
+//#include <stdio.h>
+#include <string.h>
+
+#include "stalloc.h"
 
 /* static alloc */
 
@@ -11,6 +14,19 @@ typedef struct _stalloc_buf {
 // __attribute__ ((__packed__))
 stalloc_buf;
 
+void *_calloc(int l){
+	void *p;
+#if _POSIX_C_SOURCE >= 200112L
+	if (!posix_memalign(&p,_align(1),l)) {
+		memset(p,0,l);
+	} else 
+#endif
+	    {
+		//fprintf(stderr,"ERROR posix_memalign %i\n",_align(1));
+		p=calloc(1,l);
+	}
+	return p;
+}
 
 void *stalloc(int l){
 	static const int st_block=1024*8;
@@ -23,7 +39,7 @@ a:
 	m.pos=l;
 	return m.buf;
 new:
-	if (l >= st_block) return calloc(1,l);
-	m.buf=calloc(1,m.size=st_block);
+	if (l >= st_block) return _calloc(l);
+	m.buf=_calloc(m.size=st_block);
 	goto a;
 }
