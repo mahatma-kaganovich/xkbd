@@ -8,13 +8,13 @@
 
 typedef struct _stalloc_buf {
 	void *buf;
-	int size;
-	int pos;
+	size_t size;
+	size_t pos;
 }
 // __attribute__ ((__packed__))
 stalloc_buf;
 
-void *_calloc(int l){
+void *_calloc(size_t l){
 	void *p;
 #if _POSIX_C_SOURCE >= 200112L
 	if (!posix_memalign(&p,_align(1),l)) {
@@ -28,8 +28,8 @@ void *_calloc(int l){
 	return p;
 }
 
-void *stalloc(int l){
-	static const int st_block=1024*8;
+void *stalloc(size_t l){
+	static const size_t st_block=1024*8;
 	static stalloc_buf m = {};
 
 	if (m.size < l) goto new;

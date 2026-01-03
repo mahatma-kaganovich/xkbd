@@ -2,7 +2,7 @@
 // 128-bit alignment everywhere
 #define STALLOC 4
 
-void *stalloc(int l);
+void *stalloc(size_t l);
 
 #ifndef STALLOC
 #define calloc1(s) calloc(1,sizeof(s))
