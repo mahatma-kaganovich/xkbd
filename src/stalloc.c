@@ -16,7 +16,7 @@ stalloc_buf;
 
 void *_calloc(size_t l){
 	void *p;
-#if _POSIX_C_SOURCE >= 200112L && defined(_ALIGN)
+#if _POSIX_C_SOURCE >= 200112L && _ALIGN && !defined(MINIMAL)
 	if (!posix_memalign(&p,_align(1),l)) {
 		memset(p,0,l);
 	} else 
