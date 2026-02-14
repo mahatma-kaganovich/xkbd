@@ -27,20 +27,9 @@
 #include "button.h"
 
 
-GC _createGC(keyboard *kb, int rev)
+GC _createGC(keyboard *kb, unsigned long m)
 {
-	Display *dpy = kb->display;
-	unsigned long b = BlackPixel(dpy, kb->screen);
-	unsigned long w = WhitePixel(dpy, kb->screen);
-
-	XGCValues values = {
-		.foreground=rev?w:b,
-		.background=rev?b:w,
-		.fill_style=FillSolid,
-		.graphics_exposures=0,
-	};
-
-	return XCreateGC(dpy, kb->win, GCGraphicsExposures|GCBackground|GCForeground|GCFillStyle, &values);
+	return XCreateGC(kb->display, kb->win, m, &kb->GCval);
 }
 
 #ifdef USE_XPM
@@ -62,7 +51,7 @@ void button_set_pixmap(button *b, char *filename)
     }
 
   /* we'll also be needing a gc for transparency */
-  b->mask_gc = _createGC(b->kb,1);
+  b->mask_gc = _createGC(b->kb,GC1);
   /*
   gc_vals.clip_mask = b->mask;
   valuemask = GCClipMask;

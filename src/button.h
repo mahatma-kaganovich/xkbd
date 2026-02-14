@@ -20,9 +20,7 @@
 
 button* button_new(keyboard *k);
 
-int _max3( int a, int b, int c );
-
-GC _createGC(keyboard *kb, int rev);
+GC _createGC(keyboard *kb, unsigned long m);
 
 KeySym button_ks(char *txt);
 

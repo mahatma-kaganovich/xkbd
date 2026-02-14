@@ -408,7 +408,7 @@ static void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
 	//else
 #endif
 	if (gc) { 
-		if (!*gc)  *gc = _createGC(kb,0);
+		if (!*gc)  *gc = _createGC(kb,GC0);
 		XSetForeground(dpy, *gc, col.pixel );
 	}
 }
@@ -497,15 +497,19 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
   kb->visual = DefaultVisual(display, screen);
   kb->colormap = DefaultColormap(display, screen);
 
-  /* create lots and lots of gc's */
-  kb->gc=_createGC(kb,0);
-  kb->rev_gc=_createGC(kb,1);
-  kb->txt_gc=_createGC(kb,0);
-  kb->txt_rev_gc=_createGC(kb,1);
-  kb->bdr_gc=_createGC(kb,0);
+  // reverse
+  kb->GCval.foreground=WhitePixel(display, screen);
+  kb->GCval.background=BlackPixel(display, screen);
 
-  kb->grey_gc=_createGC(kb,1);
-  kb->kp_gc=_createGC(kb,1);
+  /* create lots and lots of gc's */
+  kb->gc=_createGC(kb,GC0);
+  kb->rev_gc=_createGC(kb,GC1);
+  kb->txt_gc=_createGC(kb,GC0);
+  kb->txt_rev_gc=_createGC(kb,GC1);
+  kb->bdr_gc=_createGC(kb,GC0);
+
+  kb->grey_gc=_createGC(kb,GC1);
+  kb->kp_gc=_createGC(kb,GC1);
 
 #ifdef USE_XFT
 

@@ -399,7 +399,7 @@ static void unmapOrRestart(){
 	x = y = width = height = 0;
 #ifdef USE_XR
 	if (!geo) {
-		geo = malloc(sizeof(*geo));
+		geo = malloc1(*geo);
 		geo->w = scr_width;
 		geo->h = scr_height;
 		geo->mw = scr_mwidth;
@@ -762,7 +762,7 @@ stop_argv:
 		case 0:
 			*(char **)(res1->ptr) = NULL;
 			n = strlen((char *)val.addr)+1;
-			if (n>1) memcpy(*(char **)(res1->ptr) = malloc(n), val.addr, n);
+			if (n>1) memcpy(*(char **)(res1->ptr) = malloc2(n), val.addr, n);
 			break;
 		case 1:
 		case 2:
@@ -979,7 +979,7 @@ re_crts:
 	  strcat(userconffile, iam);
 
 	  if ((fp = fopen(userconffile, "r")) != NULL) {
-		conf_file = (char *)malloc(sizeof(char)*512);
+		conf_file = (char *)malloc2(sizeof(char)*512);
 		if (fgets(conf_file, 512, fp) != NULL) {
 			fclose(fp);
 			if ( conf_file[strlen(conf_file)-1] == '\n')
