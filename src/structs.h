@@ -245,6 +245,10 @@ typedef struct _keyboard
 
   int X,Y; // root
 
+#define GC0 (GCGraphicsExposures)
+#define GC1 (GCGraphicsExposures|GCBackground|GCForeground)
+  XGCValues GCval;
+
 } keyboard;
 
 typedef struct _button
