@@ -23,7 +23,7 @@ void *stalloc(size_t l);
 #define _ALIGN 3
 #endif
 
-#define _align(s) ((((s+((1<<_ALIGN)-1)))>>_ALIGN)<<_ALIGN)
+#define _align(s) (((((s)+((1<<_ALIGN)-1)))>>_ALIGN)<<_ALIGN)
 #define calloc1(s) stalloc(_align(sizeof(s)))
 #define malloc1(s) stalloc(_align(sizeof(s)))
 #define malloc2(s) stalloc(_align(s))
