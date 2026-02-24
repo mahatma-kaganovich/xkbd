@@ -16,12 +16,13 @@ void *stalloc(size_t l);
 #define malloc2(s) malloc(s)
 #else
 
-#if _POSIX_C_SOURCE >= 200112L
+// test over _GNU_SOURCE. req. at least vmalloc
+//#if _POSIX_C_SOURCE >= 200112L || __STDC_VERSION__ >= 201112L || defined(_ISOC11_SOURCE) || _XOPEN_SOURCE >= 500
 #define _ALIGN STALLOC
-#else
+//#else
 // 64-bit malloc
-#define _ALIGN 3
-#endif
+//#define _ALIGN 3
+//#endif
 
 #define _align(s) (((((s)+((1<<_ALIGN)-1)))>>_ALIGN)<<_ALIGN)
 #define calloc1(s) stalloc(_align(sizeof(s)))

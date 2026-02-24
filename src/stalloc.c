@@ -1,3 +1,4 @@
+//#define _GNU_SOURCE
 #include <stdlib.h>
 //#include <stdio.h>
 #include <string.h>
@@ -16,10 +17,17 @@ stalloc_buf;
 
 void *_calloc(size_t l){
 	void *p;
-#if _POSIX_C_SOURCE >= 200112L && _ALIGN && !(defined(MINIMAL) && _ALIGN < 4)
-	if (!posix_memalign(&p,_align(1),l)) {
-		memset(p,0,l);
-	} else
+#if _ALIGN && !(defined(MINIMAL) && _ALIGN < 4)
+	if
+#if _POSIX_C_SOURCE >= 200112L
+	    (!posix_memalign(&p,_align(1),l)) memset(p,0,l);
+#elif __STDC_VERSION__ >= 201112L || defined(_ISOC11_SOURCE)
+	    ((p=aligned_alloc(_align(1),l))) memset(p,0,l);
+#else
+//#elif _XOPEN_SOURCE >= 500
+	    ((p=valloc(l))) memset(p,0,l);
+#endif
+	else
 #endif
 	    {
 		//fprintf(stderr,"ERROR posix_memalign %i\n",_align(1));
