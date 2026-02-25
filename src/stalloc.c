@@ -1,12 +1,18 @@
 #include <stdlib.h>
-//#include <stdio.h>
 #include <string.h>
 #include "stalloc.h"
+
 #if __STDC_VERSION__ >= 201112L
 #include <stddef.h>
 #define CALIGN alignof(max_align_t)
+#define _th thread_local
 #else
 #define CALIGN 1
+#define _th __thread
+#endif
+#ifndef _REENTRANT
+#undef _th
+#define _th
 #endif
 
 /* static alloc */
@@ -15,12 +21,11 @@ typedef struct _stalloc_buf {
 	void *buf;
 	size_t size;
 	size_t pos;
-}
-// __attribute__ ((__packed__))
-stalloc_buf;
+} stalloc_buf;
 
 void *_calloc(size_t l){
 	void *p;
+#if _ALIGN
 	if ((CALIGN&((1<<_ALIGN)-1)) &&
 #if _POSIX_C_SOURCE >= 200112L
 	    !posix_memalign(&p,_align(1),l)
@@ -31,16 +36,15 @@ void *_calloc(size_t l){
 	    (p=valloc(l))
 #endif
 	) memset(p,0,l); else
-	    {
-		//fprintf(stderr,"ERROR posix_memalign %i\n",_align(1));
+#endif
 		p=calloc(1,l);
-	}
+
 	return p;
 }
 
 void *stalloc(size_t l){
 	static const size_t st_block=1024*8;
-	static stalloc_buf m = {};
+	static _th stalloc_buf m = {};
 
 	if (m.size < l) goto new;
 	m.buf+=m.pos;
