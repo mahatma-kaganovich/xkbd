@@ -7,9 +7,11 @@
 #define CALIGN alignof(max_align_t)
 #define _th thread_local
 #else
+#include <malloc.h>
 #define CALIGN 1
 #define _th __thread
 #endif
+
 #ifndef _REENTRANT
 #undef _th
 #define _th
@@ -27,12 +29,11 @@ void *_calloc(size_t l){
 	void *p;
 #if _ALIGN
 	if ((CALIGN&((1<<_ALIGN)-1)) &&
-#if _POSIX_C_SOURCE >= 200112L
+#if defined( _POSIX_C_SOURCE) && (_POSIX_C_SOURCE - 0) >= 200112L
 	    !posix_memalign(&p,_align(1),l)
 #elif __STDC_VERSION__ >= 201112L || defined(_ISOC11_SOURCE)
 	    (p=aligned_alloc(_align(1),l))
 #else
-//#elif _XOPEN_SOURCE >= 500
 	    (p=valloc(l))
 #endif
 	) memset(p,0,l); else
