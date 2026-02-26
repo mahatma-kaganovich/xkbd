@@ -29,10 +29,10 @@ void *_calloc(size_t l){
 	void *p;
 #if _ALIGN
 	if ((CALIGN&((1<<_ALIGN)-1)) &&
-#if defined( _POSIX_C_SOURCE) && (_POSIX_C_SOURCE - 0) >= 200112L
-	    !posix_memalign(&p,_align(1),l)
-#elif __STDC_VERSION__ >= 201112L || defined(_ISOC11_SOURCE)
+#if __STDC_VERSION__ >= 201112L || defined(_ISOC11_SOURCE)
 	    (p=aligned_alloc(_align(1),l))
+#elif defined( _POSIX_C_SOURCE) && (_POSIX_C_SOURCE - 0) >= 200112L
+	    !posix_memalign(&p,_align(1),l)
 #else
 	    (p=valloc(l))
 #endif
