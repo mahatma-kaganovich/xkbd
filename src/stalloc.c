@@ -64,6 +64,6 @@ new:
 }
 
 void stline(){
-	if (BUF_ALIGN > _ALIGN) stalloc(m.size & (buf_align-1));
+	if (BUF_ALIGN > _ALIGN) stalloc(buf_align - (m.size&(buf_align-1)));
 }
 
