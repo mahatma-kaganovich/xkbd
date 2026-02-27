@@ -213,13 +213,16 @@ int button_render(button *b, int mode)
 //  int p = cache_pix==3?0:kb->pad;
   int x = b->vx + p;
   int y = b->vy + p;
-  int w = b->act_width - (p<<1);
-  int h = b->act_height - (p<<1);
+//  int w = b->act_width - (p<<1);
+//  int h = b->act_height - (p<<1);
+  int w = b->act_width - p;
+  int h = b->act_height - p;
   int line = ((kb->line_width+1)>>1);
   p = _max(p - line,0);
   int ax = b->vx + p;
   int ay = b->vy + p;
-  p <<= 1;
+//  p <<= 1;
+  p-=1;
   int aw = b->act_width - p;
   int ah = b->act_height - p;
 
@@ -244,7 +247,7 @@ int button_render(button *b, int mode)
 		ax+=kb->vvbox->x;
 		ay+=kb->vvbox->y;
 	}
-	XCopyArea(kb->display, pix, backing, kb->gc, 0, 0, aw, ah, ax, ay);
+	XCopyArea(kb->display, pix, backing, kb->gc, 0, 0, aw , ah , ax, ay);
 	return backing==kb->win;
     }
     b->pix[i] = pix = XCreatePixmap(kb->display,
@@ -385,10 +388,12 @@ void button_paint(button *b)
     if (b->kb->backing != b->kb->win) {
   /* use the vbox offsets for the location within the window */
 	int p = b->kb->pad;
+	int line = ((b->kb->line_width+1)>>1);
+	p = _max(p - line,0);
 	int x = b->vx + p;
 	int y = b->vy + p;
-
-	p<<=1;
+	//p<<=1;
+	p-=1;
 	XCopyArea(b->kb->display, b->kb->backing, b->kb->win, b->kb->gc,
 	    x, y, b->act_width - p, b->act_height - p,
 	    x+b->kb->vvbox->x, y+b->kb->vvbox->y);

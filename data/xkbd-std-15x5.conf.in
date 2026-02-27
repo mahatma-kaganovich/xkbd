@@ -28,7 +28,7 @@ kp_col 0:31:31
 #height 90
 
 # button style, can be rounded ( default ), square or plain
-# button_style plain
+button_style square
 #repeat_delay 50
 # 0 disable repeat (powersave), -1 - delay & time from X
 repeat_time 0
