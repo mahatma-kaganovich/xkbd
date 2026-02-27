@@ -4,8 +4,8 @@
 : ${LDFLAGS:="-Wl,-O1 -Wl,--as-needed"}
 : ${CFLAGS:="-O2 -pipe -Wmaybe-uninitialized"}
 
-CFLAGS+=" -fwhole-program"
-LDFLAGS+=" -Wl,--strip-all"
+CFLAGS="$CFLAGS -fwhole-program"
+LDFLAGS="$LDFLAGS -Wl,--strip-all"
 
 e(){
 	echo "${@//\"/\\\"}"
@@ -46,7 +46,7 @@ evdev=$(pkg-config --cflags --libs libevdev) || {
 	# rare
 	[ -e /usr/include/libevdev-1.0 ] && evdev='-levdev -I/usr/include/libevdev-1.0'
 }
-[ -n "$evdev" ] && evdev+=' -DUSE_EVDEV'
+[ -n "$evdev" ] && evdev="$evdev -DUSE_EVDEV"
 _c xtg xtg.c "xtst xi xrandr xext xscrnsaver xfixes" "$(pkg-config --variable=xthreadlib x11) -DUSE_XTHREAD $evdev"
 
 wait
