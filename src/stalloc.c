@@ -1,3 +1,5 @@
+/* static alloc */
+
 #include <stdlib.h>
 #include <string.h>
 #include "stalloc.h"
@@ -21,9 +23,6 @@
 #define _th
 #endif
 
-/* static alloc */
-
-//static 
 const size_t st_block=1024*8;
 
 _th struct _stalloc_buf {
@@ -35,18 +34,17 @@ _th struct _stalloc_buf {
 void *_calloc(size_t l){
 	void *p;
 #if _ALIGN
-	if ((CALIGN&((1<<_ALIGN)-1)) &&
+	if ((CALIGN&(BUF_ALIGN-1)) &&
 #if __STDC_VERSION__ >= 201112L || defined(_ISOC11_SOURCE)
-	    (p=aligned_alloc(_align(1),l))
+	    (p=aligned_alloc(BUF_ALIGN,l))
 #elif defined(_POSIX_C_SOURCE) && (_POSIX_C_SOURCE - 0) >= 200112L
-	    !posix_memalign(&p,_align(1),l)
+	    !posix_memalign(&p,BUF_ALIGN,l)
 #else
 	    (p=valloc(l))
 #endif
 	) memset(p,0,l); else
 #endif
 		p=calloc(1,l);
-
 	return p;
 }
 
