@@ -38,6 +38,7 @@
 'XF86Prev_VMode'=>'-m',
 'XF86Ungrab'=>'/gr',
 'XF86ClearGrab'=>'*gr',
+'Tab' => 'Tab',
 );
 
 $h='/usr/include/X11/keysymdef.h';
@@ -51,6 +52,7 @@ while(defined(my $s=<$F>)){
 
 	$d=hex($i=$a[1]);
 	$kc{$a[0]}=$d;
+	next if (exists($tr{$a[0]}));
 	(($u)=$a[2]=~/[ \(]U\+([A-Z0-9]{4})\s+/)||next;
 	$u=hex($u);
 	$k{$d}=$u;
