@@ -8,7 +8,11 @@
 #define _th thread_local
 #else
 #include <malloc.h>
+#ifdef __BIGGEST_ALIGNMENT__
+#define CALIGN __BIGGEST_ALIGNMENT__
+#else
 #define CALIGN 1
+#endif
 #define _th __thread
 #endif
 
@@ -19,11 +23,14 @@
 
 /* static alloc */
 
-typedef struct _stalloc_buf {
+//static 
+const size_t st_block=1024*8;
+
+_th struct _stalloc_buf {
 	void *buf;
 	size_t size;
 	size_t pos;
-} stalloc_buf;
+} m = {};
 
 void *_calloc(size_t l){
 	void *p;
@@ -31,7 +38,7 @@ void *_calloc(size_t l){
 	if ((CALIGN&((1<<_ALIGN)-1)) &&
 #if __STDC_VERSION__ >= 201112L || defined(_ISOC11_SOURCE)
 	    (p=aligned_alloc(_align(1),l))
-#elif defined( _POSIX_C_SOURCE) && (_POSIX_C_SOURCE - 0) >= 200112L
+#elif defined(_POSIX_C_SOURCE) && (_POSIX_C_SOURCE - 0) >= 200112L
 	    !posix_memalign(&p,_align(1),l)
 #else
 	    (p=valloc(l))
@@ -44,9 +51,6 @@ void *_calloc(size_t l){
 }
 
 void *stalloc(size_t l){
-	static const size_t st_block=1024*8;
-	static _th stalloc_buf m = {};
-
 	if (m.size < l) goto new;
 	m.buf+=m.pos;
 a:
