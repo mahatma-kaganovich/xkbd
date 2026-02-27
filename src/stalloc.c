@@ -23,6 +23,8 @@
 #define _th
 #endif
 
+#define buf_align (1<<BUF_ALIGN)
+
 const size_t st_block=1024*8;
 
 _th struct _stalloc_buf {
@@ -34,11 +36,11 @@ _th struct _stalloc_buf {
 void *_calloc(size_t l){
 	void *p;
 #if _ALIGN
-	if ((CALIGN&(BUF_ALIGN-1)) &&
+	if ((CALIGN&(buf_align-1)) &&
 #if __STDC_VERSION__ >= 201112L || defined(_ISOC11_SOURCE)
-	    (p=aligned_alloc(BUF_ALIGN,l))
+	    (p=aligned_alloc(buf_align,l))
 #elif defined(_POSIX_C_SOURCE) && (_POSIX_C_SOURCE - 0) >= 200112L
-	    !posix_memalign(&p,BUF_ALIGN,l)
+	    !posix_memalign(&p,buf_align,l)
 #else
 	    (p=valloc(l))
 #endif
@@ -59,5 +61,9 @@ new:
 	if (l >= st_block) return _calloc(l);
 	m.buf=_calloc(m.size=st_block);
 	goto a;
+}
+
+void stline(){
+	if (BUF_ALIGN > _ALIGN) stalloc(m.size & (buf_align-1));
 }
 

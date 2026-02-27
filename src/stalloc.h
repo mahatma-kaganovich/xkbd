@@ -2,12 +2,13 @@
 #ifndef MINIMAL
 // 128-bit alignment if possible
 #define STALLOC 4
-// cache line
-#define BUF_ALIGN 64
 #else
 #define STALLOC 0
-#define BUF_ALIGN (1<<_ALIGN)
 #endif
+
+// 6 to 64 = usual cache line
+// _ALIGN to code optimize
+#define BUF_ALIGN _ALIGN
 
 void *stalloc(size_t l);
 
