@@ -194,6 +194,9 @@ static unsigned long getGCFill(keyboard *kb, GC gc){
 
 int button_render(button *b, int mode)
 {
+  keyboard *kb = b->kb;
+  Display *dpy = kb->display;
+  Pixmap backing = kb->backing;
   /*
     set up a default gc to point to whatevers gc is not NULL
      moving up via button -> box -> keyboard
@@ -207,8 +210,6 @@ int button_render(button *b, int mode)
 
   int l=KBLEVEL(b);
   char *txt;
-  keyboard *kb = b->kb;
-  Pixmap backing = kb->backing;
   int p = kb->pad;
 //  int p = cache_pix==3?0:kb->pad;
   int x = b->vx + p;
@@ -218,13 +219,15 @@ int button_render(button *b, int mode)
   int w = b->act_width - p;
   int h = b->act_height - p;
   int line = ((kb->line_width+1)>>1);
+  int fix = (line<<1)-kb->line_width;
   p = _max(p - line,0);
+
   int ax = b->vx + p;
   int ay = b->vy + p;
-//  p <<= 1;
-  p-=1;
-  int aw = b->act_width - p;
-  int ah = b->act_height - p;
+  int aw = b->act_width;
+  int ah = b->act_height;
+  //aw-=p<<1; ah-=p<<1;
+  aw+=fix; ah+=fix;
 
 #ifdef CACHE_PIX
   Pixmap pix = None;
@@ -247,14 +250,14 @@ int button_render(button *b, int mode)
 		ax+=kb->vvbox->x;
 		ay+=kb->vvbox->y;
 	}
-	XCopyArea(kb->display, pix, backing, kb->gc, 0, 0, aw , ah , ax, ay);
+	XCopyArea(dpy, pix, backing, kb->gc, 0, 0, aw , ah , ax, ay);
 	return backing==kb->win;
     }
-    b->pix[i] = pix = XCreatePixmap(kb->display,
+    b->pix[i] = pix = XCreatePixmap(dpy,
 	kb->win,
 //	backing,
 	aw, ah,
-	DefaultDepth(kb->display, kb->screen) );
+	DefaultDepth(dpy, kb->screen) );
 //   if (cache_pix==3) backing=pix;
   }
     // pixmap must pass too as txt[]=0
@@ -307,30 +310,48 @@ int button_render(button *b, int mode)
 
   int x1=x, y1=y, x2=w, y2=h;
   switch (kb->theme) {
+    case arc:
     case rounded:
     case square:
 	x1+=line;
 	y1+=line;
 	x2-=line<<1;
 	y2-=line<<1;
+	x2+=fix;
+	y2+=fix;
   }
 
   if (!kb->filled || (gc_solid!=kb->filled && getGCFill(kb,kb->filled)!=getGCFill(kb,gc_solid)))
-	XFillRectangle(kb->display, backing, gc_solid, x1, y1, x2, y2);
+    switch (kb->theme) {
+	case arc:
+		XFillArc(dpy, backing, gc_solid, x1, y1, x2, y2, 0, 360 * 64);
+		break;
+	default:
+		XFillRectangle(dpy, backing, gc_solid, x1, y1, x2, y2);
+		break;
+    }
 
-  switch (kb->theme) {
-    case rounded:
-	XDrawRectangle( kb->display, backing, kb->bdr_gc, x, y, w, h);
-	x2+=x;
-	y2+=y;
-	XDrawPoint(kb->display, backing, kb->bdr_gc, x1, y1);
-	XDrawPoint(kb->display, backing, kb->bdr_gc, x2, y1);
-	XDrawPoint(kb->display, backing, kb->bdr_gc, x1, y2);
-	XDrawPoint(kb->display, backing, kb->bdr_gc, x2, y2);
+  GC g = (kb->line_width || b->bg_gc == kb->rev_gc)?kb->bdr_gc:b->bg_gc;
+
+  if (!(mode & STATE(OBIT_DIRECT)))
+   switch (kb->theme) {
+    case arc:
+	if (kb->line_width) XDrawArc(dpy, backing, g, x, y, w, h, 0, 360 * 64);
+	else XFillArc(dpy, backing, g, x, y, w, h, 0, 360 * 64);
 	break;
+    case rounded:
+	if (kb->line_width) {
+		x2+=x1-1;
+		y2+=y1-1;
+		XDrawPoint(dpy, backing, g, x1, y1);
+		XDrawPoint(dpy, backing, g, x2, y1);
+		XDrawPoint(dpy, backing, g, x1, y2);
+		XDrawPoint(dpy, backing, g, x2, y2);
+//		XDrawPoint(dpy, backing, gc_txt, x1, y1); // debug
+	}
     case square:
-	if (!(mode & STATE(OBIT_DIRECT)))
-	XDrawRectangle( kb->display, backing, kb->bdr_gc, x, y, w, h);
+	if (kb->line_width) XDrawRectangle( dpy, backing, g, x, y, w, h);
+	else XFillRectangle( dpy, backing, g, x, y, w, h);
 	break;
   }
 
@@ -344,9 +365,9 @@ int button_render(button *b, int mode)
 
       gc_vals.clip_x_origin = xx;
       gc_vals.clip_y_origin = yy;
-      XChangeGC(kb->display, b->mask_gc, GCClipXOrigin|GCClipYOrigin, &gc_vals);
+      XChangeGC(dpy, b->mask_gc, GCClipXOrigin|GCClipYOrigin, &gc_vals);
 
-      XCopyArea(kb->display, b->pixmap, backing, b->mask_gc,
+      XCopyArea(dpy, b->pixmap, backing, b->mask_gc,
 		0, 0, b->vwidth, b->vheight, xx, yy);
       goto pixmap; /* imgs cannot have text aswell ! */
     }
@@ -368,7 +389,7 @@ int button_render(button *b, int mode)
 		xx, yy + kb->font->ascent,
 		(unsigned char *) txt, strlen(txt));
 #else
-    XDrawString(kb->display, backing, gc_txt,
+    XDrawString(dpy, backing, gc_txt,
 		xx, yy + kb->font->ascent,
 		txt, strlen(txt));
 #endif
@@ -376,7 +397,7 @@ int button_render(button *b, int mode)
 pixmap:
 #ifdef CACHE_PIX
   if (cache_pix)
-	XCopyArea(kb->display, backing, pix, kb->gc,
+	XCopyArea(dpy, backing, pix, kb->gc,
 		ax, ay, aw, ah, 0, 0);
 #endif
    return backing == kb->win;

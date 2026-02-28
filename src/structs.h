@@ -224,7 +224,7 @@ typedef struct _keyboard
   unsigned int state;  /* shifted | caps | modded | normal */
   unsigned int state_locked;  /* shifted | modded | normal */
 
-  enum { rounded, square, plain } theme;
+  enum { rounded, square, plain, arc } theme;
 
   int slide_margin;
   int key_delay_repeat; /* delay time before key repeat */

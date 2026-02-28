@@ -663,6 +663,8 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 		        kb->theme = square;
 		    else if (strcmp(tmpstr_C, "plain") == 0)
 		      kb->theme = plain;
+		    else if (strcmp(tmpstr_C, "arc") == 0)
+		      kb->theme = arc;
 		  }
 		else if (strcmp(tmpstr_A, "col") == 0)
 		  _set_color_fg(kb,tmpstr_C,&kb->rev_gc,NULL);
@@ -807,6 +809,7 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 
     switch  (kb->theme) {
 	case square: XSetLineAttributes(display, kb->bdr_gc, kb->line_width, LineSolid, CapButt, JoinMiter); break;
+	case arc:
 	case rounded: XSetLineAttributes(display, kb->bdr_gc, kb->line_width, LineSolid, CapRound, JoinRound); break;
 	case plain: kb->line_width = 0; break;
     }
