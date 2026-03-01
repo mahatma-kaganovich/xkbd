@@ -371,6 +371,8 @@ static void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
 	XColor exact;
 	int r = 0;
 
+	*gc = None; // let leak some global keyboard GCs
+
 	txt1 = strsep(&txt,"=|");
 	if (txt) r=XAllocNamedColor(dpy,  kb->colormap, txt1, &col, &exact);
 	else txt = txt1;
@@ -388,7 +390,7 @@ static void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
 			}
 		}
 	}
-	if (!r && !XAllocNamedColor(dpy,  kb->colormap, txt, &col, &exact)) {
+	if (!r && !XAllocNamedColor(dpy,  kb->colormap, txt?:txt1, &col, &exact)) {
 		perror("color allocation failed\n"); exit(1);
 	}
 
@@ -407,7 +409,7 @@ static void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
 	}
 	//else
 #endif
-	if (gc) { 
+	if (gc) {
 		if (!*gc)  *gc = _createGC(kb,GC0);
 		XSetForeground(dpy, *gc, col.pixel );
 	}
