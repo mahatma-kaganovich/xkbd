@@ -28,7 +28,7 @@ kp_col 63:63:63
 #height 108
 
 # button style, can be rounded ( default ), square, arc or plain
-button_style arc
+#button_style arc
 
 # border width or 0 to use "solid keycaps" with border color
 border_width 0

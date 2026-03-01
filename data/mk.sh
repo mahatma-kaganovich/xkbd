@@ -1,5 +1,7 @@
 #!/bin/sh
 
+echo ==== $*
+
 pkgdatadir=$1
 shift
 CPPFLAGS=$1
@@ -12,9 +14,14 @@ for i in $*; do
 	sed -e "s,\@pkgdatadir\@,$pkgdatadir," -e "s,\@minimal\@,$minimal," $i >$d
 	d1=${d%.conf}
 	if [ "$d" != "$d1" ]; then
-	    d1=$d1-rg.conf
-	    cp -a $d $d1
-	    patch -i rg.patch $d1 || rm "$d1" "$d1".orig "$d1".rej -f
+		for j in *.patch; do
+			j=${j##*/}
+			j=${j%.patch}
+			d1=$d1-$j.conf
+			cp -a $d $d1
+			echo "patch -i $j.patch $d1"
+			patch -i $j.patch $d1 || rm "$d1" "$d1".orig "$d1".rej -f
+		done
 	fi
 	true
 done
