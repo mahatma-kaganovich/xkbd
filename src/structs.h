@@ -170,7 +170,7 @@ typedef struct _box
 
 } box;
 
-typedef struct _gcs_t { GC fg,bg,txt,txt_rev,bdr; } gcs_t;
+typedef struct _gcs_t { GC bg,rev,txt,txt_rev,bdr; } gcs_t;
 
 #ifdef USE_XFT
 #define FNTYPE XftFont *

@@ -200,7 +200,7 @@ int button_render(button *b, int mode)
   gcs_t gc = b->gc;
 
 #ifdef USE_XFT
-  XftColor tmp_col;
+  XftColor tmp_col = b->col;
 #endif
 
   int l=KBLEVEL(b);
@@ -245,7 +245,7 @@ int button_render(button *b, int mode)
 		ax+=kb->vvbox->x;
 		ay+=kb->vvbox->y;
 	}
-	XCopyArea(dpy, pix, backing, kb->gc.fg, 0, 0, aw , ah , ax, ay);
+	XCopyArea(dpy, pix, backing, kb->gc.rev, 0, 0, aw , ah , ax, ay);
 	return backing==kb->win;
     }
     b->pix[i] = pix = XCreatePixmap(dpy,
@@ -272,23 +272,15 @@ int button_render(button *b, int mode)
 //  b->flags = (b->flags & ~(STATE(OBIT_PRESSED)|STATE(OBIT_LOCKED)|BUTTON_RELEASED))|mode;
   if (mode & STATE(OBIT_PRESSED))
     {
-	
-      //gc.fg = b->gc.fg;
       if (no_lock) {
 	gc.txt   = gc.txt_rev;
 #ifdef USE_XFT
 	tmp_col  = b->col_rev;
 #endif
-     } else {
-	//gc.txt   = b->gc.txt;
-#ifdef USE_XFT
-	tmp_col = b->col;
-#endif
      }
     }
   else if(mode & STATE(OBIT_LOCKED))
     {
-      //gc.fg = b->gc.fg;
       gc.txt   = gc.txt_rev;
 #ifdef USE_XFT
       tmp_col  = b->col_rev;
@@ -296,11 +288,7 @@ int button_render(button *b, int mode)
     }
   else  /* BUTTON_RELEASED */
     {
-      gc.fg = gc.bg;
-      //gc.txt   = b->gc.txt;
-#ifdef USE_XFT
-      tmp_col = b->col;
-#endif
+      gc.rev = gc.bg;
     }
 
   int x1=x, y1=y, x2=w, y2=h;
@@ -316,13 +304,13 @@ int button_render(button *b, int mode)
 	y2+=fix;
   }
 
-  if (!kb->filled || (gc.fg!=kb->filled && getGCFill(kb,kb->filled)!=getGCFill(kb,gc.fg)))
+  if (!kb->filled || (gc.rev!=kb->filled && getGCFill(kb,kb->filled)!=getGCFill(kb,gc.rev)))
     switch (kb->theme) {
 	case arc:
-		XFillArc(dpy, backing, gc.fg, x1, y1, x2, y2, 0, 360 * 64);
+		XFillArc(dpy, backing, gc.rev, x1, y1, x2, y2, 0, 360 * 64);
 		break;
 	default:
-		XFillRectangle(dpy, backing, gc.fg, x1, y1, x2, y2);
+		XFillRectangle(dpy, backing, gc.rev, x1, y1, x2, y2);
 		break;
     }
 
@@ -392,7 +380,7 @@ int button_render(button *b, int mode)
 pixmap:
 #ifdef CACHE_PIX
   if (cache_pix)
-	XCopyArea(dpy, backing, pix, kb->gc.fg,
+	XCopyArea(dpy, backing, pix, kb->gc.rev,
 		ax, ay, aw, ah, 0, 0);
 #endif
    return backing == kb->win;
@@ -410,7 +398,7 @@ void button_paint(button *b)
 	int y = b->vy + p;
 	//p<<=1;
 	p-=1;
-	XCopyArea(b->kb->display, b->kb->backing, b->kb->win, b->kb->gc.fg,
+	XCopyArea(b->kb->display, b->kb->backing, b->kb->win, b->kb->gc.rev,
 	    x, y, b->act_width - p, b->act_height - p,
 	    x+b->kb->vvbox->x, y+b->kb->vvbox->y);
     }

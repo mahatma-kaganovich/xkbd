@@ -68,7 +68,7 @@ static int load_a_single_font(keyboard *kb, char *fontname, FNTYPE *f) {
 #else
   if (*f) XUnloadFont((*f)->fid);
   if ((*f = XLoadQueryFont(kb->display, fontname)) == NULL) return 0;
-  XSetFont(kb->display, kb->gc.fg, (*f)->fid);
+  XSetFont(kb->display, kb->gc.rev, (*f)->fid);
   return True;
 #endif
 }
@@ -502,8 +502,8 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
   kb->GCval.background=BlackPixel(display, screen);
 
   /* create lots and lots of gc's */
-  kb->gc.fg=_createGC(kb,GC0);
   kb->gc.bg=_createGC(kb,GC1);
+  kb->gc.rev=_createGC(kb,GC0);
   kb->gc.txt=_createGC(kb,GC0);
   kb->gc.txt_rev=_createGC(kb,GC1);
   kb->gc.bdr=_createGC(kb,GC0);
@@ -666,12 +666,20 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 		    else if (strcmp(tmpstr_C, "arc") == 0)
 		      kb->theme = arc;
 		  }
-		else if (strcmp(tmpstr_A, "col") == 0)
-		  _set_color_fg(kb,tmpstr_C,&kb->gc.bg,NULL);
-		else if (strcmp(tmpstr_A, "border_col") == 0)
-		  _set_color_fg(kb,tmpstr_C,&kb->gc.bdr,NULL);
+
+		else if (strcmp(tmpstr_A, "col") == 0 || strcmp(tmpstr_A, "bg") == 0)
+		    _set_color_fg(kb,tmpstr_C,&kb->gc.bg,NULL);
 		else if (strcmp(tmpstr_A, "down_col") == 0)
-		  _set_color_fg(kb,tmpstr_C,&kb->gc.fg,NULL);
+		    _set_color_fg(kb,tmpstr_C,&kb->gc.rev,NULL);
+		else if (strcmp(tmpstr_A, "border_col") == 0 || strcmp(tmpstr_A, "border") == 0)
+		    _set_color_fg(kb,tmpstr_C,&kb->gc.bdr,NULL);
+		else if (strcmp(tmpstr_A, "txt_col") == 0 || strcmp(tmpstr_A, "fg") == 0)
+		    _set_color_fg(kb,tmpstr_C,&kb->gc.txt,&kb->color);
+		else if (strcmp(tmpstr_A, "txt_col_rev") == 0)
+		    _set_color_fg(kb,tmpstr_C,&kb->gc.txt_rev,&kb->color_rev);
+
+		else if (strcmp(tmpstr_A, "sym_col") == 0)
+		     _set_color_fg(kb,tmpstr_C,&kb->txt_sym_gc,&kb->color_sym);
 		else if (!strcmp(tmpstr_A, "gray_col") || !strcmp(tmpstr_A, "grey_col"))
 		  _set_color_fg(kb,tmpstr_C,&kb->grey_gc,NULL);
 		else if (!strcmp(tmpstr_A, "kp_col"))
@@ -692,12 +700,6 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 		     kb->key_delay_repeat = atoi(tmpstr_C);
 		else if (strcmp(tmpstr_A, "repeat_time") == 0)
 		     kb->key_repeat = atoi(tmpstr_C);
-		else if (strcmp(tmpstr_A, "txt_col") == 0)
-		     _set_color_fg(kb,tmpstr_C,&kb->gc.txt,&kb->color);
-		else if (strcmp(tmpstr_A, "sym_col") == 0)
-		     _set_color_fg(kb,tmpstr_C,&kb->txt_sym_gc,&kb->color_sym);
-		else if (strcmp(tmpstr_A, "txt_col_rev") == 0)
-		     _set_color_fg(kb,tmpstr_C,&kb->gc.txt_rev,&kb->color_rev);
 		else if (!strcmp(tmpstr_A, "def_width"))
 		     kb->def_width = atoi(tmpstr_C);
 		else if (!strcmp(tmpstr_A, "def_height"))
@@ -741,16 +743,18 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 		else if (strcmp(tmpstr_A, "img") == 0)
 		  { button_set_pixmap(b, tmpstr_C); }
 #endif
-		else if (strcmp(tmpstr_A, "bg") == 0)
-		  {b->gc.bg=NULL; _set_color_fg(kb,tmpstr_C,&b->gc.bg,NULL);}
-		else if (strcmp(tmpstr_A, "fg") == 0)
-		  {b->gc.fg=NULL; _set_color_fg(kb,tmpstr_C,&b->gc.fg,NULL);}
-		else if (strcmp(tmpstr_A, "border") == 0)
-		  _set_color_fg(kb,tmpstr_C,&b->gc.bdr,NULL);
-		else if (strcmp(tmpstr_A, "txt_col") == 0)
-		  _set_color_fg(kb,tmpstr_C,&b->gc.txt,&b->col);
+
+		else if (strcmp(tmpstr_A, "col") == 0 || strcmp(tmpstr_A, "bg") == 0)
+		    _set_color_fg(kb,tmpstr_C,&b->gc.bg,NULL);
+		else if (strcmp(tmpstr_A, "down_col") == 0)
+		    _set_color_fg(kb,tmpstr_C,&b->gc.rev,NULL);
+		else if (strcmp(tmpstr_A, "border_col") == 0 || strcmp(tmpstr_A, "border") == 0)
+		    _set_color_fg(kb,tmpstr_C,&b->gc.bdr,NULL);
+		else if (strcmp(tmpstr_A, "txt_col") == 0 || strcmp(tmpstr_A, "fg") == 0)
+		    _set_color_fg(kb,tmpstr_C,&b->gc.txt,&kb->color);
 		else if (strcmp(tmpstr_A, "txt_col_rev") == 0)
-		  _set_color_fg(kb,tmpstr_C,NULL,&b->col_rev);
+		    _set_color_fg(kb,tmpstr_C,&b->gc.txt_rev,&kb->color_rev);
+
 		else if (strcmp(tmpstr_A, "slide_up_ks") == 0)
 		  button_set_slide_ks(b, tmpstr_C, UP);
 		else if (strcmp(tmpstr_A, "slide_down_ks") == 0)
@@ -1155,7 +1159,7 @@ static void kb_render(keyboard *kb)
 static void kb_paint(keyboard *kb)
 {
   if (kb->backing!=kb->win)
-  XCopyArea(kb->display, kb->backing, kb->win, kb->gc.fg,
+  XCopyArea(kb->display, kb->backing, kb->win, kb->gc.rev,
 	    0, 0, kb->vbox->act_width, kb->vbox->act_height,
 	    kb->vbox->x, kb->vbox->y);
 }
