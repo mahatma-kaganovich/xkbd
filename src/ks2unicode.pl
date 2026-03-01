@@ -39,6 +39,7 @@
 'XF86Ungrab'=>'/gr',
 'XF86ClearGrab'=>'*gr',
 'Tab' => 'Tab',
+#'Begin' =>'',
 );
 
 $h='/usr/include/X11/keysymdef.h';

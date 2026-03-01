@@ -22,8 +22,14 @@ txt_col  black
 # width  320
 # height 100
 
-# button style, can be rounded ( default ), square or plain
-button_style square
+# button style, can be rounded ( default ), square, arc or plain
+#button_style arc
+
+# border width or 0 to use "solid keycaps" with border color
+#border_width 0
+
+#button_padding 1
+
 repeat_delay 50
 
 </global>

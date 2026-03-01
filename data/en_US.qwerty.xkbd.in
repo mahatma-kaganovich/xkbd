@@ -24,7 +24,7 @@ down_col  100:100:200
 #width  xxx
 #height xxx
 
-# button style, can be rounded ( default ), square or plain
+# button style, can be rounded ( default ), square, arc or plain
 # button_style plain
 repeat_delay 50
 

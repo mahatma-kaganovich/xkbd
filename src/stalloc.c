@@ -6,6 +6,9 @@
 
 #if __STDC_VERSION__ >= 201112L
 #include <stddef.h>
+#if __STDC_VERSION__ < 202311L
+#include <stdalign.h>
+#endif
 #define CALIGN alignof(max_align_t)
 #define _th thread_local
 #else

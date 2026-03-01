@@ -27,8 +27,14 @@ kp_col 0:31:31
 #width  252
 #height 90
 
-# button style, can be rounded ( default ), square or plain
-button_style square
+# button style, can be rounded ( default ), square, arc or plain
+#button_style arc
+
+# border width or 0 to use "solid keycaps" with border color
+#border_width 0
+
+#button_padding 1
+
 #repeat_delay 50
 # 0 disable repeat (powersave), -1 - delay & time from X
 repeat_time 0

@@ -14,7 +14,7 @@ for i in $*; do
 	if [ "$d" != "$d1" ]; then
 	    d1=$d1-rg.conf
 	    cp -a $d $d1
-	    patch -i rg.patch $d1 # || rm $d1
+	    patch -i rg.patch $d1 || rm "$d1" "$d1".orig "$d1".rej -f
 	fi
 	true
 done

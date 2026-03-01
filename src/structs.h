@@ -170,6 +170,8 @@ typedef struct _box
 
 } box;
 
+typedef struct _gcs_t { GC fg,bg,txt,txt_rev,bdr; } gcs_t;
+
 #ifdef USE_XFT
 #define FNTYPE XftFont *
 #else
@@ -206,16 +208,11 @@ typedef struct _keyboard
 #define backing win
 #endif
 
-  GC gc;
-  GC rev_gc;   /* inverse gc of above */
-  GC txt_gc;   /* gc's for button txt */
-  GC txt_rev_gc;
-  GC bdr_gc;
-  GC txt_sym_gc;
+  gcs_t gc;
 
+  GC txt_sym_gc;
   GC grey_gc;
   GC kp_gc;
-
   GC filled;
 
   FNTYPE font;
@@ -317,10 +314,7 @@ typedef struct _button
   keyboard *kb;   /* pointer to parent keyboard */
   box   *parent;  /* pointer to holding box */
 
-  GC fg_gc;       /* gc's for 'general' button cols */
-  GC bg_gc;
-  GC txt_gc;
-  
+  gcs_t gc;
 
   signed int layout_switch; /* Signals the button switches layout
 			       set to -1 for no switch            */

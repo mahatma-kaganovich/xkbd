@@ -22,7 +22,7 @@ txt_col  black
 width  480
 height 280
 
-# button style, can be rounded ( default ), square or plain
+# button style, can be rounded ( default ), square, arc or plain
 button_style plain
 
 </global>

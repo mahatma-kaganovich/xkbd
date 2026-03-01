@@ -68,7 +68,7 @@ down_col  200:200:200
 		default  RET
 		default_ks Return
 		key_span_width 1
-        </key>		
+	</key>		
 
  </row>
  </layout>

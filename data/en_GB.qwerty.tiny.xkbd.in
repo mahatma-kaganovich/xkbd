@@ -441,7 +441,7 @@ switch	    1
 	<key>
 		default  RET
 		default_ks Return
-        </key>		
+	</key>		
 
  </row>
  <row>

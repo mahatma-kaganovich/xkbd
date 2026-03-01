@@ -197,12 +197,7 @@ int button_render(button *b, int mode)
   keyboard *kb = b->kb;
   Display *dpy = kb->display;
   Pixmap backing = kb->backing;
-  /*
-    set up a default gc to point to whatevers gc is not NULL
-     moving up via button -> box -> keyboard
-  */
-  GC gc_txt;
-  GC gc_solid;
+  gcs_t gc = b->gc;
 
 #ifdef USE_XFT
   XftColor tmp_col;
@@ -250,7 +245,7 @@ int button_render(button *b, int mode)
 		ax+=kb->vvbox->x;
 		ay+=kb->vvbox->y;
 	}
-	XCopyArea(dpy, pix, backing, kb->gc, 0, 0, aw , ah , ax, ay);
+	XCopyArea(dpy, pix, backing, kb->gc.fg, 0, 0, aw , ah , ax, ay);
 	return backing==kb->win;
     }
     b->pix[i] = pix = XCreatePixmap(dpy,
@@ -278,14 +273,14 @@ int button_render(button *b, int mode)
   if (mode & STATE(OBIT_PRESSED))
     {
 	
-      gc_solid = b->fg_gc;
+      //gc.fg = b->gc.fg;
       if (no_lock) {
-	gc_txt   = kb->txt_rev_gc;
+	gc.txt   = gc.txt_rev;
 #ifdef USE_XFT
 	tmp_col  = b->col_rev;
 #endif
      } else {
-	gc_txt   = b->txt_gc;
+	//gc.txt   = b->gc.txt;
 #ifdef USE_XFT
 	tmp_col = b->col;
 #endif
@@ -293,16 +288,16 @@ int button_render(button *b, int mode)
     }
   else if(mode & STATE(OBIT_LOCKED))
     {
-      gc_solid = b->fg_gc;
-      gc_txt   = kb->txt_rev_gc;
+      //gc.fg = b->gc.fg;
+      gc.txt   = gc.txt_rev;
 #ifdef USE_XFT
       tmp_col  = b->col_rev;
 #endif
     }
   else  /* BUTTON_RELEASED */
     {
-      gc_solid = b->bg_gc;
-      gc_txt   = b->txt_gc;
+      gc.fg = gc.bg;
+      //gc.txt   = b->gc.txt;
 #ifdef USE_XFT
       tmp_col = b->col;
 #endif
@@ -321,17 +316,17 @@ int button_render(button *b, int mode)
 	y2+=fix;
   }
 
-  if (!kb->filled || (gc_solid!=kb->filled && getGCFill(kb,kb->filled)!=getGCFill(kb,gc_solid)))
+  if (!kb->filled || (gc.fg!=kb->filled && getGCFill(kb,kb->filled)!=getGCFill(kb,gc.fg)))
     switch (kb->theme) {
 	case arc:
-		XFillArc(dpy, backing, gc_solid, x1, y1, x2, y2, 0, 360 * 64);
+		XFillArc(dpy, backing, gc.fg, x1, y1, x2, y2, 0, 360 * 64);
 		break;
 	default:
-		XFillRectangle(dpy, backing, gc_solid, x1, y1, x2, y2);
+		XFillRectangle(dpy, backing, gc.fg, x1, y1, x2, y2);
 		break;
     }
 
-  GC g = (kb->line_width || b->bg_gc == kb->rev_gc)?kb->bdr_gc:b->bg_gc;
+  GC g = (kb->line_width || b->gc.bg == kb->gc.bg)?kb->gc.bdr:b->gc.bg;
 
   if (!(mode & STATE(OBIT_DIRECT)))
    switch (kb->theme) {
@@ -347,7 +342,7 @@ int button_render(button *b, int mode)
 		XDrawPoint(dpy, backing, g, x2, y1);
 		XDrawPoint(dpy, backing, g, x1, y2);
 		XDrawPoint(dpy, backing, g, x2, y2);
-//		XDrawPoint(dpy, backing, gc_txt, x1, y1); // debug
+//		XDrawPoint(dpy, backing, gc.txt, x1, y1); // debug
 	}
     case square:
 	if (kb->line_width) XDrawRectangle( dpy, backing, g, x, y, w, h);
@@ -389,7 +384,7 @@ int button_render(button *b, int mode)
 		xx, yy + kb->font->ascent,
 		(unsigned char *) txt, strlen(txt));
 #else
-    XDrawString(dpy, backing, gc_txt,
+    XDrawString(dpy, backing, gc.txt,
 		xx, yy + kb->font->ascent,
 		txt, strlen(txt));
 #endif
@@ -397,7 +392,7 @@ int button_render(button *b, int mode)
 pixmap:
 #ifdef CACHE_PIX
   if (cache_pix)
-	XCopyArea(dpy, backing, pix, kb->gc,
+	XCopyArea(dpy, backing, pix, kb->gc.fg,
 		ax, ay, aw, ah, 0, 0);
 #endif
    return backing == kb->win;
@@ -415,7 +410,7 @@ void button_paint(button *b)
 	int y = b->vy + p;
 	//p<<=1;
 	p-=1;
-	XCopyArea(b->kb->display, b->kb->backing, b->kb->win, b->kb->gc,
+	XCopyArea(b->kb->display, b->kb->backing, b->kb->win, b->kb->gc.fg,
 	    x, y, b->act_width - p, b->act_height - p,
 	    x+b->kb->vvbox->x, y+b->kb->vvbox->y);
     }
@@ -454,9 +449,8 @@ button* button_new(keyboard *k)
   button *b = calloc1(button);
   b->kb = k;
 
-  b->fg_gc      = k->gc;
-  b->bg_gc      = k->rev_gc;
-  b->txt_gc     = k->txt_gc;
+  b->gc = k->gc;
+  b->gc.txt = b->gc.txt_rev = NULL;
   b->col = k->color;
   b->col_rev = k->color_rev;
 

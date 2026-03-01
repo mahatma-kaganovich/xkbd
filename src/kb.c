@@ -68,7 +68,7 @@ static int load_a_single_font(keyboard *kb, char *fontname, FNTYPE *f) {
 #else
   if (*f) XUnloadFont((*f)->fid);
   if ((*f = XLoadQueryFont(kb->display, fontname)) == NULL) return 0;
-  XSetFont(kb->display, kb->gc, (*f)->fid);
+  XSetFont(kb->display, kb->gc.fg, (*f)->fid);
   return True;
 #endif
 }
@@ -195,8 +195,8 @@ found:
                 }
 	}
 
-	if (is_sym && kb->txt_sym_gc) {
-		b->txt_gc = kb->txt_sym_gc;
+	if (is_sym && kb->txt_sym_gc && b->gc.txt == kb->gc.txt) {
+		b->gc.txt = kb->txt_sym_gc;
 #ifdef USE_XFT
 		b->col = kb->color_sym;
 #endif
@@ -206,10 +206,10 @@ found:
 	if (b->ks[0]>=0xff80 && b->ks[0]<=0xffb9) {
 		// KP_
 //		for(l=0;l<LEVELS;l++) b->mods[l]&=~(STATE(KBIT_ALT)|STATE(KBIT_MOD));
-		if (b->bg_gc == kb->rev_gc) b->bg_gc = kb->kp_gc;
+		if (b->gc.bg == kb->gc.bg) b->gc.bg = kb->kp_gc;
 		if (kb->kp_width) w = kb->kp_width;
-	} else if ( b->bg_gc == b->kb->rev_gc && (b->modifier || !b->ks[0] || !is_sym))
-		b->bg_gc = kb->grey_gc;
+	} else if ( b->gc.bg == b->kb->gc.bg && (b->modifier || !b->ks[0] || !is_sym))
+		b->gc.bg = kb->grey_gc;
 
 	if(!b->width) b->width = w?:kb->def_width;
 	if(!b->height) b->height = kb->def_height;
@@ -478,7 +478,7 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
   char tmpstr_C[128];
 
   box *tmp_box = NULL;
-  button *tmp_but = NULL;
+  button *b = NULL;
   int line_no = 0;
   enum { none, kbddef, rowdef, keydef } context;
 
@@ -502,11 +502,11 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
   kb->GCval.background=BlackPixel(display, screen);
 
   /* create lots and lots of gc's */
-  kb->gc=_createGC(kb,GC0);
-  kb->rev_gc=_createGC(kb,GC1);
-  kb->txt_gc=_createGC(kb,GC0);
-  kb->txt_rev_gc=_createGC(kb,GC1);
-  kb->bdr_gc=_createGC(kb,GC0);
+  kb->gc.fg=_createGC(kb,GC0);
+  kb->gc.bg=_createGC(kb,GC1);
+  kb->gc.txt=_createGC(kb,GC0);
+  kb->gc.txt_rev=_createGC(kb,GC1);
+  kb->gc.bdr=_createGC(kb,GC0);
 
   kb->grey_gc=_createGC(kb,GC1);
   kb->kp_gc=_createGC(kb,GC1);
@@ -579,7 +579,7 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 
 		  break;
 		case keydef:
-		  button_update(tmp_but);
+		  button_update(b);
 		  break;
 		case none:
 		  break;
@@ -634,7 +634,7 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 	      if (strncmp(tmpstr_A, "key", 3) == 0)
 		{
 		  /* check here for NULL tmp_button */
-		  tmp_but = box_add_button(tmp_box, button_new(kb) );
+		  b = box_add_button(tmp_box, button_new(kb) );
 		  context=keydef;
 		  continue;
 		}
@@ -667,11 +667,11 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 		      kb->theme = arc;
 		  }
 		else if (strcmp(tmpstr_A, "col") == 0)
-		  _set_color_fg(kb,tmpstr_C,&kb->rev_gc,NULL);
+		  _set_color_fg(kb,tmpstr_C,&kb->gc.bg,NULL);
 		else if (strcmp(tmpstr_A, "border_col") == 0)
-		  _set_color_fg(kb,tmpstr_C,&kb->bdr_gc,NULL);
+		  _set_color_fg(kb,tmpstr_C,&kb->gc.bdr,NULL);
 		else if (strcmp(tmpstr_A, "down_col") == 0)
-		  _set_color_fg(kb,tmpstr_C,&kb->gc,NULL);
+		  _set_color_fg(kb,tmpstr_C,&kb->gc.fg,NULL);
 		else if (!strcmp(tmpstr_A, "gray_col") || !strcmp(tmpstr_A, "grey_col"))
 		  _set_color_fg(kb,tmpstr_C,&kb->grey_gc,NULL);
 		else if (!strcmp(tmpstr_A, "kp_col"))
@@ -693,11 +693,11 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 		else if (strcmp(tmpstr_A, "repeat_time") == 0)
 		     kb->key_repeat = atoi(tmpstr_C);
 		else if (strcmp(tmpstr_A, "txt_col") == 0)
-		     _set_color_fg(kb,tmpstr_C,&kb->txt_gc,&kb->color);
+		     _set_color_fg(kb,tmpstr_C,&kb->gc.txt,&kb->color);
 		else if (strcmp(tmpstr_A, "sym_col") == 0)
 		     _set_color_fg(kb,tmpstr_C,&kb->txt_sym_gc,&kb->color_sym);
 		else if (strcmp(tmpstr_A, "txt_col_rev") == 0)
-		     _set_color_fg(kb,tmpstr_C,&kb->txt_rev_gc,&kb->color_rev);
+		     _set_color_fg(kb,tmpstr_C,&kb->gc.txt_rev,&kb->color_rev);
 		else if (!strcmp(tmpstr_A, "def_width"))
 		     kb->def_width = atoi(tmpstr_C);
 		else if (!strcmp(tmpstr_A, "def_height"))
@@ -709,77 +709,79 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 		break;
 	      case keydef:
 		if (strcmp(tmpstr_A, "default") == 0)
-		  DEFAULT_TXT(tmp_but) = strdup(tmpstr_C);
+		  DEFAULT_TXT(b) = strdup(tmpstr_C);
 		else if (strcmp(tmpstr_A, "shift") == 0)
-		  SHIFT_TXT(tmp_but) = strdup(tmpstr_C);
+		  SHIFT_TXT(b) = strdup(tmpstr_C);
 		else if (strcmp(tmpstr_A, "switch") == 0) {
 		  // -1 is default, but setting in config -> -2 & switch KeySym
 		  // to other keysym - set -2 & concrete default_ks
-		  if((tmp_but->layout_switch = atoi(tmpstr_C))==-1) {
-		    button_set_txt_ks(tmp_but, "ISO_Next_Group");
-		    tmp_but->layout_switch = -2;
+		  if((b->layout_switch = atoi(tmpstr_C))==-1) {
+		    button_set_txt_ks(b, "ISO_Next_Group");
+		    b->layout_switch = -2;
 		  }
 		} else if (strcmp(tmpstr_A, "mod") == 0)
-		  MOD_TXT(tmp_but) = strdup(tmpstr_C);
+		  MOD_TXT(b) = strdup(tmpstr_C);
 		else if (strcmp(tmpstr_A, "shift_mod") == 0)
-		  SHIFT_MOD_TXT(tmp_but) = strdup(tmpstr_C);
+		  SHIFT_MOD_TXT(b) = strdup(tmpstr_C);
 		else if (strcmp(tmpstr_A, "default_ks") == 0)
-		  button_set_txt_ks(tmp_but, tmpstr_C);
+		  button_set_txt_ks(b, tmpstr_C);
 		else if (strcmp(tmpstr_A, "shift_ks") == 0)
-		  SET_KS(tmp_but,1,button_ks(tmpstr_C))
+		  SET_KS(b,1,button_ks(tmpstr_C))
 		else if (strcmp(tmpstr_A, "mod_ks") == 0)
-		  SET_KS(tmp_but,2,button_ks(tmpstr_C))
+		  SET_KS(b,2,button_ks(tmpstr_C))
 		else if (strcmp(tmpstr_A, "shift_mod_ks") == 0)
-		  SET_KS(tmp_but,3,button_ks(tmpstr_C))
+		  SET_KS(b,3,button_ks(tmpstr_C))
 		else if (!strcmp(tmpstr_A, "modifier"))
-		  tmp_but->modifier = atoi(tmpstr_C);
+		  b->modifier = atoi(tmpstr_C);
 		else if (!strcmp(tmpstr_A, "lock")) {
-		  tmp_but->modifier = atoi(tmpstr_C);
-		  tmp_but->flags & STATE(OBIT_LOCK);
+		  b->modifier = atoi(tmpstr_C);
+		  b->flags & STATE(OBIT_LOCK);
 		}
 #ifdef USE_XPM
 		else if (strcmp(tmpstr_A, "img") == 0)
-		  { button_set_pixmap(tmp_but, tmpstr_C); }
+		  { button_set_pixmap(b, tmpstr_C); }
 #endif
 		else if (strcmp(tmpstr_A, "bg") == 0)
-		  {tmp_but->bg_gc=NULL; _set_color_fg(kb,tmpstr_C,&tmp_but->bg_gc,NULL);}
+		  {b->gc.bg=NULL; _set_color_fg(kb,tmpstr_C,&b->gc.bg,NULL);}
 		else if (strcmp(tmpstr_A, "fg") == 0)
-		  {tmp_but->fg_gc=NULL; _set_color_fg(kb,tmpstr_C,&tmp_but->fg_gc,NULL);}
+		  {b->gc.fg=NULL; _set_color_fg(kb,tmpstr_C,&b->gc.fg,NULL);}
+		else if (strcmp(tmpstr_A, "border") == 0)
+		  _set_color_fg(kb,tmpstr_C,&b->gc.bdr,NULL);
 		else if (strcmp(tmpstr_A, "txt_col") == 0)
-		  _set_color_fg(kb,tmpstr_C,&tmp_but->txt_gc,&tmp_but->col);
+		  _set_color_fg(kb,tmpstr_C,&b->gc.txt,&b->col);
 		else if (strcmp(tmpstr_A, "txt_col_rev") == 0)
-		  _set_color_fg(kb,tmpstr_C,NULL,&tmp_but->col_rev);
+		  _set_color_fg(kb,tmpstr_C,NULL,&b->col_rev);
 		else if (strcmp(tmpstr_A, "slide_up_ks") == 0)
-		  button_set_slide_ks(tmp_but, tmpstr_C, UP);
+		  button_set_slide_ks(b, tmpstr_C, UP);
 		else if (strcmp(tmpstr_A, "slide_down_ks") == 0)
-		  button_set_slide_ks(tmp_but, tmpstr_C, DOWN);
+		  button_set_slide_ks(b, tmpstr_C, DOWN);
 		else if (strcmp(tmpstr_A, "slide_left_ks") == 0)
-		  button_set_slide_ks(tmp_but, tmpstr_C, LEFT);
+		  button_set_slide_ks(b, tmpstr_C, LEFT);
 		else if (strcmp(tmpstr_A, "slide_right_ks") == 0)
-		  button_set_slide_ks(tmp_but, tmpstr_C, RIGHT);
+		  button_set_slide_ks(b, tmpstr_C, RIGHT);
 		else if (strcmp(tmpstr_A, "vwidth") == 0)
 		{
-		    tmp_but->flags |= STATE(OBIT_WIDTH_SPEC);
-		    tmp_but->vwidth = atoi(tmpstr_C);
+		    b->flags |= STATE(OBIT_WIDTH_SPEC);
+		    b->vwidth = atoi(tmpstr_C);
 		}
 		else if (strcmp(tmpstr_A, "width") == 0)
-			tmp_but->width = atoi(tmpstr_C);
+			b->width = atoi(tmpstr_C);
 		else if (strcmp(tmpstr_A, "key_span_width") == 0)
 		{
-		   tmp_but->flags |= STATE(OBIT_WIDTH_SPEC);
-		   tmp_but->key_span_width = atoi(tmpstr_C);
+		   b->flags |= STATE(OBIT_WIDTH_SPEC);
+		   b->key_span_width = atoi(tmpstr_C);
 		}
 
 		else if (strcmp(tmpstr_A, "vheight") == 0)
-		  tmp_but->vheight = atoi(tmpstr_C);
+		  b->vheight = atoi(tmpstr_C);
 		else if (strcmp(tmpstr_A, "height") == 0)
-		  tmp_but->height = atoi(tmpstr_C);
+		  b->height = atoi(tmpstr_C);
                 else if (strcmp(tmpstr_A, "obey_capslock") == 0)
 		{
 		  if (strcmp(tmpstr_C, "yes") == 0)
-		    tmp_but->flags |= STATE(OBIT_OBEYCAPS);
+		    b->flags |= STATE(OBIT_OBEYCAPS);
 		  else if (strcmp(tmpstr_C, "no") == 0)
-		    tmp_but->flags &= ~STATE(OBIT_OBEYCAPS);
+		    b->flags &= ~STATE(OBIT_OBEYCAPS);
 		  else
 		  {
 		    perror("invalid value for obey_capslock\n"); exit(1);
@@ -808,9 +810,9 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
     }
 
     switch  (kb->theme) {
-	case square: XSetLineAttributes(display, kb->bdr_gc, kb->line_width, LineSolid, CapButt, JoinMiter); break;
+	case square: XSetLineAttributes(display, kb->gc.bdr, kb->line_width, LineSolid, CapButt, JoinMiter); break;
 	case arc:
-	case rounded: XSetLineAttributes(display, kb->bdr_gc, kb->line_width, LineSolid, CapRound, JoinRound); break;
+	case rounded: XSetLineAttributes(display, kb->gc.bdr, kb->line_width, LineSolid, CapRound, JoinRound); break;
 	case plain: kb->line_width = 0; break;
     }
 
@@ -1139,7 +1141,7 @@ static void kb_render(keyboard *kb)
 	list *listp, *ip;
 	if (kb->backing!=kb->win)
 	    XFillRectangle(kb->display, kb->backing,
-		kb->filled=kb->rev_gc, kb->vvbox->vx, kb->vvbox->vy,
+		kb->filled=kb->gc.bg, kb->vvbox->vx, kb->vvbox->vy,
 		kb->vvbox->act_width, kb->vvbox->act_height);
 	for (listp = kb->vvbox->root_kid; listp; listp = listp->next) {
 		for(ip=((box *)listp->data)->root_kid; ip; ip= ip->next) {
@@ -1153,7 +1155,7 @@ static void kb_render(keyboard *kb)
 static void kb_paint(keyboard *kb)
 {
   if (kb->backing!=kb->win)
-  XCopyArea(kb->display, kb->backing, kb->win, kb->gc,
+  XCopyArea(kb->display, kb->backing, kb->win, kb->gc.fg,
 	    0, 0, kb->vbox->act_width, kb->vbox->act_height,
 	    kb->vbox->x, kb->vbox->y);
 }
@@ -1887,7 +1889,7 @@ void kb_send_keypress(button *b, unsigned int next_state, unsigned int flags) {
 
 button * kb_find_button(keyboard *kb, int x, int y)
 {
-	button *but = NULL, *tmp_but;
+	button *but = NULL, *b;
 	box *vbox = kb->vbox, *bx;
 	list *listp, *ip;
 	int i;
@@ -1901,16 +1903,16 @@ button * kb_find_button(keyboard *kb, int x, int y)
 		if (y < i) break;
 		if (y >= i+bx->act_height && listp->next) continue;
 		for(ip=bx->root_kid; ip; ip=ip->next) {
-			tmp_but = (button *)ip->data;
-			i = tmp_but->x+bx->x;
+			b = (button *)ip->data;
+			i = b->x+bx->x;
 			if (x<i) break;
-			if (x>=i+tmp_but->act_width && ip->next) continue;
-//			i = tmp_but->y+bx->y
+			if (x>=i+b->act_width && ip->next) continue;
+//			i = b->y+bx->y
 //			if (y<i) break;
-//			if (y>i+tmp_but->act_height && listp->next) continue;
+//			if (y>i+b->act_height && listp->next) continue;
 			/* if pressed invariant/border - check buttons are identical */
-			if (but && memcmp(but,tmp_but,(char*)&but->flags - (char*)&but->ks) + sizeof(but->flags)) return NULL;
-			but = tmp_but;
+			if (but && memcmp(but,b,(char*)&but->flags - (char*)&but->ks) + sizeof(but->flags)) return NULL;
+			but = b;
 		}
 	}
 	if (!but) fprintf(stderr, "xkbd: no button %i,%i\n",x,y);
