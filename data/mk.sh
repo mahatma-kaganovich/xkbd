@@ -17,10 +17,9 @@ for i in $*; do
 		for j in *.patch; do
 			j=${j##*/}
 			j=${j%.patch}
-			d1=$d1-$j.conf
-			cp -a $d $d1
-			echo "patch -i $j.patch $d1"
-			patch -i $j.patch $d1 || rm "$d1" "$d1".orig "$d1".rej -f
+			d2=$d1-$j.conf
+			cp -a $d $d2
+			patch -fi $j.patch $d2 || rm "$d2" "$d2".orig "$d2".rej -f
 		done
 	fi
 	true
