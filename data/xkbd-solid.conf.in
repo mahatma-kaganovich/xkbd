@@ -307,7 +307,7 @@ kp_width 18
 		default_ks Up
 		mod PgUp
 		mod_ks Prior
-		bg 64:64:64
+		bg 63:63:63
 	</key>
 	<key>
 		default Shift
@@ -365,20 +365,20 @@ kp_width 18
 		default ←
 		default_ks Left
 		mod_ks Home
-		bg 64:64:64
+		bg 63:63:63
 	</key>
 	<key>
 		default ↓
 		default_ks Down
 		mod PgDn
 		mod_ks Next
-		bg 64:64:64
+		bg 63:63:63
 	</key>
 	<key>
 		default →
 		default_ks Right
 		mod_ks End
-		bg 64:64:64
+		bg 63:63:63
 	</key>
 	<key>
 		default_ks Insert
