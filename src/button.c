@@ -199,10 +199,6 @@ int button_render(button *b, int mode)
   Pixmap backing = kb->backing;
   gcs_t gc = b->gc;
 
-#ifdef USE_XFT
-  XftColor tmp_col = b->col;
-#endif
-
   int l=KBLEVEL(b);
   char *txt;
   int p = kb->pad;
@@ -275,7 +271,7 @@ int button_render(button *b, int mode)
       if (no_lock) {
 	gc.txt   = gc.txt_rev;
 #ifdef USE_XFT
-	tmp_col  = b->col_rev;
+	gc.col  = gc.col_rev;
 #endif
      }
     }
@@ -283,7 +279,7 @@ int button_render(button *b, int mode)
     {
       gc.txt   = gc.txt_rev;
 #ifdef USE_XFT
-      tmp_col  = b->col_rev;
+      gc.col  = gc.col_rev;
 #endif
     }
   else  /* BUTTON_RELEASED */
@@ -368,7 +364,7 @@ int button_render(button *b, int mode)
     int xx = x+((w - _but_size(b,l))>>1);
     int yy = y+((h - (b->vheight?:strlen1utf8(txt)?kb->vheight1:kb->vheight))>>1);
 #ifdef USE_XFT
-    XftDrawStringUtf8(kb->xftdraw, &tmp_col, strlen1utf8(txt)?kb->font1:kb->font,
+    XftDrawStringUtf8(kb->xftdraw, &gc.col, strlen1utf8(txt)?kb->font1:kb->font,
 		xx, yy + kb->font->ascent,
 		(unsigned char *) txt, strlen(txt));
 #else
@@ -438,9 +434,7 @@ button* button_new(keyboard *k)
   b->kb = k;
 
   b->gc = k->gc;
-  b->gc.txt = b->gc.txt_rev = NULL;
-  b->col = k->color;
-  b->col_rev = k->color_rev;
+//  b->gc.txt = b->gc.txt_rev = NULL;
 
   b->layout_switch = -1;
 

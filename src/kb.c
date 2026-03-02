@@ -198,7 +198,7 @@ found:
 	if (is_sym && kb->txt_sym_gc && b->gc.txt == kb->gc.txt) {
 		b->gc.txt = kb->txt_sym_gc;
 #ifdef USE_XFT
-		b->col = kb->color_sym;
+		b->gc.col = kb->color_sym;
 #endif
 	}
 
@@ -525,7 +525,7 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 		     kb->visual,
 		     kb->colormap,
 		     &colortmp,
-		     &kb->color_rev);
+		     &kb->gc.col_rev);
 
   colortmp.red   = 0x0000;
   colortmp.green = 0x0000;
@@ -535,7 +535,7 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 		     kb->visual,
 		     kb->colormap,
 		     &colortmp,
-		     &kb->color);
+		     &kb->gc.col);
 
   /* --- end xft bits -------------------------- */
 
@@ -676,9 +676,9 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 		else if (strcmp(tmpstr_A, "border_col") == 0 || strcmp(tmpstr_A, "border") == 0)
 		    _set_color_fg(kb,tmpstr_C,&kb->gc.bdr,NULL);
 		else if (strcmp(tmpstr_A, "txt_col") == 0 || strcmp(tmpstr_A, "fg") == 0)
-		    _set_color_fg(kb,tmpstr_C,&kb->gc.txt,&kb->color);
+		    _set_color_fg(kb,tmpstr_C,&kb->gc.txt,&kb->gc.col);
 		else if (strcmp(tmpstr_A, "txt_col_rev") == 0)
-		    _set_color_fg(kb,tmpstr_C,&kb->gc.txt_rev,&kb->color_rev);
+		    _set_color_fg(kb,tmpstr_C,&kb->gc.txt_rev,&kb->gc.col_rev);
 
 		else if (strcmp(tmpstr_A, "sym_col") == 0)
 		     _set_color_fg(kb,tmpstr_C,&kb->txt_sym_gc,&kb->color_sym);
@@ -753,9 +753,9 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 		else if (strcmp(tmpstr_A, "border_col") == 0 || strcmp(tmpstr_A, "border") == 0)
 		    _set_color_fg(kb,tmpstr_C,&b->gc.bdr,NULL);
 		else if (strcmp(tmpstr_A, "txt_col") == 0 || strcmp(tmpstr_A, "fg") == 0)
-		    _set_color_fg(kb,tmpstr_C,&b->gc.txt,&kb->color);
+		    _set_color_fg(kb,tmpstr_C,&b->gc.txt,&b->gc.col);
 		else if (strcmp(tmpstr_A, "txt_col_rev") == 0)
-		    _set_color_fg(kb,tmpstr_C,&b->gc.txt_rev,&kb->color_rev);
+		    _set_color_fg(kb,tmpstr_C,&b->gc.txt_rev,&b->gc.col_rev);
 
 		else if (strcmp(tmpstr_A, "slide_up_ks") == 0)
 		  button_set_slide_ks(b, tmpstr_C, UP);

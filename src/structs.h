@@ -170,7 +170,12 @@ typedef struct _box
 
 } box;
 
-typedef struct _gcs_t { GC bg,rev,txt,txt_rev,bdr; } gcs_t;
+typedef struct _gcs_t {
+	GC bg,rev,txt,txt_rev,bdr;
+#ifdef USE_XFT
+	XftColor col,col_rev;
+#endif
+} gcs_t;
 
 #ifdef USE_XFT
 #define FNTYPE XftFont *
@@ -231,8 +236,6 @@ typedef struct _keyboard
 
 #ifdef USE_XFT
   XftDraw *xftdraw;   /* xft aa bits */
-  XftColor color;
-  XftColor color_rev;
   XftColor color_sym;;
 #endif
 
@@ -319,10 +322,6 @@ typedef struct _button
   signed int layout_switch; /* Signals the button switches layout
 			       set to -1 for no switch            */
 
-#ifdef USE_XFT
-  XftColor col;
-  XftColor col_rev;
-#endif
 
   Pixmap pixmap;
   Pixmap mask;
