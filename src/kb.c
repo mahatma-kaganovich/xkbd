@@ -358,11 +358,15 @@ unsigned int kb_sync_state(keyboard *kb, unsigned int mods, unsigned int locked_
 
 
 #ifdef USE_XFT
-#define _set_color_fg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,xc)
-static void __set_color_fg(keyboard *kb, char *txt,GC *gc, XftColor *xc){
+#define _set_color_fg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,xc,1)
+#define _set_color_bg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,xc,2)
+#define _set_color_bgfg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,xc,3)
+static void __set_color_fg(keyboard *kb, char *txt,GC *gc, XftColor *xc, int bgfg){
 #else
-#define _set_color_fg(kb,c,gc,xc)  __set_color_fg(kb,c,gc)
-static void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
+#define _set_color_fg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,1)
+#define _set_color_bg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,2)
+#define _set_color_bgfg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,3)
+static void __set_color_fg(keyboard *kb, char *txt ,GC *gc, int bgfg){
 #endif
 	XColor col = {};
 	Display *dpy = kb->display;
@@ -371,7 +375,20 @@ static void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
 	XColor exact;
 	int r = 0;
 
-	*gc = None; // let leak some global keyboard GCs
+#if 0
+	// vs. leaks
+	if (*gc && !(
+		*gc == kb->gc.bg ||
+		*gc == kb->gc.rev ||
+		*gc == kb->gc.txt ||
+		*gc == kb->gc.txt_rev ||
+		*gc == kb->txt_sym_gc ||
+		*gc == kb->grey_gc ||
+		*gc == kb->kp_gc ||
+		*gc == kb->filled
+		)) XFreeGC(dpy,*gc);
+#endif
+	*gc = None;
 
 	txt1 = strsep(&txt,"=|");
 	if (txt) r=XAllocNamedColor(dpy,  kb->colormap, txt1, &col, &exact);
@@ -411,7 +428,8 @@ static void __set_color_fg(keyboard *kb, char *txt ,GC *gc){
 #endif
 	if (gc) {
 		if (!*gc)  *gc = _createGC(kb,GC0);
-		XSetForeground(dpy, *gc, col.pixel );
+		if (bgfg&1) XSetForeground(dpy, *gc, col.pixel);
+		if (bgfg&2) XSetBackground(dpy, *gc, col.pixel);
 	}
 }
 
@@ -462,6 +480,21 @@ static box *clone_box(Display *dpy, box *vbox, int group){
 		}
 	}
 	return bx;
+}
+
+int __set_colors(keyboard *kb,char *tmpstr_A, char *tmpstr_C, gcs_t *gc){
+	if (strcmp(tmpstr_A, "col") == 0 || strcmp(tmpstr_A, "bg") == 0)
+		_set_color_fg(kb,tmpstr_C,&gc->bg,NULL);
+	else if (strcmp(tmpstr_A, "down_col") == 0)
+		_set_color_fg(kb,tmpstr_C,&gc->rev,NULL);
+	else if (strcmp(tmpstr_A, "border_col") == 0 || strcmp(tmpstr_A, "border") == 0)
+		_set_color_fg(kb,tmpstr_C,&gc->bdr,NULL);
+	else if (strcmp(tmpstr_A, "txt_col") == 0 || strcmp(tmpstr_A, "fg") == 0)
+		_set_color_fg(kb,tmpstr_C,&gc->txt,&gc->col);
+	else if (strcmp(tmpstr_A, "txt_col_rev") == 0)
+		_set_color_fg(kb,tmpstr_C,&gc->txt_rev,&gc->col_rev);
+	else return 0;
+	return 1;
 }
 
 keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
@@ -668,18 +701,7 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 		    else if (strcmp(tmpstr_C, "arc") == 0)
 		      kb->theme = arc;
 		  }
-
-		else if (strcmp(tmpstr_A, "col") == 0 || strcmp(tmpstr_A, "bg") == 0)
-		    _set_color_fg(kb,tmpstr_C,&kb->gc.bg,NULL);
-		else if (strcmp(tmpstr_A, "down_col") == 0)
-		    _set_color_fg(kb,tmpstr_C,&kb->gc.rev,NULL);
-		else if (strcmp(tmpstr_A, "border_col") == 0 || strcmp(tmpstr_A, "border") == 0)
-		    _set_color_fg(kb,tmpstr_C,&kb->gc.bdr,NULL);
-		else if (strcmp(tmpstr_A, "txt_col") == 0 || strcmp(tmpstr_A, "fg") == 0)
-		    _set_color_fg(kb,tmpstr_C,&kb->gc.txt,&kb->gc.col);
-		else if (strcmp(tmpstr_A, "txt_col_rev") == 0)
-		    _set_color_fg(kb,tmpstr_C,&kb->gc.txt_rev,&kb->gc.col_rev);
-
+                else if (__set_colors(kb,tmpstr_A,tmpstr_C,&kb->gc)) { }
 		else if (strcmp(tmpstr_A, "sym_col") == 0)
 		     _set_color_fg(kb,tmpstr_C,&kb->txt_sym_gc,&kb->color_sym);
 		else if (!strcmp(tmpstr_A, "gray_col") || !strcmp(tmpstr_A, "grey_col"))
@@ -746,17 +768,7 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 		  { button_set_pixmap(b, tmpstr_C); }
 #endif
 
-		else if (strcmp(tmpstr_A, "col") == 0 || strcmp(tmpstr_A, "bg") == 0)
-		    _set_color_fg(kb,tmpstr_C,&b->gc.bg,NULL);
-		else if (strcmp(tmpstr_A, "down_col") == 0)
-		    _set_color_fg(kb,tmpstr_C,&b->gc.rev,NULL);
-		else if (strcmp(tmpstr_A, "border_col") == 0 || strcmp(tmpstr_A, "border") == 0)
-		    _set_color_fg(kb,tmpstr_C,&b->gc.bdr,NULL);
-		else if (strcmp(tmpstr_A, "txt_col") == 0 || strcmp(tmpstr_A, "fg") == 0)
-		    _set_color_fg(kb,tmpstr_C,&b->gc.txt,&b->gc.col);
-		else if (strcmp(tmpstr_A, "txt_col_rev") == 0)
-		    _set_color_fg(kb,tmpstr_C,&b->gc.txt_rev,&b->gc.col_rev);
-
+                else if (__set_colors(kb,tmpstr_A,tmpstr_C,&b->gc)) { }
 		else if (strcmp(tmpstr_A, "slide_up_ks") == 0)
 		  button_set_slide_ks(b, tmpstr_C, UP);
 		else if (strcmp(tmpstr_A, "slide_down_ks") == 0)
