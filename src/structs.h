@@ -247,6 +247,7 @@ typedef struct _keyboard
 
 #define GC0 (GCGraphicsExposures)
 #define GC1 (GCGraphicsExposures|GCBackground|GCForeground)
+#define _createGC(kb,m) XCreateGC(kb->display, kb->win, m, &kb->GCval)
   XGCValues GCval;
 
 } keyboard;
@@ -324,7 +325,6 @@ typedef struct _button
 
 
   Pixmap pixmap;
-  Pixmap mask;
   GC mask_gc;
 
   int cnt;
@@ -358,6 +358,7 @@ static inline int strlen1utf8(char *s) {
 	while (*s && cnt<2) cnt += (*s++ & 0xC0) != 0x80;
 	return cnt==1;
 }
+
 
 #endif
 

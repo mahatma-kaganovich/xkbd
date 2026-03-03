@@ -430,6 +430,7 @@ static void __set_color_fg(keyboard *kb, char *txt ,GC *gc, int bgfg){
 		if (!*gc)  *gc = _createGC(kb,GC0);
 		if (bgfg&1) XSetForeground(dpy, *gc, col.pixel);
 		if (bgfg&2) XSetBackground(dpy, *gc, col.pixel);
+		if (gc == &kb->gc.bg) XSetWindowBackground(dpy, kb->win, col.pixel);
 	}
 }
 
@@ -483,8 +484,10 @@ static box *clone_box(Display *dpy, box *vbox, int group){
 }
 
 int __set_colors(keyboard *kb,char *tmpstr_A, char *tmpstr_C, gcs_t *gc){
-	if (strcmp(tmpstr_A, "col") == 0 || strcmp(tmpstr_A, "bg") == 0)
-		_set_color_fg(kb,tmpstr_C,&gc->bg,NULL);
+	if (strcmp(tmpstr_A, "col") == 0 || strcmp(tmpstr_A, "bg") == 0) {
+		_set_color_bgfg(kb,tmpstr_C,&gc->bg,NULL);
+		//sleep(10);
+	}
 	else if (strcmp(tmpstr_A, "down_col") == 0)
 		_set_color_fg(kb,tmpstr_C,&gc->rev,NULL);
 	else if (strcmp(tmpstr_A, "border_col") == 0 || strcmp(tmpstr_A, "border") == 0)

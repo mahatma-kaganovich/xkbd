@@ -20,7 +20,7 @@
 
 button* button_new(keyboard *k);
 
-GC _createGC(keyboard *kb, unsigned long m);
+//GC _createGC(keyboard *kb, unsigned long m);
 
 KeySym button_ks(char *txt);
 

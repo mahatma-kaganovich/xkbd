@@ -27,37 +27,23 @@
 #include "button.h"
 
 
-GC _createGC(keyboard *kb, unsigned long m)
-{
-	return XCreateGC(kb->display, kb->win, m, &kb->GCval);
-}
-
 #ifdef USE_XPM
 void button_set_pixmap(button *b, char *filename)
 {
   XpmAttributes attrib;
-  //XGCValues gc_vals;
-  //unsigned long valuemask = 0;
 
   attrib.valuemask = XpmCloseness;
   attrib.closeness = 40000;
 
   if (XpmReadFileToPixmap( b->kb->display, b->kb->win, filename,
-		       &b->pixmap, &b->mask, &attrib)
+		       &b->pixmap, &b->kb->GCval.clip_mask, &attrib)
       != XpmSuccess )
     {
           fprintf(stderr, "xkbd: failed loading image '%s'\n", filename);
 	  exit(1);
     }
 
-  /* we'll also be needing a gc for transparency */
-  b->mask_gc = _createGC(b->kb,GC1);
-  /*
-  gc_vals.clip_mask = b->mask;
-  valuemask = GCClipMask;
-  XChangeGC(b->kb->display, b->mask_gc, valuemask, &gc_vals);
-  */
-  XSetClipMask(b->kb->display, b->mask_gc, b->mask);
+  b->mask_gc = _createGC(b->kb,GC0|GCClipMask);
 
   b->vwidth  = attrib.width;
   b->vheight = attrib.height;
@@ -187,9 +173,8 @@ static int button_set_b_size(button *b, int size)
 }
 
 static unsigned long getGCFill(keyboard *kb, GC gc){
-	XGCValues v;
-	XGetGCValues(kb->display,gc,GCForeground,&v);
-	return v.foreground;
+	XGetGCValues(kb->display,gc,GCForeground,&kb->GCval);
+	return kb->GCval.foreground;
 }
 
 int button_render(button *b, int mode)
@@ -338,13 +323,13 @@ int button_render(button *b, int mode)
   if (b->pixmap)
     {
       /* TODO: improve alignment of images, kinda hacked at the mo ! */
-      XGCValues gc_vals;
       int xx = x+((w - b->vwidth)>>1);
       int yy = y+((h - b->vheight)>>1);
 
-      gc_vals.clip_x_origin = xx;
-      gc_vals.clip_y_origin = yy;
-      XChangeGC(dpy, b->mask_gc, GCClipXOrigin|GCClipYOrigin, &gc_vals);
+      kb->GCval.clip_x_origin = xx;
+      kb->GCval.clip_y_origin = yy;
+      XCopyGC(dpy,g,GCBackground|GCForeground,b->mask_gc);
+      XChangeGC(dpy, b->mask_gc, GCClipXOrigin|GCClipYOrigin, &kb->GCval);
 
       XCopyArea(dpy, b->pixmap, backing, b->mask_gc,
 		0, 0, b->vwidth, b->vheight, xx, yy);
