@@ -523,28 +523,15 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
   kb->GCval.foreground=WhitePixel(display, screen);
   kb->GCval.background=BlackPixel(display, screen);
 
-  /* create lots and lots of gc's */
-#if 0
-  kb->filled =
-  kb->gc.bg=_createGC(kb,GC1);
-  kb->gc.rev=_createGC(kb,GC0);
-  kb->gc.txt=_createGC(kb,GC0);
+  kb->gc.rev=
   kb->gc.txt_rev=_createGC(kb,GC1);
-  kb->gc.bdr=_createGC(kb,GC0);
 
-  kb->grey_gc=_createGC(kb,GC1);
-  kb->kp_gc=_createGC(kb,GC1);
-#else
-  kb->filled =
-  kb->gc.txt_rev=
+  kb->filled=
+  kb->gc.bg=
   kb->grey_gc=
   kb->kp_gc=
-  kb->gc.bg=_createGC(kb,GC1);
-
-  kb->gc.rev=
   kb->gc.txt=
   kb->gc.bdr=_createGC(kb,GC0);
-#endif
 
 #ifdef USE_XFT
 
@@ -558,7 +545,7 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 		     kb->visual,
 		     kb->colormap,
 		     &colortmp,
-		     &kb->gc.col_rev);
+		     &kb->gc.col);
 
   colortmp.red   = 0x0000;
   colortmp.green = 0x0000;
@@ -568,7 +555,7 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 		     kb->visual,
 		     kb->colormap,
 		     &colortmp,
-		     &kb->gc.col);
+		     &kb->gc.col_rev);
 
   /* --- end xft bits -------------------------- */
 
