@@ -7,6 +7,9 @@
 CFLAGS="$CFLAGS -fwhole-program"
 LDFLAGS="$LDFLAGS -Wl,--strip-all"
 
+clean=false
+[ "$1" = clean ] && clean=true
+
 e(){
 	echo "${@//\"/\\\"}"
 	"${@}"
@@ -14,6 +17,10 @@ e(){
 
 _c(){
 	local i skip=false c=/dev/null w=
+	$clean && {
+		[ -e $1 ] && unlink $1
+		return 0
+	}
 	[ -e $1 ] && skip=true
 	$skip && for i in $2; do
 		[ $i -nt $1 ] && skip=false && echo "# changed: $i"
@@ -36,7 +43,13 @@ _c(){
 	fi &
 }
 
-[ /usr/include/X11/keysymdef.h -nt ks2unicode.c ] && e ./ks2unicode.pl
+if $clean; then
+	[ -e ks2unicode.c ] && unlink ks2unicode.c
+else
+	[ /usr/include/X11/keysymdef.h -nt ks2unicode.c ] ||
+	[ ks2unicode.pl -nt ks2unicode.c ] &&
+	e ./ks2unicode.pl
+fi
 _c xkbd "stalloc.c box.c button.c kb.c ks2unicode.c xkbd.c" "xtst xi xrandr xft xpm" "-DVERSION=\"1.8.999\" -DDEFAULTCONFIG=\"/etc/xkbd.conf\" -DUSE_XFT -DUSE_XPM -DUSE_SS -DUSE_XI -DUSE_XR"
 _c xssevent xssevent.c xscrnsaver
 _c xkbswitch xkbswitch.c

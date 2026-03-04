@@ -177,6 +177,9 @@ static unsigned long getGCFill(keyboard *kb, GC gc){
 	return kb->GCval.foreground;
 }
 
+//#define noFilled(g) (!kb->filled || (g!=kb->filled && getGCFill(kb,kb->filled)!=getGCFill(kb,g)))
+#define noFilled(g) (!kb->filled || g!=kb->filled || getGCFill(kb,kb->filled)!=getGCFill(kb,g))
+
 int button_render(button *b, int mode)
 {
   keyboard *kb = b->kb;
@@ -226,7 +229,7 @@ int button_render(button *b, int mode)
 		ax+=kb->vvbox->x;
 		ay+=kb->vvbox->y;
 	}
-	XCopyArea(dpy, pix, backing, kb->gc.rev, 0, 0, aw , ah , ax, ay);
+	XCopyArea(dpy, pix, backing, kb->gc.bg, 0, 0, aw , ah , ax, ay);
 	return backing==kb->win;
     }
     b->pix[i] = pix = XCreatePixmap(dpy,
@@ -253,6 +256,7 @@ int button_render(button *b, int mode)
 //  b->flags = (b->flags & ~(STATE(OBIT_PRESSED)|STATE(OBIT_LOCKED)|BUTTON_RELEASED))|mode;
   if (mode & STATE(OBIT_PRESSED))
     {
+      gc.bg = gc.rev;
       if (no_lock) {
 	gc.txt   = gc.txt_rev;
 #ifdef USE_XFT
@@ -263,14 +267,15 @@ int button_render(button *b, int mode)
   else if(mode & STATE(OBIT_LOCKED))
     {
       gc.txt   = gc.txt_rev;
+      gc.bg = gc.rev;
 #ifdef USE_XFT
       gc.col  = gc.col_rev;
 #endif
     }
-  else  /* BUTTON_RELEASED */
-    {
-      gc.rev = gc.bg;
-    }
+//  else  /* BUTTON_RELEASED */
+//    {
+//      gc.rev = gc.bg;
+//    }
 
   int x1=x, y1=y, x2=w, y2=h;
   switch (kb->theme) {
@@ -285,19 +290,20 @@ int button_render(button *b, int mode)
 	y2+=fix;
   }
 
-  if (!kb->filled || (gc.rev!=kb->filled && getGCFill(kb,kb->filled)!=getGCFill(kb,gc.rev)))
+  if (noFilled(gc.bg))
     switch (kb->theme) {
 	case arc:
-		XFillArc(dpy, backing, gc.rev, x1, y1, x2, y2, 0, 360 * 64);
+		XFillArc(dpy, backing, gc.bg, x1, y1, x2, y2, 0, 360 * 64);
 		break;
 	default:
-		XFillRectangle(dpy, backing, gc.rev, x1, y1, x2, y2);
+		XFillRectangle(dpy, backing, gc.bg, x1, y1, x2, y2);
 		break;
     }
 
   GC g = (kb->line_width || b->gc.bg == kb->gc.bg)?kb->gc.bdr:b->gc.bg;
 
   if (!(mode & STATE(OBIT_DIRECT)))
+  //if (noFilled(g)) {
    switch (kb->theme) {
     case arc:
 	if (kb->line_width) XDrawArc(dpy, backing, g, x, y, w, h, 0, 360 * 64);
@@ -318,7 +324,6 @@ int button_render(button *b, int mode)
 	else XFillRectangle( dpy, backing, g, x, y, w, h);
 	break;
   }
-
 
   if (b->pixmap)
     {
@@ -361,7 +366,7 @@ int button_render(button *b, int mode)
 pixmap:
 #ifdef CACHE_PIX
   if (cache_pix)
-	XCopyArea(dpy, backing, pix, kb->gc.rev,
+	XCopyArea(dpy, backing, pix, kb->gc.bg,
 		ax, ay, aw, ah, 0, 0);
 #endif
    return backing == kb->win;
@@ -379,7 +384,7 @@ void button_paint(button *b)
 	int y = b->vy + p;
 	//p<<=1;
 	p-=1;
-	XCopyArea(b->kb->display, b->kb->backing, b->kb->win, b->kb->gc.rev,
+	XCopyArea(b->kb->display, b->kb->backing, b->kb->win, b->kb->gc.bg,
 	    x, y, b->act_width - p, b->act_height - p,
 	    x+b->kb->vvbox->x, y+b->kb->vvbox->y);
     }

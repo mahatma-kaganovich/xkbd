@@ -375,21 +375,6 @@ static void __set_color_fg(keyboard *kb, char *txt ,GC *gc, int bgfg){
 	XColor exact;
 	int r = 0;
 
-#if 0
-	// vs. leaks
-	if (*gc && !(
-		*gc == kb->gc.bg ||
-		*gc == kb->gc.rev ||
-		*gc == kb->gc.txt ||
-		*gc == kb->gc.txt_rev ||
-		*gc == kb->txt_sym_gc ||
-		*gc == kb->grey_gc ||
-		*gc == kb->kp_gc ||
-		*gc == kb->filled
-		)) XFreeGC(dpy,*gc);
-#endif
-	*gc = None;
-
 	txt1 = strsep(&txt,"=|");
 	if (txt) r=XAllocNamedColor(dpy,  kb->colormap, txt1, &col, &exact);
 	else txt = txt1;
@@ -427,10 +412,28 @@ static void __set_color_fg(keyboard *kb, char *txt ,GC *gc, int bgfg){
 	//else
 #endif
 	if (gc) {
-		if (!*gc)  *gc = _createGC(kb,GC0);
+#if 0
+		// vs. leaks
+		if (*gc && !(
+			*gc == kb->gc.bg ||
+			*gc == kb->gc.rev ||
+			*gc == kb->gc.txt ||
+			*gc == kb->gc.txt_rev ||
+			*gc == kb->txt_sym_gc ||
+			*gc == kb->grey_gc ||
+			*gc == kb->kp_gc ||
+			*gc == kb->filled
+			)) XFreeGC(dpy,*gc);
+		*gc = None;
+#endif
+		//if (!*gc)
+		    *gc = _createGC(kb,GC0);
 		if (bgfg&1) XSetForeground(dpy, *gc, col.pixel);
 		if (bgfg&2) XSetBackground(dpy, *gc, col.pixel);
-		if (gc == &kb->gc.bg) XSetWindowBackground(dpy, kb->win, col.pixel);
+		if (gc == &kb->gc.bg) {
+			kb->filled = *gc;
+			XSetWindowBackground(dpy, kb->win, col.pixel);
+		}
 	}
 }
 
@@ -1175,8 +1178,9 @@ static void kb_render(keyboard *kb)
 
 static void kb_paint(keyboard *kb)
 {
+
   if (kb->backing!=kb->win)
-  XCopyArea(kb->display, kb->backing, kb->win, kb->gc.rev,
+  XCopyArea(kb->display, kb->backing, kb->win, kb->gc.bg,
 	    0, 0, kb->vbox->act_width, kb->vbox->act_height,
 	    kb->vbox->x, kb->vbox->y);
 }
