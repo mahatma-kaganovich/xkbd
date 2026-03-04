@@ -218,6 +218,8 @@ typedef struct _keyboard
   GC txt_sym_gc;
   GC grey_gc;
   GC kp_gc;
+//#define noFilled(g) (!kb->filled || (g!=kb->filled && getGCFill(kb,kb->filled)!=getGCFill(kb,g)))
+#define noFilled(g) (!kb->filled || g!=kb->filled || getGCFill(kb,kb->filled)!=getGCFill(kb,g))
   GC filled;
 
   FNTYPE font;

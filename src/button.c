@@ -177,9 +177,6 @@ static unsigned long getGCFill(keyboard *kb, GC gc){
 	return kb->GCval.foreground;
 }
 
-//#define noFilled(g) (!kb->filled || (g!=kb->filled && getGCFill(kb,kb->filled)!=getGCFill(kb,g)))
-#define noFilled(g) (!kb->filled || g!=kb->filled || getGCFill(kb,kb->filled)!=getGCFill(kb,g))
-
 int button_render(button *b, int mode)
 {
   keyboard *kb = b->kb;

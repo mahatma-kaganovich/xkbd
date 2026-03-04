@@ -358,15 +358,15 @@ unsigned int kb_sync_state(keyboard *kb, unsigned int mods, unsigned int locked_
 
 
 #ifdef USE_XFT
-#define _set_color_fg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,xc,1)
-#define _set_color_bg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,xc,2)
-#define _set_color_bgfg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,xc,3)
-static void __set_color_fg(keyboard *kb, char *txt,GC *gc, XftColor *xc, int bgfg){
+#define _set_color_fg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,xc,GC0|GCForeground)
+#define _set_color_bg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,xc,GC0|GCBackground)
+#define _set_color_bgfg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,xc,GC0|GCForeground)
+static void __set_color_fg(keyboard *kb, char *txt,GC *gc, XftColor *xc, unsigned long mask){
 #else
-#define _set_color_fg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,1)
-#define _set_color_bg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,2)
-#define _set_color_bgfg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,3)
-static void __set_color_fg(keyboard *kb, char *txt ,GC *gc, int bgfg){
+#define _set_color_fg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,GC0|GCForeground)
+#define _set_color_bg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,GC0|GCBackground)
+#define _set_color_bgfg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,GC0|GCForeground)
+static void __set_color_fg(keyboard *kb, char *txt ,GC *gc, unsigned long mask){
 #endif
 	XColor col = {};
 	Display *dpy = kb->display;
@@ -412,27 +412,12 @@ static void __set_color_fg(keyboard *kb, char *txt ,GC *gc, int bgfg){
 	//else
 #endif
 	if (gc) {
-#if 0
-		// vs. leaks
-		if (*gc && !(
-			*gc == kb->gc.bg ||
-			*gc == kb->gc.rev ||
-			*gc == kb->gc.txt ||
-			*gc == kb->gc.txt_rev ||
-			*gc == kb->txt_sym_gc ||
-			*gc == kb->grey_gc ||
-			*gc == kb->kp_gc ||
-			*gc == kb->filled
-			)) XFreeGC(dpy,*gc);
-		*gc = None;
-#endif
-		//if (!*gc)
-		    *gc = _createGC(kb,GC0);
-		if (bgfg&1) XSetForeground(dpy, *gc, col.pixel);
-		if (bgfg&2) XSetBackground(dpy, *gc, col.pixel);
-		if (gc == &kb->gc.bg) {
+		kb->GCval.foreground = kb->GCval.background = col.pixel;
+		*gc = _createGC(kb,mask);
+		if (gc == &kb->gc.bg && !cache_pix || cache_pix == 3) {
 			kb->filled = *gc;
-			XSetWindowBackground(dpy, kb->win, col.pixel);
+			if (col.pixel)
+			    XSetWindowBackground(dpy, kb->win, col.pixel);
 		}
 	}
 }
@@ -543,6 +528,8 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
   kb->GCval.background=BlackPixel(display, screen);
 
   /* create lots and lots of gc's */
+#if 0
+  kb->filled =
   kb->gc.bg=_createGC(kb,GC1);
   kb->gc.rev=_createGC(kb,GC0);
   kb->gc.txt=_createGC(kb,GC0);
@@ -551,6 +538,17 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 
   kb->grey_gc=_createGC(kb,GC1);
   kb->kp_gc=_createGC(kb,GC1);
+#else
+  kb->filled =
+  kb->gc.txt_rev=
+  kb->grey_gc=
+  kb->kp_gc=
+  kb->gc.bg=_createGC(kb,GC1);
+
+  kb->gc.rev=
+  kb->gc.txt=
+  kb->gc.bdr=_createGC(kb,GC0);
+#endif
 
 #ifdef USE_XFT
 
