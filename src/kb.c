@@ -358,15 +358,15 @@ unsigned int kb_sync_state(keyboard *kb, unsigned int mods, unsigned int locked_
 
 
 #ifdef USE_XFT
-#define _set_color_fg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,xc,GC0|GCForeground)
-#define _set_color_bg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,xc,GC0|GCBackground)
-#define _set_color_bgfg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,xc,GC0|GCForeground)
-static void __set_color_fg(keyboard *kb, char *txt,GC *gc, XftColor *xc, unsigned long mask){
+#define _set_color_fg(kb,c,gc,xc)  __set_color(kb,c,gc,xc,GC0|GCForeground)
+#define _set_color_bg(kb,c,gc,xc)  __set_color(kb,c,gc,xc,GC0|GCBackground)
+#define _set_color_bgfg(kb,c,gc,xc)  __set_color(kb,c,gc,xc,GC0|GCForeground)
+static void __set_color(keyboard *kb, char *txt,GC *gc, XftColor *xc, unsigned long mask){
 #else
-#define _set_color_fg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,GC0|GCForeground)
-#define _set_color_bg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,GC0|GCBackground)
-#define _set_color_bgfg(kb,c,gc,xc)  __set_color_fg(kb,c,gc,GC0|GCForeground)
-static void __set_color_fg(keyboard *kb, char *txt ,GC *gc, unsigned long mask){
+#define _set_color_fg(kb,c,gc,xc)  __set_color(kb,c,gc,GC0|GCForeground)
+#define _set_color_bg(kb,c,gc,xc)  __set_color(kb,c,gc,GC0|GCBackground)
+#define _set_color_bgfg(kb,c,gc,xc)  __set_color(kb,c,gc,GC0|GCForeground)
+static void __set_color(keyboard *kb, char *txt ,GC *gc, unsigned long mask){
 #endif
 	XColor col = {};
 	Display *dpy = kb->display;
@@ -409,17 +409,9 @@ static void __set_color_fg(keyboard *kb, char *txt ,GC *gc, unsigned long mask){
 			kb->colormap,
 			&colortmp, xc);
 	}
-	//else
 #endif
-	if (gc) {
-		kb->GCval.foreground = kb->GCval.background = col.pixel;
-		*gc = _createGC(kb,mask);
-		if (gc == &kb->gc.bg && !cache_pix || cache_pix == 3) {
-			kb->filled = *gc;
-			if (col.pixel)
-			    XSetWindowBackground(dpy, kb->win, col.pixel);
-		}
-	}
+	kb->GCval.foreground = kb->GCval.background = col.pixel;
+	if (gc) *gc = _createGC(kb,mask);
 }
 
 static box *_clone_box(box *vbox){
@@ -474,7 +466,11 @@ static box *clone_box(Display *dpy, box *vbox, int group){
 int __set_colors(keyboard *kb,char *tmpstr_A, char *tmpstr_C, gcs_t *gc){
 	if (strcmp(tmpstr_A, "col") == 0 || strcmp(tmpstr_A, "bg") == 0) {
 		_set_color_bgfg(kb,tmpstr_C,&gc->bg,NULL);
-		//sleep(10);
+		if (!cache_pix || cache_pix == 3) {
+			kb->filled = gc->bg;
+			if (kb->GCval.background)
+			    XSetWindowBackground(kb->display, kb->win, kb->GCval.background);
+		}
 	}
 	else if (strcmp(tmpstr_A, "down_col") == 0)
 		_set_color_fg(kb,tmpstr_C,&gc->rev,NULL);
