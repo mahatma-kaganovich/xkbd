@@ -121,11 +121,15 @@ int _button_get_txt_size(keyboard *kb, char *txt)
 #ifdef USE_XFT
   XGlyphInfo       extents;
   XftTextExtentsUtf8(kb->display, strlen1utf8(txt)?kb->font1:kb->font,
-	(unsigned char *) txt, strlen(txt),
+	(FcChar8 *) txt, strlen(txt),
 	&extents);
   return extents.width;
+#elif defined(F_UTF8)
+  XRectangle r1,r2;
+  Xutf8TextExtents(strlen1utf8(txt)?kb->font1:kb->font,(char *) txt, strlen(txt),&r1,&r2);
+  return r1.width;
 #else
-  return XTextWidth(kb->font_info, txt, strlen(txt));
+  return XTextWidth(kb->font, txt, strlen(txt));
 #endif
 }
 
@@ -254,7 +258,7 @@ int button_render(button *b, int mode)
   if (mode & STATE(OBIT_PRESSED))
     {
       gc.bg = gc.rev;
-      gc.bdr = gc.bdr_rev?:gc.bdr;
+      if (gc.bdr_rev) gc.bdr = gc.bdr_rev;
       if (no_lock) {
 	gc.txt   = gc.txt_rev;
 #ifdef USE_XFT
@@ -266,7 +270,7 @@ int button_render(button *b, int mode)
     {
       gc.txt   = gc.txt_rev;
       gc.bg = gc.rev;
-      gc.bdr = gc.bdr_rev?:gc.bdr;
+      if (gc.bdr_rev) gc.bdr = gc.bdr_rev;
 #ifdef USE_XFT
       gc.col  = gc.col_rev;
 #endif
@@ -355,11 +359,15 @@ int button_render(button *b, int mode)
     int yy = y+((h - (b->vheight?:strlen1utf8(txt)?kb->vheight1:kb->vheight))>>1);
 #ifdef USE_XFT
     XftDrawStringUtf8(kb->xftdraw, &gc.col, strlen1utf8(txt)?kb->font1:kb->font,
-		xx, yy + kb->font->ascent,
+		xx, yy + (strlen1utf8(txt)?kb->ascent1:kb->ascent),
 		(unsigned char *) txt, strlen(txt));
+#elif defined(F_UTF8)
+    Xutf8DrawString(dpy, backing, strlen1utf8(txt)?kb->font1:kb->font, gc.txt,
+		xx, yy + (strlen1utf8(txt)?kb->ascent1:kb->ascent),
+		txt, strlen(txt));
 #else
     XDrawString(dpy, backing, gc.txt,
-		xx, yy + kb->font->ascent,
+		xx, yy + kb->ascent,
 		txt, strlen(txt));
 #endif
   }

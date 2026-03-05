@@ -45,8 +45,6 @@
 #define DBG(txt, args... ) /* nothing */
 #endif
 
-#define DEFAULT_FONT "Monospace-%i|-%i|sans-%i|fixed-%i|fixed"
-
 KeySym *keymap = NULL;
 int minkc = 0;
 int maxkc = 0;
@@ -65,8 +63,16 @@ static int load_a_single_font(keyboard *kb, char *fontname, FNTYPE *f) {
 #ifdef USE_XFT
   if (*f) XftFontClose(kb->display, *f);
   return ((*f = XftFontOpenName(kb->display, kb->screen, fontname)) != NULL);
+#elif defined(F_UTF8)
+	char **missing_list;
+	int missing_count;
+	char *def_string;
+	if (*f) XFreeFontSet(kb->display,*f);
+	*f=XCreateFontSet(kb->display, fontname,&missing_list, &missing_count, &def_string);
+	if (!*f) return 0;
+	return 1;
 #else
-  if (*f) XUnloadFont((*f)->fid);
+  if (*f) XUnloadFont(kb->display,(*f)->fid);
   if ((*f = XLoadQueryFont(kb->display, fontname)) == NULL) return 0;
   XSetFont(kb->display, kb->gc.rev, (*f)->fid);
   return True;
@@ -83,6 +89,7 @@ static void load_font(keyboard *kb, char **loaded, char *fnt, FNTYPE *f){
 	}
 	fnames0 = fnames = strdup(fnt);
 	*loaded = fname1 = malloc(strlen(fnt)+10);
+
 	while((fname = strsep(&fnames, "|"))) {
 		sprintf(fname1,fname,10);
 		if (!load_a_single_font(kb,fname1,f)) continue;
@@ -94,10 +101,12 @@ static void load_font(keyboard *kb, char **loaded, char *fnt, FNTYPE *f){
 				sprintf(fname1,fname,i);
 				if (!load_a_single_font(kb,fname1,f)) continue;
 			}
+			
 		}
 		free(fnames0);
 		return;
 	}
+err:
 	fprintf(stderr, "xkbd: unable to find suitable font in '%s'\n", fnt);
 	exit(1);
 }
@@ -356,17 +365,15 @@ unsigned int kb_sync_state(keyboard *kb, unsigned int mods, unsigned int locked_
 	return ch;
 }
 
-
-#ifdef USE_XFT
 #define _set_color_fg(kb,c,gc,xc)  __set_color(kb,c,gc,xc,GC0|GCForeground)
 #define _set_color_bg(kb,c,gc,xc)  __set_color(kb,c,gc,xc,GC0|GCBackground)
 #define _set_color_bgfg(kb,c,gc,xc)  __set_color(kb,c,gc,xc,GC0|GCForeground)
+
+#ifdef USE_XFT
 static void __set_color(keyboard *kb, char *txt,GC *gc, XftColor *xc, unsigned long mask){
 #else
-#define _set_color_fg(kb,c,gc,xc)  __set_color(kb,c,gc,GC0|GCForeground)
-#define _set_color_bg(kb,c,gc,xc)  __set_color(kb,c,gc,GC0|GCBackground)
-#define _set_color_bgfg(kb,c,gc,xc)  __set_color(kb,c,gc,GC0|GCForeground)
-static void __set_color(keyboard *kb, char *txt ,GC *gc, unsigned long mask){
+#define __set_color(kb,c,gc,xc,m)  __set_color_(kb,c,gc,m)
+static void __set_color_(keyboard *kb, char *txt ,GC *gc, unsigned long mask){
 #endif
 	XColor col = {};
 	Display *dpy = kb->display;
@@ -479,7 +486,7 @@ int __set_colors(keyboard *kb,char *tmpstr_A, char *tmpstr_C, gcs_t *gc){
 		_set_color_fg(kb,tmpstr_C,&gc->bdr_rev,NULL);
 	} else if (strcmp(tmpstr_A, "txt_col") == 0 || strcmp(tmpstr_A, "fg") == 0)
 		_set_color_fg(kb,tmpstr_C,&gc->txt,&gc->col);
-	else if (strcmp(tmpstr_A, "txt_col_rev") == 0)
+	else if (strcmp(tmpstr_A, "txt_col_rev") == 0 || strcmp(tmpstr_A, "txt_rev_col") == 0)
 		_set_color_fg(kb,tmpstr_C,&gc->txt_rev,&gc->col_rev);
 	else return 0;
 	return 1;
@@ -906,9 +913,22 @@ void kb_size(keyboard *kb) {
 #ifdef USE_XFT
 	kb->vheight = _max(kb->font->height,kb->font->ascent+kb->font->descent);
 	kb->vheight1 = _max(kb->font1->height,kb->font1->ascent+kb->font1->descent);
+	kb->ascent = kb->font->ascent;
+	kb->ascent1 = kb->font1->ascent;
+#elif defined(F_UTF8)
+	XFontSetExtents *extent;
+	extent = XExtentsOfFontSet(kb->font);
+	kb->vheight = extent->max_logical_extent.height;
+	kb->ascent = -extent->max_logical_extent.y;
+	extent = XExtentsOfFontSet(kb->font1);
+	kb->vheight1= extent->max_logical_extent.height;
+	kb->ascent1 = -extent->max_logical_extent.y;
 #else
-	kb->vheight = b->kb->font->ascent + b->kb->font->descent;
-	kb->vheight1 = b->kb->font1->ascent + b->kb->font1->descent;
+	
+	kb->vheight = kb->font->ascent + kb->font->descent;
+	kb->vheight1 = kb->font1->ascent + kb->font1->descent;
+	kb->ascent = kb->font->ascent;
+	kb->ascent1 = kb->font1->ascent;
 #endif
 
 

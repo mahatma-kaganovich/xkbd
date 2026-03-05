@@ -24,11 +24,14 @@
 #include <X11/XKBlib.h>
 #ifdef USE_XFT
 #include <X11/Xft/Xft.h>
+#define DEFAULT_FONT "Monospace-%i|-%i|sans-%i|fixed-%i|fixed"
+#else
+#define F_UTF8
+#define DEFAULT_FONT "-*-fixed-medium-r-*-*-%i-*-*-*-*-*-iso10646-1|fixed"
 #endif
 
 #include "stalloc.h"
 
-#define DEFAULT_FONT "Monospace-%i|-%i|sans-%i|fixed-%i|fixed"
 
 typedef uint_fast8_t _ushort;
 typedef int_fast16_t _sshort;
@@ -179,6 +182,8 @@ typedef struct _gcs_t {
 
 #ifdef USE_XFT
 #define FNTYPE XftFont *
+#elif defined(F_UTF8)
+#define FNTYPE XFontSet
 #else
 #define FNTYPE XFontStruct *
 #endif
@@ -198,6 +203,8 @@ typedef struct _keyboard
 
   int vheight;
   int vheight1;
+  int ascent;
+  int ascent1;
 
   int pad;
 
