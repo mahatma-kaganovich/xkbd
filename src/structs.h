@@ -171,7 +171,7 @@ typedef struct _box
 } box;
 
 typedef struct _gcs_t {
-	GC bg,rev,txt,txt_rev,bdr;
+	GC bg,rev,txt,txt_rev,bdr,bdr_rev;
 #ifdef USE_XFT
 	XftColor col,col_rev;
 #endif
@@ -199,7 +199,6 @@ typedef struct _keyboard
   int vheight;
   int vheight1;
 
-  int line_width;
   int pad;
 
   Window win;
@@ -247,8 +246,8 @@ typedef struct _keyboard
 
   int X,Y; // root
 
-#define GC0 (GCGraphicsExposures)
-#define GC1 (GCGraphicsExposures|GCBackground|GCForeground)
+#define GC0 (GCGraphicsExposures|GCLineWidth|GCLineStyle|GCCapStyle|GCJoinStyle)
+#define GC1 (GC0|GCBackground|GCForeground)
 #define _createGC(kb,m) XCreateGC(kb->display, kb->win, m, &kb->GCval)
   XGCValues GCval;
 

@@ -194,8 +194,8 @@ int button_render(button *b, int mode)
 //  int h = b->act_height - (p<<1);
   int w = b->act_width - p;
   int h = b->act_height - p;
-  int line = ((kb->line_width+1)>>1);
-  int fix = (line<<1)-kb->line_width;
+  int line = ((kb->GCval.line_width+1)>>1);
+  int fix = (line<<1)-kb->GCval.line_width;
   p = _max(p - line,0);
 
   int ax = b->vx + p;
@@ -254,6 +254,7 @@ int button_render(button *b, int mode)
   if (mode & STATE(OBIT_PRESSED))
     {
       gc.bg = gc.rev;
+      gc.bdr = gc.bdr_rev?:gc.bdr;
       if (no_lock) {
 	gc.txt   = gc.txt_rev;
 #ifdef USE_XFT
@@ -265,6 +266,7 @@ int button_render(button *b, int mode)
     {
       gc.txt   = gc.txt_rev;
       gc.bg = gc.rev;
+      gc.bdr = gc.bdr_rev?:gc.bdr;
 #ifdef USE_XFT
       gc.col  = gc.col_rev;
 #endif
@@ -297,17 +299,18 @@ int button_render(button *b, int mode)
 		break;
     }
 
-  GC g = (kb->line_width || b->gc.bg == kb->gc.bg)?kb->gc.bdr:b->gc.bg;
+ // GC g = (kb->GCval.line_width || b->gc.bg == kb->gc.bg)?kb->gc.bdr:b->gc.bg;
+  GC g = (kb->GCval.line_width || gc.bg == kb->gc.bg)?gc.bdr:gc.bg;
 
-  if (!(mode & STATE(OBIT_DIRECT)))
+  if (!(mode & STATE(OBIT_DIRECT)) || gc.bdr_rev)
   //if (noFilled(g)) {
    switch (kb->theme) {
     case arc:
-	if (kb->line_width) XDrawArc(dpy, backing, g, x, y, w, h, 0, 360 * 64);
+	if (kb->GCval.line_width) XDrawArc(dpy, backing, g, x, y, w, h, 0, 360 * 64);
 	else XFillArc(dpy, backing, g, x, y, w, h, 0, 360 * 64);
 	break;
     case rounded:
-	if (kb->line_width) {
+	if (kb->GCval.line_width) {
 		x2+=x1-1;
 		y2+=y1-1;
 		XDrawPoint(dpy, backing, g, x1, y1);
@@ -317,7 +320,7 @@ int button_render(button *b, int mode)
 //		XDrawPoint(dpy, backing, gc.txt, x1, y1); // debug
 	}
     case square:
-	if (kb->line_width) XDrawRectangle( dpy, backing, g, x, y, w, h);
+	if (kb->GCval.line_width) XDrawRectangle( dpy, backing, g, x, y, w, h);
 	else XFillRectangle( dpy, backing, g, x, y, w, h);
 	break;
   }
@@ -375,7 +378,7 @@ void button_paint(button *b)
     if (b->kb->backing != b->kb->win) {
   /* use the vbox offsets for the location within the window */
 	int p = b->kb->pad;
-	int line = ((b->kb->line_width+1)>>1);
+	int line = ((b->kb->GCval.line_width+1)>>1);
 	p = _max(p - line,0);
 	int x = b->vx + p;
 	int y = b->vy + p;

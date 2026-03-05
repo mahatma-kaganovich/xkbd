@@ -471,12 +471,13 @@ int __set_colors(keyboard *kb,char *tmpstr_A, char *tmpstr_C, gcs_t *gc){
 			if (kb->GCval.background)
 			    XSetWindowBackground(kb->display, kb->win, kb->GCval.background);
 		}
-	}
-	else if (strcmp(tmpstr_A, "down_col") == 0)
+	} else if (strcmp(tmpstr_A, "down_col") == 0)
 		_set_color_fg(kb,tmpstr_C,&gc->rev,NULL);
-	else if (strcmp(tmpstr_A, "border_col") == 0 || strcmp(tmpstr_A, "border") == 0)
+	else if (strcmp(tmpstr_A, "border_col") == 0 || strcmp(tmpstr_A, "border") == 0) {
 		_set_color_fg(kb,tmpstr_C,&gc->bdr,NULL);
-	else if (strcmp(tmpstr_A, "txt_col") == 0 || strcmp(tmpstr_A, "fg") == 0)
+	} else if (strcmp(tmpstr_A, "border_rev_col") == 0) {
+		_set_color_fg(kb,tmpstr_C,&gc->bdr_rev,NULL);
+	} else if (strcmp(tmpstr_A, "txt_col") == 0 || strcmp(tmpstr_A, "fg") == 0)
 		_set_color_fg(kb,tmpstr_C,&gc->txt,&gc->col);
 	else if (strcmp(tmpstr_A, "txt_col_rev") == 0)
 		_set_color_fg(kb,tmpstr_C,&gc->txt_rev,&gc->col_rev);
@@ -523,6 +524,11 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
   kb->GCval.foreground=WhitePixel(display, screen);
   kb->GCval.background=BlackPixel(display, screen);
 
+  kb->GCval.line_width = 1;
+  kb->GCval.line_style = LineSolid;
+  kb->GCval.cap_style = CapRound;
+  kb->GCval.join_style = JoinRound;
+
   kb->gc.rev=
   kb->gc.txt_rev=_createGC(kb,GC1);
 
@@ -567,8 +573,6 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
   kb->key_delay_repeat = 50;
   kb->key_repeat       = -1;
 
-  kb->line_width = 1;
-
   kb_load_keymap(display);
 
   if (!strcmp(conf_file,"-")) {
@@ -611,15 +615,21 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 	    }
 	  if (sscanf(tp, "<%s", tmpstr_A) == 1)  /* get tag name */
 	    {
-	      if (strncmp(tmpstr_A, "global", 5) == 0)
-		{
-		  context=kbddef;
-		  continue;
+		int layout = kb->total_layouts;
+		if (strncmp(tmpstr_A, "global", 5) == 0) context=kbddef;
+		else if (strncmp(tmpstr_A, "layout", 6) == 0) kb->total_layouts++;
+		else if (strncmp(tmpstr_A, "row", 3) == 0) {
+		  if (kb->total_layouts == 0) kb->total_layouts++;
+		  context=rowdef;
+		  tmp_box = box_add_box(kb->vbox, box_new());
+		} else if (strncmp(tmpstr_A, "key", 3) == 0) {
+		  /* check here for NULL tmp_button */
+		  b = box_add_button(tmp_box, button_new(kb) );
+		  context=keydef;
 		}
-	      if (strncmp(tmpstr_A, "layout", 6) == 0)
-		{
-		  kb->total_layouts++;
-		  kb->kbd_layouts[kb->total_layouts-1] = box_new();
+
+		if (layout != kb->total_layouts) {
+		  kb->kbd_layouts[layout] = box_new();
 		  kb->vbox = kb->kbd_layouts[kb->group = kb->total_layouts-1];
 		  kb->vbox->act_width  = kb_width;
 		  kb->vbox->act_height = kb_height;
@@ -627,40 +637,12 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 		  kb->vbox->min_width = 0;
 		  kb->vbox->x = kb_x;
 		  kb->vbox->y = kb_y;
-		  continue;
+		  if (!layout) {
+			XChangeGC(display,kb->gc.bdr,GC0,&kb->GCval);
+			if (kb->gc.bdr_rev) XChangeGC(display,kb->gc.bdr_rev,GC0,&kb->GCval);
+		  }
 		}
-	      if (strncmp(tmpstr_A, "row", 3) == 0)
-		{
-		  if (kb->total_layouts == 0)
-		    {
-		      /*
-			 Minor Kludge :-)
-			 So older configs work we can work with
-			 out a <layout> tag
-		      */
-		      kb->total_layouts++;
-		      kb->kbd_layouts[kb->total_layouts-1] = box_new();
-		      kb->vbox = kb->kbd_layouts[kb->group = kb->total_layouts-1];
-		      kb->vbox->act_width  = kb_width;
-		      kb->vbox->act_height = kb_height;
-		      kb->vbox->min_height = 0;
-		      kb->vbox->min_width = 0;
-		      kb->vbox->x = kb_x;
-		      kb->vbox->y = kb_y;
-		    }
-		  context=rowdef;
-		  tmp_box = box_add_box(kb->vbox, box_new());
-
-		  continue;
-		}
-	      if (strncmp(tmpstr_A, "key", 3) == 0)
-		{
-		  /* check here for NULL tmp_button */
-		  b = box_add_button(tmp_box, button_new(kb) );
-		  context=keydef;
-		  continue;
-		}
-
+		continue;
 	    } else {
 	      fprintf(stderr,"Config file parse failed (tag) at line: %i\n",
 		      line_no);
@@ -681,13 +663,16 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 			font1 = strdup(tmpstr_C);
 		else if (strcmp(tmpstr_A, "button_style") == 0)
 		  {
-		    if (strcmp(tmpstr_C, "square") == 0)
-		        kb->theme = square;
-		    else if (strcmp(tmpstr_C, "plain") == 0)
-		      kb->theme = plain;
-		    else if (strcmp(tmpstr_C, "arc") == 0)
-		      kb->theme = arc;
-		  }
+		    if (strcmp(tmpstr_C, "square") == 0) {
+			kb->theme = square;
+			kb->GCval.cap_style = CapButt;
+			kb->GCval.join_style = JoinMiter;
+		    } else if (strcmp(tmpstr_C, "plain") == 0) {
+			kb->theme = plain;
+			kb->GCval.line_width = 0;
+		    } else if (strcmp(tmpstr_C, "arc") == 0)
+			kb->theme = arc;
+		    }
                 else if (__set_colors(kb,tmpstr_A,tmpstr_C,&kb->gc)) { }
 		else if (strcmp(tmpstr_A, "sym_col") == 0)
 		     _set_color_fg(kb,tmpstr_C,&kb->txt_sym_gc,&kb->color_sym);
@@ -696,7 +681,7 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 		else if (!strcmp(tmpstr_A, "kp_col"))
 		  _set_color_fg(kb,tmpstr_C,&kb->kp_gc,NULL);
 		else if (strcmp(tmpstr_A, "border_width") == 0)
-			kb->line_width=atoi(tmpstr_C);
+			kb->GCval.line_width=atoi(tmpstr_C);
 		else if (strcmp(tmpstr_A, "button_padding") == 0)
 			kb->pad=atoi(tmpstr_C);
 		else if (strcmp(tmpstr_A, "width") == 0)
@@ -812,13 +797,6 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
     if (font_name1) {
 	if (font1) free(font1);
 	font1 = strdup(font_name1);
-    }
-
-    switch  (kb->theme) {
-	case square: XSetLineAttributes(display, kb->gc.bdr, kb->line_width, LineSolid, CapButt, JoinMiter); break;
-	case arc:
-	case rounded: XSetLineAttributes(display, kb->gc.bdr, kb->line_width, LineSolid, CapRound, JoinRound); break;
-	case plain: kb->line_width = 0; break;
     }
 
   kb->key_delay_repeat1 = kb->key_delay_repeat;
