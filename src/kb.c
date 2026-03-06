@@ -77,6 +77,14 @@ static int load_a_single_font(keyboard *kb, char *fontname, FNTYPE *f, fontinfo 
 	inf->height = extent->max_logical_extent.height;
 	inf->width = extent->max_logical_extent.width;
 	inf->ascent = -extent->max_logical_extent.y;
+#if 0
+	printf("locale=%s def=%s\n",XLocaleOfFontSet(*f),def_string);
+	for (int i = 0; i < missing_count; i++) {
+	    char * m = *(missing_list + i);
+	    printf("missing \t%s\n", m);
+	}
+#endif
+	if (missing_count) XFreeStringList(missing_list);
 #else
 	if (*f) XUnloadFont(kb->display,(*f)->fid);
 	*f = XLoadQueryFont(kb->display, fontname);
@@ -915,6 +923,10 @@ void kb_size(keyboard *kb) {
 	h1 = kb->vbox->act_height;
 	mw = kb->width?:w1;
 	mh = kb->height?:h1;
+
+#if !defined(USE_UTF8) && defined(F_UTF8)
+	setlocale(LC_CTYPE,"");
+#endif
 
 	if (kb->font1 == kb->font) kb->font1 = NULL;
 	if (font1 && !strcmp(font, font1)) font1 = NULL;

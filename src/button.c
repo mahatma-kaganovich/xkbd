@@ -366,7 +366,7 @@ int button_render(button *b, int mode)
 //setlocale(LC_CTYPE,"");
     Xutf8DrawString(dpy, backing, len1?kb->font1:kb->font, gc.txt,
 		xx, yy + (len1?kb->finfo1.ascent:kb->finfo.ascent),
-		text, strlen(text));
+		txt, strlen(txt));
 #else
     XDrawString(dpy, backing, gc.txt,
 		xx, yy + (len1?kb->finfo1.ascent:kb->finfo.ascent),
