@@ -59,10 +59,13 @@ char *loaded_font1 = NULL;
 static void kb_process_keypress(button *b, int repeat, unsigned int flags);
 static int kb_switch_layout(keyboard *kb, int kbd_layout_num, int shift);
 
-static int load_a_single_font(keyboard *kb, char *fontname, FNTYPE *f) {
+static int load_a_single_font(keyboard *kb, char *fontname, FNTYPE *f, fontinfo *inf) {
 #ifdef USE_XFT
-  if (*f) XftFontClose(kb->display, *f);
-  return ((*f = XftFontOpenName(kb->display, kb->screen, fontname)) != NULL);
+	if (*f) XftFontClose(kb->display, *f);
+	*f = XftFontOpenName(kb->display, kb->screen, fontname);
+	if (!*f) return 0;
+	inf->height = _max((*f)->height, (inf->ascent=(*f)->ascent) + (*f)->descent);
+	inf->width = (*f)->max_advance_width;
 #elif defined(F_UTF8)
 	char **missing_list;
 	int missing_count;
@@ -70,16 +73,23 @@ static int load_a_single_font(keyboard *kb, char *fontname, FNTYPE *f) {
 	if (*f) XFreeFontSet(kb->display,*f);
 	*f=XCreateFontSet(kb->display, fontname,&missing_list, &missing_count, &def_string);
 	if (!*f) return 0;
-	return 1;
+	XFontSetExtents *extent = XExtentsOfFontSet(kb->font);
+	inf->height = extent->max_logical_extent.height;
+	inf->width = extent->max_logical_extent.width;
+	inf->ascent = -extent->max_logical_extent.y;
 #else
-  if (*f) XUnloadFont(kb->display,(*f)->fid);
-  if ((*f = XLoadQueryFont(kb->display, fontname)) == NULL) return 0;
-  XSetFont(kb->display, kb->gc.rev, (*f)->fid);
-  return True;
+	if (*f) XUnloadFont(kb->display,(*f)->fid);
+	*f = XLoadQueryFont(kb->display, fontname);
+	if (!*f) return 0;
+	kb->GCval.font = (*f)->fid;
+	inf->height = (inf->ascent=(*f)->ascent) + (*f)->descent;
+	inf->width = (*f)->max_bounds.width;
 #endif
+//	printf("font %s\n",fontname);
+	return 1;
 }
 
-static void load_font(keyboard *kb, char **loaded, char *fnt, FNTYPE *f){
+static void load_font(keyboard *kb, char **loaded, char *fnt, FNTYPE *f, fontinfo *inf){
 	char *fnames0, *fnames, *fname, *fname1;
 	int i;
 
@@ -92,16 +102,16 @@ static void load_font(keyboard *kb, char **loaded, char *fnt, FNTYPE *f){
 
 	while((fname = strsep(&fnames, "|"))) {
 		sprintf(fname1,fname,10);
-		if (!load_a_single_font(kb,fname1,f)) continue;
+		if (!load_a_single_font(kb,fname1,f,inf)) continue;
 		// font found
 		if (strcmp(fname1,fname)) {
 			// font is variable print mask. scale
-			i = ldiv(kb->vbox->act_width, _button_get_txt_size(kb,"ABCabc123+")).quot;
+//			i = ldiv(kb->vbox->act_width, _button_get_txt_size(kb,"ABCabc123+")).quot;
+			i = ldiv(kb->vbox->act_width, inf->width*10).quot;
 			if (i && i!=10 && i<1000) {
 				sprintf(fname1,fname,i);
-				if (!load_a_single_font(kb,fname1,f)) continue;
+				if (!load_a_single_font(kb,fname1,f,inf)) continue;
 			}
-			
 		}
 		free(fnames0);
 		return;
@@ -633,6 +643,9 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 		  /* check here for NULL tmp_button */
 		  b = box_add_button(tmp_box, button_new(kb) );
 		  context=keydef;
+		} else {
+//		  fprintf(stderr,"Config file parse failed (tag) at line: %i\n", line_no);
+//	          exit(1);
 		}
 
 		if (layout != kb->total_layouts) {
@@ -651,8 +664,7 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 		}
 		continue;
 	    } else {
-	      fprintf(stderr,"Config file parse failed (tag) at line: %i\n",
-		      line_no);
+	      fprintf(stderr,"Config file parse failed (tag) at line: %i\n", line_no);
 	      exit(1);
 	    }
 	}
@@ -906,34 +918,20 @@ void kb_size(keyboard *kb) {
 
 	if (kb->font1 == kb->font) kb->font1 = NULL;
 	if (font1 && !strcmp(font, font1)) font1 = NULL;
-	load_font(kb, &loaded_font, font, &kb->font);
-	if (font1) load_font(kb, &loaded_font1, font1, &kb->font1);
-	else kb->font1 = kb->font;
+	load_font(kb, &loaded_font, font, &kb->font, &kb->finfo);
+	if (font1) load_font(kb, &loaded_font1, font1, &kb->font1, &kb->finfo1);
+	else {
+		kb->font1 = kb->font;
+		kb->finfo1 = kb->finfo;
+	}
 
-#ifdef USE_XFT
-	kb->vheight = _max(kb->font->height,kb->font->ascent+kb->font->descent);
-	kb->vheight1 = _max(kb->font1->height,kb->font1->ascent+kb->font1->descent);
-	kb->ascent = kb->font->ascent;
-	kb->ascent1 = kb->font1->ascent;
-#elif defined(F_UTF8)
-	XFontSetExtents *extent;
-	extent = XExtentsOfFontSet(kb->font);
-	kb->vheight = extent->max_logical_extent.height;
-	kb->ascent = -extent->max_logical_extent.y;
-	extent = XExtentsOfFontSet(kb->font1);
-	kb->vheight1= extent->max_logical_extent.height;
-	kb->ascent1 = -extent->max_logical_extent.y;
-#else
-	
-	kb->vheight = kb->font->ascent + kb->font->descent;
-	kb->vheight1 = kb->font1->ascent + kb->font1->descent;
-	kb->ascent = kb->font->ascent;
-	kb->ascent1 = kb->font1->ascent;
-#endif
-
+	if (kb->GCval.font) {
+		XChangeGC(kb->display,kb->gc.txt,GCFont,&kb->GCval);
+		XChangeGC(kb->display,kb->gc.txt_rev,GCFont,&kb->GCval);
+	}
 
 	int max_single_char_width = 0;
-	int max_single_char_height = kb->vheight1;
+	int max_single_char_height = kb->finfo1.height;
 	int max_width = 0; /* required for sizing code */
 
 	for(i=0;i<kb->total_layouts;i++) {
@@ -944,6 +942,10 @@ void kb_size(keyboard *kb) {
 			bx->y=ldiv(bx->y*h1,mh).quot;
 			for(ip=((box *)listp->data)->root_kid; ip; ip= ip->next) {
 				b = (button *)ip->data;
+				if (kb->GCval.font) {
+					XChangeGC(kb->display,b->gc.txt,GCFont,&kb->GCval);
+					XChangeGC(kb->display,b->gc.txt_rev,GCFont,&kb->GCval);
+				}
 				if (!b->width && bx->undef) bx->width += (b->width = div(w - bx->width, bx->undef--).quot);
 				if (init_cnt) {
 #ifdef CACHE_SIZES
@@ -961,15 +963,15 @@ void kb_size(keyboard *kb) {
 				}
 				button_calc_vwidth(b);
 				if (b->vheight) continue;
-				b->vheight = kb->vheight;
+				b->vheight = kb->finfo.height;
 				if (
-					!(b->width && b->height && kb->vheight == kb->vheight1) && // opt
+					!(b->width && b->height && kb->finfo.height == kb->finfo1.height) && // opt
 					!(b->flags & STATE(OBIT_WIDTH_SPEC))) {
 					if ( ( DEFAULT_TXT(b) == NULL || strlen1utf8(DEFAULT_TXT(b)))
 						&& (SHIFT_TXT(b) == NULL || strlen1utf8(SHIFT_TXT(b)))
 						&& (MOD_TXT(b) == NULL || strlen1utf8(MOD_TXT(b)))
 						&& !b->pixmap) {
-							b->vheight = kb->vheight1;
+							b->vheight = kb->finfo1.height;
 							if (b->vwidth > max_single_char_width)
 								max_single_char_width = b->vwidth;
 					}

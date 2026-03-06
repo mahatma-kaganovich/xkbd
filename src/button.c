@@ -355,19 +355,21 @@ int button_render(button *b, int mode)
 #endif
  
   if (txt) {
+    int len1 = strlen1utf8(txt);
     int xx = x+((w - _but_size(b,l))>>1);
-    int yy = y+((h - (b->vheight?:strlen1utf8(txt)?kb->vheight1:kb->vheight))>>1);
+    int yy = y+((h - (b->vheight?:len1?kb->finfo1.height:kb->finfo.height))>>1);
 #ifdef USE_XFT
-    XftDrawStringUtf8(kb->xftdraw, &gc.col, strlen1utf8(txt)?kb->font1:kb->font,
-		xx, yy + (strlen1utf8(txt)?kb->ascent1:kb->ascent),
+    XftDrawStringUtf8(kb->xftdraw, &gc.col, len1?kb->font1:kb->font,
+		xx, yy + (len1?kb->finfo1.ascent:kb->finfo.ascent),
 		(unsigned char *) txt, strlen(txt));
 #elif defined(F_UTF8)
-    Xutf8DrawString(dpy, backing, strlen1utf8(txt)?kb->font1:kb->font, gc.txt,
-		xx, yy + (strlen1utf8(txt)?kb->ascent1:kb->ascent),
-		txt, strlen(txt));
+//setlocale(LC_CTYPE,"");
+    Xutf8DrawString(dpy, backing, len1?kb->font1:kb->font, gc.txt,
+		xx, yy + (len1?kb->finfo1.ascent:kb->finfo.ascent),
+		text, strlen(text));
 #else
     XDrawString(dpy, backing, gc.txt,
-		xx, yy + kb->ascent,
+		xx, yy + (len1?kb->finfo1.ascent:kb->finfo.ascent),
 		txt, strlen(txt));
 #endif
   }

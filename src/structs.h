@@ -26,6 +26,8 @@
 #include <X11/Xft/Xft.h>
 #define DEFAULT_FONT "Monospace-%i|-%i|sans-%i|fixed-%i|fixed"
 #else
+#include <locale.h>
+//#define DEFAULT_FONT "-*-fixed-*-*-*-*-%i-*-*-*-*-*-*-*|fixed"
 #define F_UTF8
 #define DEFAULT_FONT "-*-fixed-medium-r-*-*-%i-*-*-*-*-*-iso10646-1|fixed"
 #endif
@@ -180,6 +182,10 @@ typedef struct _gcs_t {
 #endif
 } gcs_t;
 
+typedef struct _fontinfo {
+	int height, width, ascent;
+} fontinfo;
+
 #ifdef USE_XFT
 #define FNTYPE XftFont *
 #elif defined(F_UTF8)
@@ -201,10 +207,7 @@ typedef struct _keyboard
 
   int act_width, act_height; // ConfigureNotify - touch control only
 
-  int vheight;
-  int vheight1;
-  int ascent;
-  int ascent1;
+  fontinfo finfo,finfo1;
 
   int pad;
 
