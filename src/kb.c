@@ -940,7 +940,9 @@ void kb_size(keyboard *kb) {
 #if !defined(USE_XFT) && defined(F_UTF8)
 	setlocale(LC_CTYPE,"");
 #endif
-	int fntsize=_min(w1/maxstrs,h1/(rows<<1));
+	int fntsize=8;
+	if (maxstrs) _MAX(fntsize,w1/maxstrs);
+	if (rows) _MIN(fntsize,h1/(rows<<1));
 
 	if (kb->font1 == kb->font) kb->font1 = NULL;
 	if (font1 && !strcmp(font, font1)) font1 = NULL;
