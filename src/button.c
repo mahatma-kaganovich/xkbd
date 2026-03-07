@@ -147,9 +147,9 @@ static int _but_size(button *b, int l){
 #endif
 }
 
-int button_calc_vwidth(button *b)
+void button_calc_vwidth(button *b)
 {
-  if (b->vwidth ) return b->vwidth; /* already calculated from image or width_param */
+  if (b->vwidth ) return; /* already calculated from image or width_param */
 
 #ifdef CACHE_SIZES
   int i,sz = 0;
@@ -166,14 +166,6 @@ int button_calc_vwidth(button *b)
 //	&& !(DEFAULT_KS(b) || SHIFT_KS(b) || MOD_KS(b)) &&
 //	DEFAULT_TXT(b) == NULL && SHIFT_TXT(b) == NULL && MOD_TXT(b) == NULL
   ) b->flags|=STATE(OBIT_DIRECT); // reuse bit as blank/spacer
-
-  return b->vwidth;
-}
-
-static int button_set_b_size(button *b, int size)
-{
-   b->b_size = size;
-   return size;
 }
 
 static unsigned long getGCFill(keyboard *kb, GC gc){

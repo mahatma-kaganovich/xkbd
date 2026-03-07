@@ -318,8 +318,6 @@ typedef struct _button
 
   int vwidth;  /* width  of contents ( min width ) */
   int vheight; /* height of contents ( min height ) */
-  int b_size;   /* size of border in pixels */
-                /* eg. total width = vwidth+pad_x+(2*b_size) */
 
    int key_span_width; /* width in number of keys spanned */
 
