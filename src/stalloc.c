@@ -57,13 +57,19 @@ void *stalloc(size_t l){
 	if (m.size < l) goto new;
 	m.buf+=m.pos;
 a:
-	m.size-=l;
-	m.pos=l;
+	m.size-=(m.pos=l);
 	return m.buf;
 new:
 	if (l >= st_block) return _calloc(l);
 	m.buf=_calloc(m.size=st_block);
 	goto a;
+}
+
+void *ststrdup(const char *s){
+	int l = strlen(s)+1;
+	void *d = (l > (st_block>>1)) ? malloc(l) : stalloc(_align(l));
+	memcpy(d,s,l);
+	return d;
 }
 
 void stline(){

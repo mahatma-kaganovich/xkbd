@@ -118,10 +118,10 @@ static void load_font(keyboard *kb, char **loaded, char *fnt, FNTYPE *f, fontinf
 #endif
 	if (*loaded) {
 		if (!strcmp(*loaded,fnt)) return;
-		free(*loaded);
+		free1(*loaded);
 	}
-	fnames0 = fnames = strdup(fnt);
-	*loaded = fname1 = malloc(strlen(fnt)+10);
+	fnames0 = fnames = strdup1(fnt);
+	*loaded = fname1 = malloc2(strlen(fnt)+10);
 
 	while((fname = strsep(&fnames, "|"))) {
 		sprintf(fname1,fname,init_size);
@@ -141,7 +141,7 @@ static void load_font(keyboard *kb, char **loaded, char *fnt, FNTYPE *f, fontinf
 				if (!load_a_single_font(kb,fname1,f,inf)) continue;
 			}
 		}
-		free(fnames0);
+		free1(fnames0);
 		return;
 	}
 err:
@@ -705,9 +705,9 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 		break;
 	      case kbddef:
 		if ((strcmp(tmpstr_A, "font") == 0))
-			font = strdup(tmpstr_C);
+			font = strdup1(tmpstr_C);
 		if ((strcmp(tmpstr_A, "font1") == 0))
-			font1 = strdup(tmpstr_C);
+			font1 = strdup1(tmpstr_C);
 		else if (strcmp(tmpstr_A, "button_style") == 0)
 		  {
 		    if (strcmp(tmpstr_C, "square") == 0) {
@@ -754,9 +754,9 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 		break;
 	      case keydef:
 		if (strcmp(tmpstr_A, "default") == 0)
-		  DEFAULT_TXT(b) = strdup(tmpstr_C);
+		  DEFAULT_TXT(b) = strdup1(tmpstr_C);
 		else if (strcmp(tmpstr_A, "shift") == 0)
-		  SHIFT_TXT(b) = strdup(tmpstr_C);
+		  SHIFT_TXT(b) = strdup1(tmpstr_C);
 		else if (strcmp(tmpstr_A, "switch") == 0) {
 		  // -1 is default, but setting in config -> -2 & switch KeySym
 		  // to other keysym - set -2 & concrete default_ks
@@ -765,9 +765,9 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 		    b->layout_switch = -2;
 		  }
 		} else if (strcmp(tmpstr_A, "mod") == 0)
-		  MOD_TXT(b) = strdup(tmpstr_C);
+		  MOD_TXT(b) = strdup1(tmpstr_C);
 		else if (strcmp(tmpstr_A, "shift_mod") == 0)
-		  SHIFT_MOD_TXT(b) = strdup(tmpstr_C);
+		  SHIFT_MOD_TXT(b) = strdup1(tmpstr_C);
 		else if (strcmp(tmpstr_A, "default_ks") == 0)
 		  button_set_txt_ks(b, tmpstr_C);
 		else if (strcmp(tmpstr_A, "shift_ks") == 0)
@@ -836,15 +836,20 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
       line_no++;
     }
 
+#ifndef STALLOC
     if (font_name) {
-	if (font) free(font);
-	font = strdup(font_name);
-    } else if (!font) font = strdup(DEFAULT_FONT);
+	if (font) free1(font);
+	font = strdup1(font_name);
+    } else if (!font) font = strdup1(DEFAULT_FONT);
 
     if (font_name1) {
-	if (font1) free(font1);
-	font1 = strdup(font_name1);
+	if (font1) free1(font1);
+	font1 = strdup1(font_name1);
     }
+#else
+    font = font_name?:DEFAULT_FONT;
+    font1 = font_name1;
+#endif
 
   kb->key_delay_repeat1 = kb->key_delay_repeat;
   kb->key_repeat1 = kb->key_repeat;
