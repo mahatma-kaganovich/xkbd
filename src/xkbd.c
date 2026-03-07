@@ -891,10 +891,10 @@ re_crts:
 					break;
 				}
 				found++;
-				X1=_max(X1,x1);
-				Y1=_max(Y1,y1);
-				X2=_min(X2,x2);
-				Y2=_min(Y2,y2);
+				_MAX(X1,x1);
+				_MAX(Y1,y1);
+				_MIN(X2,x2);
+				_MIN(Y2,y2);
 				subpixel_order = oinf->subpixel_order;
 				scr_mwidth=oinf->mm_width;
 				scr_mheight=oinf->mm_height;

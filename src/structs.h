@@ -361,11 +361,20 @@ extern int cache_pix;
 
 static inline long _min(long x,long y){ return x<y?x:y; }
 static inline long _max(long x,long y){ return x>y?x:y; }
+#define _MAX(x,y) {long tmpY = (y); if (tmpY > x) x = tmpY;}
+#define _MIN(x,y) {long tmpY = (y); if (tmpY < x) x = tmpY;}
 
 static inline int strlen1utf8(char *s) {
 	int cnt=0;
 	while (*s && cnt<2) cnt += (*s++ & 0xC0) != 0x80;
 	return cnt==1;
+}
+
+static inline size_t strlen_utf8(char *s) {
+	size_t cnt=0;
+	if (s)
+		while (*s) cnt += (*s++ & 0xC0) != 0x80;
+	return cnt;
 }
 
 

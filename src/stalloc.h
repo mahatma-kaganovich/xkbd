@@ -13,13 +13,15 @@
 void *stalloc(size_t l);
 void *ststrdup(const char *s);
 
+
 #ifndef STALLOC
 #define _ALIGN 0
+#define _align(s) (s)
 #define calloc1(s) calloc(1,sizeof(s))
 #define malloc1(s) malloc(sizeof(s))
 #define malloc2(s) malloc(s)
 #define strdup1(s) strdup(s)
-#define free1(s) strdup(s)
+#define free1(s) free(s)
 #else
 #define _ALIGN STALLOC
 #define _align(s) (((((s)+((1<<_ALIGN)-1)))>>_ALIGN)<<_ALIGN)

@@ -91,31 +91,15 @@ static int load_a_single_font(keyboard *kb, char *fontname, FNTYPE *f, fontinfo 
 	inf->height = (inf->ascent=(*f)->ascent) + (*f)->descent;
 	inf->width = (*f)->max_bounds.width;
 #endif
-	printf("font %s\n",fontname);
+//	printf("font %s\n",fontname);
 	return 1;
 }
 
-static void load_font(keyboard *kb, char **loaded, char *fnt, FNTYPE *f, fontinfo *inf){
+static void load_font(keyboard *kb, char **loaded, char *fnt, FNTYPE *f, fontinfo *inf, int fontsize){
 	char *fnames0, *fnames, *fname, *fname1;
 	int i;
-	// xft: name-2
-#define _ALLx10
-// over-approximated!
-#ifdef _ALLx10
-	const int init_size = 10, keycap_size = 10, kbd_width = 10;
-#else
-	int init_size = 10, keycap_size = 10, kbd_width = 10;
-//	keycap_size = kb->def_width
-	kbd_width = kb->vbox->act_width/kb->def_width;
-	printf("w=%i\n",kbd_width);
-//	int init_size = 10, keycap_size = kb->def_width+2, kbd_width = 16;
-//	const int init_size = 16, keycap_size = 8, kbd_width = 16;
-	// act_width/(kbd_width*keycap_size)
-//	init_size = (kb->vbox->act_width+0.)/(kbd_width*keycap_size)+.5;
-//	init_size = (kb->vbox->act_width)/(kbd_width*keycap_size);
-//	init_size = (kb->vbox->act_width)/(kbd_width*kb->def_width);
-//	init_size = 10;
-#endif
+//	int init_size = 10, keycap_size = 10, kbd_width = 10;
+
 	if (*loaded) {
 		if (!strcmp(*loaded,fnt)) return;
 		free1(*loaded);
@@ -123,24 +107,20 @@ static void load_font(keyboard *kb, char **loaded, char *fnt, FNTYPE *f, fontinf
 	fnames0 = fnames = strdup1(fnt);
 	*loaded = fname1 = malloc2(strlen(fnt)+10);
 
+	//fontsize=10;
 	while((fname = strsep(&fnames, "|"))) {
-		sprintf(fname1,fname,init_size);
+		sprintf(fname1,fname,fontsize);
 		if (!load_a_single_font(kb,fname1,f,inf)) continue;
+/*
 		// font found
 		if (strcmp(fname1,fname)) {
-#ifdef _ALLx10
-			//i = ldiv(kb->vbox->act_width, _button_get_txt_size(kb,"ABCabc123+")).quot;
 			i = div(kb->vbox->act_width, inf->width * keycap_size).quot;
-#else
-			// kbd_with = kb->vbox->act_width/init_size;
-			i = kb->vbox->act_width*init_size/(keycap_size*inf->width*kbd_width);
-			printf("=== %i %i %i %i\n",i,kbd_width,kb->def_height,kb->vbox->act_width/(kb->def_width+2));
-#endif
-			if (i && i!=init_size && i<1000) {
+			if (i!=init_size && i<1000) {
 				sprintf(fname1,fname,i);
 				if (!load_a_single_font(kb,fname1,f,inf)) continue;
 			}
 		}
+*/
 		free1(fnames0);
 		return;
 	}
@@ -890,6 +870,7 @@ void kb_size(keyboard *kb) {
 	box *vbox, *bx;
 	static unsigned long long init_cnt = 0;
 	const int hack = 1; /* hack for using all screen space */
+	long maxstrs = 0, rows = 0, l;
 
 	// [virtual] kb size based on buttons
 	w=0; h=0;
@@ -900,18 +881,25 @@ void kb_size(keyboard *kb) {
 			bx=(box *)listp->data;
 			bx->x=0; bx->y=h1;
 			bx->undef=0;
+			l = 0;
+			rows++;
 			for(ip=bx->root_kid; ip; ip= ip->next) {
 				b = (button *)ip->data;
+
+				l+=4; // add empty chars per button
+				for (j=0;j<STD_LEVELS;j++) _MAX(l,strlen_utf8(b->txt[j]));
+
 				w2+=b->width;
-				h2=_max(h2,b->height);
+				_MAX(h2,b->height);
 				if (!b->width) bx->undef++;
 			}
 			bx->width = w2;
 			bx->height = h2;
 			h1+=h2;
-			w=_max(w,w2);
+			_MAX(w,w2);
+			_MAX(maxstrs,l);
 		}
-		h=_max(h,h1);
+		_MAX(h,h1);
 	}
 	if (!kb->width) kb->width=w;
 	if (!kb->height) kb->height=h;
@@ -935,12 +923,12 @@ void kb_size(keyboard *kb) {
 		kb->vbox->act_height=ldiv(_min(scr_height,kb->vbox->act_width)*d2,d1).quot;
 		if (!h2){
 		} else if (!w2) kb->vbox->act_height=h2;
-		else kb->vbox->act_height=_min(kb->vbox->act_height,ldiv(h2*kb->vbox->act_width,w2).quot);
+		else _MIN(kb->vbox->act_height,ldiv(h2*kb->vbox->act_width,w2).quot);
 	    } else if (!kb->vbox->act_width) {
 		kb->vbox->act_width=_min(scr_width,ldiv(kb->vbox->act_height*d1,d2).quot);
 		if (!w2){
 		} else if (!h2) kb->vbox->act_width=w2;
-		else kb->vbox->act_width=_min(kb->vbox->act_width,ldiv(w2*kb->vbox->act_height,h2).quot);
+		else _MIN(kb->vbox->act_width,ldiv(w2*kb->vbox->act_height,h2).quot);
 	    }
 	}
 
@@ -952,11 +940,12 @@ void kb_size(keyboard *kb) {
 #if !defined(USE_XFT) && defined(F_UTF8)
 	setlocale(LC_CTYPE,"");
 #endif
+	int fntsize=_min(w1/maxstrs,h1/(rows<<1));
 
 	if (kb->font1 == kb->font) kb->font1 = NULL;
 	if (font1 && !strcmp(font, font1)) font1 = NULL;
-	load_font(kb, &loaded_font, font, &kb->font, &kb->finfo);
-	if (font1) load_font(kb, &loaded_font1, font1, &kb->font1, &kb->finfo1);
+	load_font(kb, &loaded_font, font, &kb->font, &kb->finfo,fntsize);
+	if (font1) load_font(kb, &loaded_font1, font1, &kb->font1, &kb->finfo1,fntsize);
 	else {
 		kb->font1 = kb->font;
 		kb->finfo1 = kb->finfo;
@@ -1117,7 +1106,7 @@ void kb_size(keyboard *kb) {
 				b->vx = button_get_abs_x(b) - vbox->x + vbox->vx;
 				b->vy = button_get_abs_y(b) - vbox->y + vbox->vy;
 			}
-			fx = _max(fx,cx);
+			_MAX(fx,cx);
 		    }
 		    vbox->act_height = cy + hack;
 		    vbox->act_width = fx + hack;
