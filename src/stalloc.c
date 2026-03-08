@@ -4,6 +4,12 @@
 #include <string.h>
 #include "stalloc.h"
 
+#include <unistd.h>
+//#undef _POSIX_MAPPED_FILES
+#if defined(_POSIX_MAPPED_FILES) && (_POSIX_MAPPED_FILES - 0) > 0
+#include <sys/mman.h>
+#endif
+
 #if __STDC_VERSION__ >= 201112L
 #include <stddef.h>
 #if __STDC_VERSION__ < 202311L
@@ -60,6 +66,11 @@ a:
 	m.size-=(m.pos=l);
 	return m.buf;
 new:
+#if defined(_POSIX_MAPPED_FILES) && (_POSIX_MAPPED_FILES - 0) > 0
+	m.buf = mmap(NULL, m.size = 0xffffffff, PROT_READ | PROT_WRITE,
+		MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (m.buf != MAP_FAILED) goto a;
+#endif
 	if (l >= st_block) return _calloc(l);
 	m.buf=_calloc(m.size=st_block);
 	goto a;
@@ -67,7 +78,12 @@ new:
 
 void *ststrdup(const char *s){
 	int l = strlen(s)+1;
-	void *d = (l > (st_block>>1)) ? malloc(l) : stalloc(_align(l));
+	void *d =
+#if defined(_POSIX_MAPPED_FILES) && (_POSIX_MAPPED_FILES - 0) > 0
+#else
+		(l > (st_block>>1)) ? malloc(l) :
+#endif
+		stalloc(_align(l));
 	memcpy(d,s,l);
 	return d;
 }

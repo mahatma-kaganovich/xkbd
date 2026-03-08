@@ -1,7 +1,7 @@
 
 #ifndef MINIMAL
 // 128-bit alignment if possible
-#define STALLOC 4
+//#define STALLOC 4
 #else
 #define STALLOC 0
 #endif

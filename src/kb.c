@@ -24,9 +24,6 @@
 #include <X11/keysym.h>
 #include <X11/XKBlib.h>
 
-#ifdef USE_XFT
-#include <X11/Xft/Xft.h>
-#endif
 #include "structs.h"
 #include "kb.h"
 #include "box.h"
@@ -888,7 +885,9 @@ void kb_size(keyboard *kb) {
 				b = (button *)ip->data;
 
 				k = 0;
-				for (j=0;j<STD_LEVELS;j++) _MAX(k,strlen_utf8(b->txt[j]));
+				for (j=0;j<STD_LEVELS;j++)
+					//_MAX(k,strlen_utf8(b->txt[j]));
+					if (b->txt[j]) _MAX(k,strlen(b->txt[j]));
 				k*=1.12; // long text pressure
 #ifdef USE_XFT
 				k++;
