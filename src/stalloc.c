@@ -4,13 +4,12 @@
 #include <string.h>
 #include "stalloc.h"
 
-#include <stdio.h>
-
-
+#ifdef _POSIX_C_SOURCE
 #include <unistd.h>
 //#undef _POSIX_MAPPED_FILES
 #if defined(_POSIX_MAPPED_FILES) && (_POSIX_MAPPED_FILES - 0) > 0
 #include <sys/mman.h>
+#endif
 #endif
 
 #if __STDC_VERSION__ >= 201112L
@@ -35,10 +34,9 @@
 #define _th
 #endif
 
-#define buf_align (1<<BUF_ALIGN)
+#define  buf_align (1<<BUF_ALIGN)
 
 const size_t st_block=1024*8;
-const size_t st_block_mmap=1024*1024;
 
 _th struct _stalloc_buf {
 	void *buf;
@@ -72,7 +70,8 @@ a:
 new:
 	if (l >= st_block) return _calloc(l);
 #if defined(_POSIX_MAPPED_FILES) && (_POSIX_MAPPED_FILES - 0) > 0
-	m.buf = mmap(NULL, m.size = st_block_mmap, PROT_READ | PROT_WRITE,
+	m.size = sysconf(_SC_PAGESIZE);
+	m.buf = mmap(NULL, m.size += st_block/m.size*m.size, PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	if (m.buf == MAP_FAILED)
 #endif
