@@ -4,6 +4,9 @@
 #include <string.h>
 #include "stalloc.h"
 
+#include <stdio.h>
+
+
 #include <unistd.h>
 //#undef _POSIX_MAPPED_FILES
 #if defined(_POSIX_MAPPED_FILES) && (_POSIX_MAPPED_FILES - 0) > 0
@@ -35,6 +38,7 @@
 #define buf_align (1<<BUF_ALIGN)
 
 const size_t st_block=1024*8;
+const size_t st_block_mmap=1024*1024;
 
 _th struct _stalloc_buf {
 	void *buf;
@@ -66,24 +70,19 @@ a:
 	m.size-=(m.pos=l);
 	return m.buf;
 new:
-#if defined(_POSIX_MAPPED_FILES) && (_POSIX_MAPPED_FILES - 0) > 0
-	m.buf = mmap(NULL, m.size = 0xffffffff, PROT_READ | PROT_WRITE,
-		MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-	if (m.buf != MAP_FAILED) goto a;
-#endif
 	if (l >= st_block) return _calloc(l);
-	m.buf=_calloc(m.size=st_block);
+#if defined(_POSIX_MAPPED_FILES) && (_POSIX_MAPPED_FILES - 0) > 0
+	m.buf = mmap(NULL, m.size = st_block_mmap, PROT_READ | PROT_WRITE,
+		MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (m.buf == MAP_FAILED)
+#endif
+	    m.buf=_calloc(m.size=st_block);
 	goto a;
 }
 
 void *ststrdup(const char *s){
 	int l = strlen(s)+1;
-	void *d =
-#if defined(_POSIX_MAPPED_FILES) && (_POSIX_MAPPED_FILES - 0) > 0
-#else
-		(l > (st_block>>1)) ? malloc(l) :
-#endif
-		stalloc(_align(l));
+	void *d = (l > (st_block>>1)) ? malloc(l) : stalloc(_align(l));
 	memcpy(d,s,l);
 	return d;
 }
