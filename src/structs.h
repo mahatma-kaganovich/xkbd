@@ -24,15 +24,30 @@
 #include <X11/XKBlib.h>
 #ifdef USE_XFT
 #include <X11/Xft/Xft.h>
-#define DEFAULT_FONT "Monospace-%i|-%i|sans-%i|fixed-%i|fixed"
 #else
-#include <locale.h>
-//#define DEFAULT_FONT "-*-fixed-*-*-*-*-%i-*-*-*-*-*-*-*|fixed"
 #define F_UTF8
-#define DEFAULT_FONT "-*-fixed-medium-r-*-*-%i-*-*-*-*-*-iso10646-1|fixed"
 #endif
 
 #include "stalloc.h"
+
+
+#ifdef USE_XFT
+#define FNTYPE XftFont *
+#define DEFAULT_FONT "Monospace-%i|-%i|sans-%i|fixed-%i|fixed"
+#elif defined(F_UTF8)
+#include <locale.h>
+#define FNTYPE XFontSet
+#define DEFAULT_FONT \
+	"-*-*-medium-r-normal-*-%i-*-*-*-*-*-iso10646-1|" \
+	"-*-*-*-*-*-*-%i-*-*-*-*-*-iso10646-1|" \
+	"fixed"
+#else
+#define FNTYPE XFontStruct *
+#define DEFAULT_FONT \
+	"-*-*-medium-r-normal-*-%i-*-*-*-*-*-*-*|" \
+	"-*-*-*-*-*-*-%i-*-*-*-*-*-*-*|" \
+	"fixed"
+#endif
 
 
 typedef uint_fast8_t _ushort;
@@ -183,16 +198,9 @@ typedef struct _gcs_t {
 } gcs_t;
 
 typedef struct _fontinfo {
+	FNTYPE font;
 	int height, width, ascent;
 } fontinfo;
-
-#ifdef USE_XFT
-#define FNTYPE XftFont *
-#elif defined(F_UTF8)
-#define FNTYPE XFontSet
-#else
-#define FNTYPE XFontStruct *
-#endif
 
 typedef struct _keyboard
 {
@@ -230,9 +238,6 @@ typedef struct _keyboard
 //#define noFilled(g) (!kb->filled || (g!=kb->filled && getGCFill(kb,kb->filled)!=getGCFill(kb,g)))
 #define noFilled(g) (!kb->filled || g!=kb->filled || getGCFill(kb,kb->filled)!=getGCFill(kb,g))
   GC filled;
-
-  FNTYPE font;
-  FNTYPE font1;
 
   unsigned int state;  /* shifted | caps | modded | normal */
   unsigned int state_locked;  /* shifted | modded | normal */
@@ -376,7 +381,6 @@ static inline size_t strlen_utf8(char *s) {
 		while (*s) cnt += (*s++ & 0xC0) != 0x80;
 	return cnt;
 }
-
 
 #endif
 

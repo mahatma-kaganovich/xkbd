@@ -118,18 +118,17 @@ KeySym button_ks(char *txt)
 int _button_get_txt_size(keyboard *kb, char *txt)
 {
   if (!txt) return 0;
+  fontinfo *f = strlen1utf8(txt)?&kb->finfo1:&kb->finfo;
 #ifdef USE_XFT
-  XGlyphInfo       extents;
-  XftTextExtentsUtf8(kb->display, strlen1utf8(txt)?kb->font1:kb->font,
-	(FcChar8 *) txt, strlen(txt),
-	&extents);
+  XGlyphInfo extents;
+  XftTextExtentsUtf8(kb->display, f->font, (FcChar8 *)txt, strlen(txt), &extents);
   return extents.width;
 #elif defined(F_UTF8)
   XRectangle r1,r2;
-  Xutf8TextExtents(strlen1utf8(txt)?kb->font1:kb->font,(char *) txt, strlen(txt),&r1,&r2);
+  Xutf8TextExtents(f->font,(char *) txt, strlen(txt),&r1,&r2);
   return r1.width;
 #else
-  return XTextWidth(kb->font, txt, strlen(txt));
+  return XTextWidth(f->font, txt, strlen(txt));
 #endif
 }
 
@@ -347,22 +346,16 @@ int button_render(button *b, int mode)
 #endif
  
   if (txt) {
-    int len1 = strlen1utf8(txt);
+    fontinfo *f = strlen1utf8(txt)?&kb->finfo1:&kb->finfo;
     int xx = x+((w - _but_size(b,l))>>1);
-    int yy = y+((h - (b->vheight?:len1?kb->finfo1.height:kb->finfo.height))>>1);
+    int yy = y+((h - (b->vheight?:f->height))>>1) + f->ascent;
 #ifdef USE_XFT
-    XftDrawStringUtf8(kb->xftdraw, &gc.col, len1?kb->font1:kb->font,
-		xx, yy + (len1?kb->finfo1.ascent:kb->finfo.ascent),
-		(unsigned char *) txt, strlen(txt));
+    XftDrawStringUtf8(kb->xftdraw, &gc.col, f->font,
+		xx, yy, (FcChar8 *) txt, strlen(txt));
 #elif defined(F_UTF8)
-//setlocale(LC_CTYPE,"");
-    Xutf8DrawString(dpy, backing, len1?kb->font1:kb->font, gc.txt,
-		xx, yy + (len1?kb->finfo1.ascent:kb->finfo.ascent),
-		txt, strlen(txt));
+    Xutf8DrawString(dpy, backing, f->font, gc.txt, xx, yy, txt, strlen(txt));
 #else
-    XDrawString(dpy, backing, gc.txt,
-		xx, yy + (len1?kb->finfo1.ascent:kb->finfo.ascent),
-		txt, strlen(txt));
+    XDrawString(dpy, backing, gc.txt, xx, yy, txt, strlen(txt));
 #endif
   }
 pixmap:

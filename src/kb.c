@@ -59,43 +59,44 @@ char *loaded_font1 = NULL;
 static void kb_process_keypress(button *b, int repeat, unsigned int flags);
 static int kb_switch_layout(keyboard *kb, int kbd_layout_num, int shift);
 
-static int load_a_single_font(keyboard *kb, char *fontname, FNTYPE *f, fontinfo *inf) {
+static int load_a_single_font(keyboard *kb, char *fontname, fontinfo *inf) {
 #ifdef USE_XFT
-	if (*f) XftFontClose(kb->display, *f);
-	*f = XftFontOpenName(kb->display, kb->screen, fontname);
-	if (!*f) return 0;
-	inf->height = _max((*f)->height, (inf->ascent=(*f)->ascent) + (*f)->descent);
-	inf->width = (*f)->max_advance_width;
+	if (inf->font) XftFontClose(kb->display, inf->font);
+	inf->font = XftFontOpenName(kb->display, kb->screen, fontname);
+	if (!inf->font) return 0;
+	inf->height = _max((inf->font)->height, (inf->ascent=(inf->font)->ascent) + (inf->font)->descent);
+	inf->width = (inf->font)->max_advance_width;
 #elif defined(F_UTF8)
+	setlocale(LC_CTYPE,"");
 	char **missing_list;
 	int missing_count;
 	char *def_string;
-	if (*f) XFreeFontSet(kb->display,*f);
-	*f=XCreateFontSet(kb->display, fontname,&missing_list, &missing_count, &def_string);
-	if (!*f) return 0;
-	XFontSetExtents *extent = XExtentsOfFontSet(kb->font);
+	if (inf->font) XFreeFontSet(kb->display,inf->font);
+	inf->font=XCreateFontSet(kb->display, fontname,&missing_list, &missing_count, &def_string);
+	if (!inf->font) return 0;
+	XFontSetExtents *extent = XExtentsOfFontSet(kb->finfo.font);
 	inf->height = extent->max_logical_extent.height;
 	inf->width = extent->max_logical_extent.width;
 	inf->ascent = -extent->max_logical_extent.y;
 #if 0
-	printf("locale=%s def=%s\n",XLocaleOfFontSet(*f),def_string);
+	printf("font=%s locale=%s def=%s\n",XBaseFontNameListOfFontSet(inf->font),XLocaleOfFontSet(inf->font),def_string);
 	for (int i = 0; i < missing_count; i++)
 	    printf("missing %s\n", *(missing_list + i));
 #endif
 	if (missing_count) XFreeStringList(missing_list);
 #else
-	if (*f) XUnloadFont(kb->display,(*f)->fid);
-	*f = XLoadQueryFont(kb->display, fontname);
-	if (!*f) return 0;
-	kb->GCval.font = (*f)->fid;
-	inf->height = (inf->ascent=(*f)->ascent) + (*f)->descent;
-	inf->width = (*f)->max_bounds.width;
+	if (inf->font) XUnloadFont(kb->display,(inf->font)->fid);
+	inf->font = XLoadQueryFont(kb->display, fontname);
+	if (!inf->font) return 0;
+	kb->GCval.font = (inf->font)->fid;
+	inf->height = (inf->ascent=(inf->font)->ascent) + (inf->font)->descent;
+	inf->width = (inf->font)->max_bounds.width;
 #endif
 //	printf("font %s\n",fontname);
 	return 1;
 }
 
-static void load_font(keyboard *kb, char **loaded, char *fnt, FNTYPE *f, fontinfo *inf, int fontsize){
+static void load_font(keyboard *kb, char **loaded, char *fnt, fontinfo *inf, int fontsize){
 	char *fnames0, *fnames, *fname, *fname1;
 	int i;
 //	int init_size = 10, keycap_size = 10, kbd_width = 10;
@@ -110,14 +111,14 @@ static void load_font(keyboard *kb, char **loaded, char *fnt, FNTYPE *f, fontinf
 	//fontsize=10;
 	while((fname = strsep(&fnames, "|"))) {
 		sprintf(fname1,fname,fontsize);
-		if (!load_a_single_font(kb,fname1,f,inf)) continue;
+		if (!load_a_single_font(kb,fname1,inf)) continue;
 /*
 		// font found
 		if (strcmp(fname1,fname)) {
 			i = div(kb->vbox->act_width, inf->width * keycap_size).quot;
 			if (i!=init_size && i<1000) {
 				sprintf(fname1,fname,i);
-				if (!load_a_single_font(kb,fname1,f,inf)) continue;
+				if (!load_a_single_font(kb,fname1,inf)) continue;
 			}
 		}
 */
@@ -870,7 +871,7 @@ void kb_size(keyboard *kb) {
 	box *vbox, *bx;
 	static unsigned long long init_cnt = 0;
 	const int hack = 1; /* hack for using all screen space */
-	long maxstrs = 0, rows = 0, l;
+	long maxstrs = 0, rows = 0;
 
 	// [virtual] kb size based on buttons
 	w=0; h=0;
@@ -881,13 +882,18 @@ void kb_size(keyboard *kb) {
 			bx=(box *)listp->data;
 			bx->x=0; bx->y=h1;
 			bx->undef=0;
-			l = 0;
+			int l = 0;
 			rows++;
 			for(ip=bx->root_kid; ip; ip= ip->next) {
 				b = (button *)ip->data;
 
-				l+=4; // add empty chars per button
-				for (j=0;j<STD_LEVELS;j++) _MAX(l,strlen_utf8(b->txt[j]));
+				k = 0;
+				for (j=0;j<STD_LEVELS;j++) _MAX(k,strlen_utf8(b->txt[j]));
+				k*=1.12; // long text pressure
+#ifdef USE_XFT
+				k++;
+#endif
+				l += k;
 
 				w2+=b->width;
 				_MAX(h2,b->height);
@@ -937,21 +943,15 @@ void kb_size(keyboard *kb) {
 	mw = kb->width?:w1;
 	mh = kb->height?:h1;
 
-#if !defined(USE_XFT) && defined(F_UTF8)
-	setlocale(LC_CTYPE,"");
-#endif
 	int fntsize=8;
-	if (maxstrs) _MAX(fntsize,w1/maxstrs);
+	if (maxstrs) _MAX(fntsize,(0.+w1)/maxstrs + .5);
 	if (rows) _MIN(fntsize,h1/(rows<<1));
 
-	if (kb->font1 == kb->font) kb->font1 = NULL;
+	if (kb->finfo1.font == kb->finfo.font) kb->finfo1.font = NULL;
 	if (font1 && !strcmp(font, font1)) font1 = NULL;
-	load_font(kb, &loaded_font, font, &kb->font, &kb->finfo,fntsize);
-	if (font1) load_font(kb, &loaded_font1, font1, &kb->font1, &kb->finfo1,fntsize);
-	else {
-		kb->font1 = kb->font;
-		kb->finfo1 = kb->finfo;
-	}
+	load_font(kb, &loaded_font, font, &kb->finfo, fntsize);
+	if (font1) load_font(kb, &loaded_font1, font1, &kb->finfo1, fntsize);
+	else kb->finfo1 = kb->finfo;
 
 #if !defined(USE_XFT) && !defined(F_UTF8)
 	XChangeGC(kb->display,kb->gc.txt,GCFont,&kb->GCval);
