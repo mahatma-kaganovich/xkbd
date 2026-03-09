@@ -1,5 +1,6 @@
 /* static alloc */
 
+
 #include <stdlib.h>
 #include <string.h>
 #include "stalloc.h"
@@ -14,20 +15,19 @@
 
 #if __STDC_VERSION__ >= 201112L
 #include <stddef.h>
+#define _th thread_local
 #if __STDC_VERSION__ < 202311L
-#include <stdalign.h>
 #endif
 #define CALIGN alignof(max_align_t)
-#define _th thread_local
 #else
 #include <malloc.h>
+#define _th __thread
 #ifdef __BIGGEST_ALIGNMENT__
 #define CALIGN __BIGGEST_ALIGNMENT__
 #else
 #define CALIGN 1
 #endif
-#define _th __thread
-#endif
+#endif //  __STDC_VERSION__ >= 201112L
 
 #ifndef _REENTRANT
 #undef _th
@@ -39,7 +39,7 @@
 const size_t st_block=1024*8;
 
 _th struct _stalloc_buf {
-	void *buf;
+	void  *buf;
 	size_t size;
 	size_t pos;
 } m = {};
@@ -70,8 +70,11 @@ a:
 new:
 	if (l >= st_block) return _calloc(l);
 #if defined(_POSIX_MAPPED_FILES) && (_POSIX_MAPPED_FILES - 0) > 0
+	// >=st_block: (ceil(st_block/pgs)*pgs)
+	// ++: ((abs(st_block/pgs)+1)*pgs)
 	m.size = sysconf(_SC_PAGESIZE);
-	m.buf = mmap(NULL, m.size += st_block/m.size*m.size, PROT_READ | PROT_WRITE,
+	m.size *= st_block/m.size + 1;
+	m.buf = mmap(NULL, m.size, PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	if (m.buf == MAP_FAILED)
 #endif
