@@ -44,7 +44,7 @@ _th struct _stalloc_buf {
 	size_t pos;
 } m = {};
 
-void *_calloc(size_t l){
+static inline void *_alloc(size_t l){
 	void *p;
 #if _ALIGN
 	if ((CALIGN&(buf_align-1)) &&
@@ -55,9 +55,26 @@ void *_calloc(size_t l){
 #else
 	    (p=valloc(l))
 #endif
-	) memset(p,0,l); else
+	) return p;
+#endif
+	return NULL;
+}
+
+static void *_calloc(size_t l){
+	void *p;
+#if _ALIGN
+	if ((p=_alloc(buf_align))) memset(p,0,l); else
 #endif
 		p=calloc(1,l);
+	return p;
+}
+
+static void *_malloc(size_t l){
+	void *p;
+#if _ALIGN
+	if (!(p=_alloc(buf_align)))
+#endif
+		p=malloc(l);
 	return p;
 }
 
@@ -84,7 +101,7 @@ new:
 
 void *ststrdup(const char *s){
 	int l = strlen(s)+1;
-	void *d = (l > (st_block>>1)) ? malloc(l) : stalloc(_align(l));
+	void *d = (l > (st_block>>1)) ? _malloc(l) : stalloc(_align(l));
 	memcpy(d,s,l);
 	return d;
 }
