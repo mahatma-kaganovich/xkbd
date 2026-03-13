@@ -87,10 +87,14 @@ a:
 new:
 	if (l >= st_block) return _calloc(l);
 #if defined(_POSIX_MAPPED_FILES) && (_POSIX_MAPPED_FILES - 0) > 0
+#if 0
+	m.size = 0xffffffff;
+#else
 	// >=st_block: (ceil(st_block/pgs)*pgs)
 	// ++: ((abs(st_block/pgs)+1)*pgs)
 	m.size = sysconf(_SC_PAGESIZE);
 	m.size *= st_block/m.size + 1;
+#endif
 	m.buf = mmap(NULL, m.size, PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	if (m.buf == MAP_FAILED)
@@ -100,8 +104,19 @@ new:
 }
 
 void *ststrdup(const char *s){
+	void *d;
+#if 1
+	// may be slower, but give him chance
+	m.buf+=m.pos;
+	if ((d = memccpy(m.buf,s,0,m.size))) {
+		m.pos = d - m.buf;
+		return m.buf;
+	}
+	m.pos=0;
+	memset(m.buf,0,m.size);
+#endif
 	int l = strlen(s)+1;
-	void *d = (l > (st_block>>1)) ? _malloc(l) : stalloc(_align(l));
+	d = (l > (st_block>>1)) ? _malloc(l) : stalloc(_align(l));
 	memcpy(d,s,l);
 	return d;
 }
