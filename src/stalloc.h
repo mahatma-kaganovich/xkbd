@@ -24,7 +24,8 @@ void *ststrdup(const char *s);
 #define free1(s) free(s)
 #else
 #define _ALIGN STALLOC
-#define _align(s) (((((s)+((1<<_ALIGN)-1)))>>_ALIGN)<<_ALIGN)
+//#define _align(s) (((((s)+((1<<_ALIGN)-1)))>>_ALIGN)<<_ALIGN)
+#define _align(s) ((((s)+(((size_t)1<<_ALIGN)-1)))&~(((size_t)1<<_ALIGN)-1))
 #define calloc1(s) stalloc(_align(sizeof(s)))
 #define malloc1(s) stalloc(_align(sizeof(s)))
 #define malloc2(s) stalloc(_align(s))

@@ -754,14 +754,13 @@ stop_argv:
     for (i=0; s=(res1=&resources[i])->name; i++) {
 	char *type = NULL;
 	XrmValue val;
-	int n;
 	val.addr = NULL;
 
 	if (res1->ptr && !res1->ch && XrmGetResource(xrm,s,NULL,&type,&val) && val.addr) {
 		switch (res1->type) {
 		case 0:
 			*(char **)(res1->ptr) = NULL;
-			n = strlen((char *)val.addr)+1;
+			size_t n = strlen((char *)val.addr)+1;
 			if (n>1) memcpy(*(char **)(res1->ptr) = malloc2(n), val.addr, n);
 			break;
 		case 1:
