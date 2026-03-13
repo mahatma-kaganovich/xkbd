@@ -105,19 +105,27 @@ new:
 
 void *ststrdup(const char *s){
 	void *d;
-#if (__STDC_VERSION__ >= 202311L || defined(_POSIX_C_SOURCE)) && !(__GLIBC__ && !__s390x__)
+#if !defined(MINIMAL) && \
+    (__STDC_VERSION__ >= 202311L || defined(_POSIX_C_SOURCE)) && \
+    !(__GLIBC__ && !__s390x__)
 	// may be slower, but give him chance
-	// keep "right" code for 1-pass cases
+	// keep "right" code for 1-pass memccpy()
 	m.buf+=m.pos;
 	if ((d = memccpy(m.buf,s,0,m.size))) {
-		m.pos = d - m.buf;
+		m.pos = _align(d - m.buf);
 		return m.buf;
 	}
-	m.pos=0;
-	memset(m.buf,0,m.size);
-#endif
+	int l = strlen(s)+1;
+	if (l > (st_block>>1)) {
+		m.pos=0;
+		memset(m.buf,0,m.size);
+		d = _malloc(l);
+	} else
+		d = stalloc(_align(l));
+#else
 	int l = strlen(s)+1;
 	d = (l > (st_block>>1)) ? _malloc(l) : stalloc(_align(l));
+#endif
 	memcpy(d,s,l);
 	return d;
 }
