@@ -105,8 +105,9 @@ new:
 
 void *ststrdup(const char *s){
 	void *d;
-#if __STDC_VERSION__ >= 202311L || defined(_POSIX_C_SOURCE)
+#if (__STDC_VERSION__ >= 202311L || defined(_POSIX_C_SOURCE)) && !(__GLIBC__ && !__s390x__)
 	// may be slower, but give him chance
+	// keep "right" code for 1-pass cases
 	m.buf+=m.pos;
 	if ((d = memccpy(m.buf,s,0,m.size))) {
 		m.pos = d - m.buf;
