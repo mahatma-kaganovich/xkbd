@@ -1,5 +1,5 @@
 /*
-	xtg v1.61 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.62 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -2445,7 +2445,7 @@ err_:
 	do {
 		IOD(v4l2_input){.index = i};
 		if (!iocall(VIDIOC_ENUMINPUT)) break;
-		DBG("v4l input %i '%s' type %i",i,io.v4l2_input.name,io.v4l2_input.type);
+		DBG("v4l input %lu '%s' type %i",i,io.v4l2_input.name,io.v4l2_input.type);
 		if (io.v4l2_input.type == V4L2_INPUT_TYPE_CAMERA && j == 0xffff) j=i;
 		//if (io.v4l2_input.type == V4L2_INPUT_TYPE_TOUCH) {};
 	} while((++i)&0xfff);
@@ -2458,7 +2458,7 @@ err_:
 	if (!iocall(VIDIOC_G_INPUT)) goto err;
 	if (io.i != j) {
 		io.i = j;
-		DBG("v4l switch input to %i",j);
+		DBG("v4l switch input to %lu",j);
 		if (!iocall(VIDIOC_S_INPUT)) goto err;
 	}
 skip_input:
@@ -2720,7 +2720,7 @@ static int _open(char *name,int flags){
 
 static int _open2(char *buf,char *name1,char *name2,uint32_t ino,int ncp,int flags){
 	int fd = -1;
-	int l = strlen(name1);
+	size_t l = strlen(name1);
 	if (l >= _buf_len1) {
 		ERR("name too long: ",name1);
 		goto ex;
@@ -2852,7 +2852,7 @@ static void open_iio_light(){
 	    _open_iio1(type="intensity",NULL) ||
 	    _open_iio1(type="intensity_both","intensity_scale")
 		)) return;
-	int typelen = strlen(type);
+	size_t typelen = strlen(type);
 
 	if (pi[p_Y]) pi[p_Safe] |= 16;
 	light_scale = _read_uf(fd2);
@@ -2926,7 +2926,7 @@ th:
 #endif
 
 char *_mon_sysfs_name;
-int _mon_sysfs_name_len;
+size_t _mon_sysfs_name_len;
 long _sysfs_val;
 static int _sysfs_open(_short mode) {
 	int fd = -3;
@@ -3061,7 +3061,7 @@ files_ok:
 			XFlush(dpy);
 		}
 		xrSetProp(a_xrp[xrp_bl],XA_INTEGER,&cur,1,!!pr->p);
-		DBG("backlight over sysfs: %s cur=%i max=%li",_mon_sysfs_name,cur.i,_sysfs_val);
+		DBG("backlight over sysfs: %s cur=%lu max=%li",_mon_sysfs_name,cur.i,_sysfs_val);
 	}
 #ifdef SYSFS_CACHE
 	if (minf->blfd) goto ex;

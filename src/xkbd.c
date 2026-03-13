@@ -462,7 +462,7 @@ static _ushort abs3(int devid){
 	XIINF_D(devid) {
 		CLINF() if (cl->type == XIValuatorClass && e->mode == Absolute) {
 			label = XGetAtomName(display,e->label);
-			int l = strlen(label);
+			size_t l = strlen(label);
 			if (   (l >= 8  && !strcmp(&label[l-8],"Pressure"))
 			    || (l > 2  && !strcmp(&label[l-2]," Z"))
 			    ) goto found;
