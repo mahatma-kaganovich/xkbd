@@ -105,7 +105,7 @@ new:
 
 void *ststrdup(const char *s){
 	void *d;
-#if 1
+#if __STDC_VERSION__ >= 202311L || defined(_POSIX_C_SOURCE)
 	// may be slower, but give him chance
 	m.buf+=m.pos;
 	if ((d = memccpy(m.buf,s,0,m.size))) {
