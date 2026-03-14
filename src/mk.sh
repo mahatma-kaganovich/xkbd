@@ -2,7 +2,7 @@
 # quick test
 
 : ${LDFLAGS:="-Wl,-O1 -Wl,--as-needed -Wl,--strip-all"}
-: ${CFLAGS:="-Oz -pipe -Wmaybe-uninitialized -fwhole-program"}
+: ${CFLAGS:="-O2 -pipe -Wmaybe-uninitialized -fwhole-program"}
 
 clean=false
 [ "$1" = clean ] && clean=true

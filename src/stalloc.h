@@ -1,11 +1,13 @@
 /* static alloc / (c) mahatma / GPLv2 or Anarchy license */
 
-#ifndef MINIMAL
-// 128-bit alignment if possible
-#define STALLOC 4
-#else
+#ifdef MINIMAL
 #define ENABLE_HUGE_MMAP
 #define STALLOC 0
+#endif
+
+#ifndef STALLOC
+// 128-bit alignment if possible
+#define STALLOC 4
 #endif
 
 // 6 to 64 = usual cache line
@@ -16,7 +18,7 @@ void *stalloc(size_t l);
 void *ststrdup(const char *s);
 
 
-#ifndef STALLOC
+#if STALLOC == -1
 #define _ALIGN 0
 #define _align(s) (s)
 #define calloc1(s) calloc(1,sizeof(s))
