@@ -232,6 +232,7 @@ tr:
 	return;
 }
 
+#ifndef ksText_
 int ksText_(KeySym ks, char **txt, int *is_sym){
 	ksText(ks,txt,is_sym);
 	if (*txt == ksText_buf) {
@@ -241,5 +242,6 @@ int ksText_(KeySym ks, char **txt, int *is_sym){
 	}
 	return 0;
 }
+#endif
 
 ';

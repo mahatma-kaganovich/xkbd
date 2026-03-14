@@ -808,11 +808,11 @@ stop_argv:
 		&& XIQueryVersion(display, &ximajor, &ximinor) != BadRequest;
 	// always. reduce brainfuck
 	if (xi) getHierarchy(XIAllDevices);
+	int DeviceIdMask = (fake_touch&2) ? XIAllMasterDevices : XIAllDevices;
 #endif
 #ifndef MINIMAL
 	// not found how to get keymap change on XInput, so keep Xkb events
 	int xkbError, reason_rtrn, xkbmjr = XkbMajorVersion, xkbmnr = XkbMinorVersion, xkbop;
-	int DeviceIdMask = (fake_touch&2) ? XIAllMasterDevices : XIAllDevices;
 	if (!XkbQueryExtension(display,&xkbop,&xkbEventType,&xkbError,&xkbmjr,&xkbmnr)) xkbEventType = 0;
 #endif
 

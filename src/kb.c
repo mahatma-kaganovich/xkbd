@@ -32,7 +32,6 @@
 #ifndef MINIMAL
 #include "ks2unicode.h"
 #else
-#define __ksText(ks) ""
 #define ksText_(ks,x,y) ""
 #endif
 

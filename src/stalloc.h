@@ -3,6 +3,7 @@
 // 128-bit alignment if possible
 #define STALLOC 4
 #else
+#define ENABLE_HUGE_MMAP
 #define STALLOC 0
 #endif
 

@@ -98,6 +98,14 @@ if test x$enable_minimal = xyes; then
       CPPFLAGS="$CPPFLAGS -DMINIMAL"
 fi
 
+AC_ARG_ENABLE(huge-mmap,
+  [  --enable-huge-mmap         alloc static data over huge mmap (big virtual mem), [default=no]],
+  enable_huge_mmap=$enableval, huge-mmap=no)
+
+if test x$enable_huge_mmap = xyes; then
+      CPPFLAGS="$CPPFLAGS -DENABLE_HUGE_MMAP"
+fi
+
 dnl check for debug build
 AC_ARG_ENABLE(debug,
   [  --enable-debug         enable debug build],

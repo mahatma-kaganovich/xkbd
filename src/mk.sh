@@ -1,11 +1,8 @@
 #!/bin/bash
 # quick test
 
-: ${LDFLAGS:="-Wl,-O1 -Wl,--as-needed"}
-: ${CFLAGS:="-O2 -pipe -Wmaybe-uninitialized"}
-
-CFLAGS="$CFLAGS -fwhole-program"
-LDFLAGS="$LDFLAGS -Wl,--strip-all"
+: ${LDFLAGS:="-Wl,-O1 -Wl,--as-needed -Wl,--strip-all"}
+: ${CFLAGS:="-Oz -pipe -Wmaybe-uninitialized -fwhole-program"}
 
 clean=false
 [ "$1" = clean ] && clean=true
@@ -22,7 +19,7 @@ _c(){
 		return 0
 	}
 	[ -e $1 ] && skip=true
-	$skip && for i in $2; do
+	$skip && for i in $2 ${2//.c/.h}; do
 		[ $i -nt $1 ] && skip=false && echo "# changed: $i"
 	done
 	$skip && return 0
@@ -50,7 +47,8 @@ else
 	[ ks2unicode.pl -nt ks2unicode.c ] &&
 	e ./ks2unicode.pl
 fi
-_c xkbd "stalloc.c box.c button.c kb.c ks2unicode.c xkbd.c" "xtst xi xrandr xft xpm" "-DVERSION=\"1.8.999\" -DDEFAULTCONFIG=\"/etc/xkbd.conf\" -DUSE_XFT -DUSE_XPM -DUSE_SS -DUSE_XI -DUSE_XR"
+#_c xkbd "structs.h stalloc.c box.c button.c kb.c ks2unicode.c xkbd.c" "xtst xi xrandr xft xpm" "-DVERSION=\"1.8.999\" -DDEFAULTCONFIG=\"/etc/xkbd.conf\" -DUSE_XFT -DUSE_XPM -DUSE_SS -DUSE_XI -DUSE_XR"
+_c xkbd "structs.h stalloc.c box.c button.c kb.c ks2unicode.c xkbd.c" "xtst xi xrandr xft xpm" "-DVERSION=\"1.8.999\" -DDEFAULTCONFIG=\"/etc/xkbd.conf\" -DUSE_XFT -DUSE_XPM -DUSE_SS -D_USE_XI -DUSE_XR"
 _c xssevent xssevent.c xscrnsaver
 _c xkbswitch xkbswitch.c
 _c xkbdd xtg.c "" -DNO_ALL

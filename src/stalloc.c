@@ -36,15 +36,36 @@
 
 #define  buf_align (1<<BUF_ALIGN)
 
-const size_t st_block=1024*8;
-
 _th struct _stalloc_buf {
 	void  *buf;
 	size_t size;
 	size_t pos;
 } m = {};
 
-static inline void *_alloc(size_t l){
+#if defined(_POSIX_MAPPED_FILES) && (_POSIX_MAPPED_FILES - 0) > 0
+#define USE_MMAP
+#ifdef ENABLE_HUGE_MMAP
+__attribute__((noinline))
+#endif
+static void _mmap(){
+	m.buf = mmap(NULL, m.size, PROT_READ | PROT_WRITE,
+		MAP_PRIVATE | MAP_ANONYMOUS
+#if defined(ENABLE_HUGE_MMAP) && (ENABLE_HUGE_MMAP+0) != 2
+		| MAP_NORESERVE
+#endif
+		, -1, 0);
+}
+#else
+#undef USE_MMAP
+#undef ENABLE_HUGE_MMAP
+#endif
+
+#ifdef ENABLE_HUGE_MMAP
+const size_t st_block=0xffffffff;
+#else
+const size_t st_block=1024*8;
+
+static void *_alloc(size_t l){
 	void *p;
 #if _ALIGN
 	if ((CALIGN&(buf_align-1)) &&
@@ -77,6 +98,7 @@ static void *_malloc(size_t l){
 		p=malloc(l);
 	return p;
 }
+#endif
 
 void *stalloc(size_t l){
 	if (m.size < l) goto new;
@@ -85,26 +107,38 @@ a:
 	m.size-=(m.pos=l);
 	return m.buf;
 new:
-	if (l >= st_block) return _calloc(l);
-#if defined(_POSIX_MAPPED_FILES) && (_POSIX_MAPPED_FILES - 0) > 0
-#if 0
-	m.size = 0xffffffff;
+#ifdef ENABLE_HUGE_MMAP
+	m.size = st_block;
+	_mmap();
 #else
+	if (l >= st_block) return _calloc(l);
+#ifdef USE_MMAP
 	// >=st_block: (ceil(st_block/pgs)*pgs)
 	// ++: ((abs(st_block/pgs)+1)*pgs)
 	m.size = sysconf(_SC_PAGESIZE);
 	m.size *= st_block/m.size + 1;
-#endif
-	m.buf = mmap(NULL, m.size, PROT_READ | PROT_WRITE,
-		MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	_mmap();
 	if (m.buf == MAP_FAILED)
 #endif
 	    m.buf=_calloc(m.size=st_block);
+#endif
 	goto a;
 }
 
 void *ststrdup(const char *s){
 	void *d;
+#ifdef ENABLE_HUGE_MMAP
+	m.buf+=m.pos;
+rep:
+	if ((d = memccpy(m.buf,s,0,m.size))) {
+		m.pos = _align(d - m.buf);
+	} else if (m.size < (st_block>>1)) {
+		m.size = st_block;
+		_mmap();
+		goto rep;
+	} else m.buf = NULL;
+	return m.buf;
+#else
 #if !defined(MINIMAL) && \
     (__STDC_VERSION__ >= 202311L || defined(_POSIX_C_SOURCE)) && \
     !(__GLIBC__ && !__s390x__)
@@ -128,6 +162,7 @@ void *ststrdup(const char *s){
 #endif
 	memcpy(d,s,l);
 	return d;
+#endif
 }
 
 void stline(){
