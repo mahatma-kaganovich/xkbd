@@ -1,4 +1,4 @@
-/* static alloc */
+/* static alloc / (c) mahatma / GPLv2 or Anarchy license */
 
 
 #include <stdlib.h>
