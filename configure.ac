@@ -100,7 +100,7 @@ fi
 
 AC_ARG_ENABLE(huge-mmap,
   [  --enable-huge-mmap         alloc static data over huge mmap (big virtual mem), [default=no]],
-  enable_huge_mmap=$enableval, huge-mmap=no)
+  enable_huge_mmap=$enableval, enable_huge_mmap=no)
 
 if test x$enable_huge_mmap = xyes; then
       CPPFLAGS="$CPPFLAGS -DENABLE_HUGE_MMAP"
