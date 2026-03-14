@@ -47,8 +47,7 @@ else
 	[ ks2unicode.pl -nt ks2unicode.c ] &&
 	e ./ks2unicode.pl
 fi
-#_c xkbd "structs.h stalloc.c box.c button.c kb.c ks2unicode.c xkbd.c" "xtst xi xrandr xft xpm" "-DVERSION=\"1.8.999\" -DDEFAULTCONFIG=\"/etc/xkbd.conf\" -DUSE_XFT -DUSE_XPM -DUSE_SS -DUSE_XI -DUSE_XR"
-_c xkbd "structs.h stalloc.c box.c button.c kb.c ks2unicode.c xkbd.c" "xtst xi xrandr xft xpm" "-DVERSION=\"1.8.999\" -DDEFAULTCONFIG=\"/etc/xkbd.conf\" -DUSE_XFT -DUSE_XPM -DUSE_SS -D_USE_XI -DUSE_XR"
+_c xkbd "structs.h stalloc.c ks2unicode.c box.c button.c kb.c xkbd.c" "xtst xi xrandr xft xpm" "-DVERSION=\"1.8.999\" -DDEFAULTCONFIG=\"/etc/xkbd.conf\" -DUSE_XFT -DUSE_XPM -DUSE_SS -DUSE_XI -DUSE_XR"
 _c xssevent xssevent.c xscrnsaver
 _c xkbswitch xkbswitch.c
 _c xkbdd xtg.c "" -DNO_ALL
