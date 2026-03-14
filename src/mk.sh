@@ -24,6 +24,7 @@ _c(){
 	done
 	$skip && return 0
 	[[ "$2" != *\ * ]] && w=-fwhole-program
+	unlink "$1"
 	echo "# compiling $1"
 	if [[ " $CFLAGS " == *' -fwhole-program '* ]] && [[ "$2" == *\ * ]]; then
 		c="$2"

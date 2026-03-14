@@ -2,4 +2,4 @@
 
 aclocal && autoheader && libtoolize && automake -a && autoconf &&
 ./configure &&
-make -j
+make

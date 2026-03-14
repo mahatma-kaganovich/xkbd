@@ -25,7 +25,9 @@
 #ifdef USE_XFT
 #include <X11/Xft/Xft.h>
 #else
+#ifndef NO_FONTSET
 #define F_UTF8
+#endif
 #endif
 
 #include "stalloc.h"

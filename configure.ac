@@ -106,6 +106,14 @@ if test x$enable_huge_mmap = xyes; then
       CPPFLAGS="$CPPFLAGS -DENABLE_HUGE_MMAP"
 fi
 
+AC_ARG_ENABLE(fontset,
+  [  --disable-fontset         with --disable-xft: disable fontset/utf-8/iso10646-1, [default=no]],
+  enable_fontset=$enableval, enable_fontset=yes)
+
+if test x$enable_fontset = xno; then
+      CPPFLAGS="$CPPFLAGS -DNO_FONTSET"
+fi
+
 dnl check for debug build
 AC_ARG_ENABLE(debug,
   [  --enable-debug         enable debug build],
@@ -176,10 +184,10 @@ if test x$enable_thread != xno && test x$enable_minimal != xyes; then
     fi
 fi
 
-AC_OUTPUT(Makefile 
+AC_OUTPUT(Makefile
           src/Makefile
           data/Makefile
-          doc/Makefile 
+          doc/Makefile
           data/img/Makefile
           packaging/Makefile
           packaging/ipkg/Makefile
