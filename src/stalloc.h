@@ -1,3 +1,4 @@
+/* static alloc / (c) mahatma / GPLv2 or Anarchy license */
 
 #ifndef MINIMAL
 // 128-bit alignment if possible
