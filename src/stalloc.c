@@ -149,16 +149,16 @@ rep:
 		m.pos = _align(d - m.buf);
 		return m.buf;
 	}
-	int l = strlen(s)+1;
-	if (l > (st_block>>1)) {
+	size_t l = strlen(s);
+	if (l >= (st_block>>1)) {
 		m.pos=0;
 		memset(m.buf,0,m.size);
-		d = _malloc(l);
+		d = _malloc(++l);
 	} else
-		d = stalloc(_align(l));
+		d = stalloc(_align(l+1));
 #else
-	int l = strlen(s)+1;
-	d = (l > (st_block>>1)) ? _malloc(l) : stalloc(_align(l));
+	size_t l = strlen(s);
+	d = (l >= (st_block>>1)) ? _malloc(++l) : stalloc(_align(l+1));
 #endif
 	memcpy(d,s,l);
 	return d;
