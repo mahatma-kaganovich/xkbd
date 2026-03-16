@@ -34,7 +34,21 @@
 #define _th
 #endif
 
+#if defined(_POSIX_MAPPED_FILES) && (_POSIX_MAPPED_FILES - 0) > 0
+#define USE_MMAP
+#else
+#undef USE_MMAP
+#undef ENABLE_HUGE_MMAP
+#endif
+
+
 #define  buf_align (1<<BUF_ALIGN)
+
+#ifdef ENABLE_HUGE_MMAP
+const size_t st_block=0xffffffff;
+#else
+const size_t st_block=1024*8;
+#endif
 
 _th struct _stalloc_buf {
 	void  *buf;
@@ -42,12 +56,19 @@ _th struct _stalloc_buf {
 	size_t pos;
 } m = {};
 
-#if defined(_POSIX_MAPPED_FILES) && (_POSIX_MAPPED_FILES - 0) > 0
-#define USE_MMAP
+#ifdef USE_MMAP
 #ifdef ENABLE_HUGE_MMAP
 __attribute__((noinline))
 #endif
 static void _mmap(){
+#ifdef ENABLE_HUGE_MMAP
+	m.size = st_block;
+#else
+	// >=st_block: (ceil(st_block/pgs)*pgs)
+	// ++: ((abs(st_block/pgs)+1)*pgs)
+	m.size = sysconf(_SC_PAGESIZE);
+	m.size *= st_block/m.size + 1;
+#endif
 	m.buf = mmap(NULL, m.size, PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS
 #if defined(ENABLE_HUGE_MMAP) && (ENABLE_HUGE_MMAP+0) != 2
@@ -55,16 +76,10 @@ static void _mmap(){
 #endif
 		, -1, 0);
 }
-#else
-#undef USE_MMAP
-#undef ENABLE_HUGE_MMAP
 #endif
 
-#ifdef ENABLE_HUGE_MMAP
-const size_t st_block=0xffffffff;
-#else
-const size_t st_block=1024*8;
 
+#ifndef ENABLE_HUGE_MMAP
 static void *_alloc(size_t l){
 	void *p;
 #if _ALIGN
@@ -107,19 +122,19 @@ a:
 	m.size-=(m.pos=l);
 	return m.buf;
 new:
+	if (l >= st_block)
 #ifdef ENABLE_HUGE_MMAP
-	m.size = st_block;
-	_mmap();
+	    return NULL;
 #else
-	if (l >= st_block) return _calloc(l);
+	    return _calloc(l);
+#endif
 #ifdef USE_MMAP
-	// >=st_block: (ceil(st_block/pgs)*pgs)
-	// ++: ((abs(st_block/pgs)+1)*pgs)
-	m.size = sysconf(_SC_PAGESIZE);
-	m.size *= st_block/m.size + 1;
 	_mmap();
 	if (m.buf == MAP_FAILED)
 #endif
+#ifdef ENABLE_HUGE_MMAP
+	    return NULL;
+#else
 	    m.buf=_calloc(m.size=st_block);
 #endif
 	goto a;
@@ -132,12 +147,14 @@ void *ststrdup(const char *s){
 rep:
 	if ((d = memccpy(m.buf,s,0,m.size))) {
 		m.pos = _align(d - m.buf);
-	} else if (m.size < (st_block>>1)) {
-		m.size = st_block;
+		return m.buf;
+	}
+	m.pos = 0;
+	if (m.size < (st_block>>1)) {
 		_mmap();
-		goto rep;
-	} else m.buf = NULL;
-	return m.buf;
+		if (m.buf != MAP_FAILED) goto rep;
+	}
+	return NULL;
 #else
 #if !defined(MINIMAL) && \
     (__STDC_VERSION__ >= 202311L || defined(_POSIX_C_SOURCE)) && \
