@@ -122,7 +122,7 @@ a:
 	m.size-=(m.pos=l);
 	return m.buf;
 new:
-	if (l >= st_block)
+	if (l > st_block)
 #ifdef ENABLE_HUGE_MMAP
 	    return NULL;
 #else
