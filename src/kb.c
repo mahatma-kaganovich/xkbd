@@ -95,18 +95,31 @@ static int load_a_single_font(keyboard *kb, char *fontname, fontinfo *inf) {
 static void load_font(keyboard *kb, char **loaded, char *fnt, fontinfo *inf, int fontsize){
 	char *fnames0, *fnames, *fname, *fname1;
 	int i;
-//	int init_size = 10, keycap_size = 10, kbd_width = 10;
 
 	if (*loaded) {
 		if (!strcmp(*loaded,fnt)) return;
 		free1(*loaded);
 	}
 	fnames0 = fnames = strdup1(fnt);
-	*loaded = fname1 = malloc2(strlen(fnt)+10);
+	*loaded = fname1 = malloc2(strlen(fnt)+64);
+
+	char *codeset = "*-*";
+#if !defined(USE_XFT) && !defined(F_UTF8)
+//	setlocale(LC_ALL, "");
+//	char *cs = nl_langinfo(CODESET);
+	static const char *utf = "UTF-8";
+	char *cs = getenv("LANG");
+	kb->iconv = (iconv_t) -1;
+	if (cs && (cs = strchr(getenv("LANG"),'.')) &&
+	    strncasecmp(++cs,utf,3) &&
+	    (kb->iconv = iconv_open(cs,utf)) != (iconv_t) -1) {
+		codeset = cs;
+	}
+#endif
 
 	//fontsize=10;
 	while((fname = strsep(&fnames, "|"))) {
-		sprintf(fname1,fname,fontsize);
+		sprintf(fname1,fname,fontsize,codeset);
 		if (!load_a_single_font(kb,fname1,inf)) continue;
 /*
 		// font found

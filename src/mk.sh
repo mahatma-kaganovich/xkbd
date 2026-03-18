@@ -19,7 +19,7 @@ _c(){
 		return 0
 	}
 	[ -e $1 ] && skip=true
-	$skip && for i in $2 ${2//.c/.h}; do
+	$skip && for i in $0 $2 ${2//.c/.h}; do
 		[ $i -nt $1 ] && skip=false && echo "# changed: $i"
 	done
 	$skip && return 0

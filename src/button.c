@@ -355,6 +355,12 @@ int button_render(button *b, int mode)
 #elif defined(F_UTF8)
     Xutf8DrawString(dpy, backing, f->font, gc.txt, xx, yy, txt, strlen(txt));
 #else
+    if ((kb->iconv)!=(iconv_t)-1 && (txt[1] & 0xC0) == 0x80) {
+	static char buf8[32];
+	char *b1=txt,*b2=buf8;
+	size_t bs1=strlen(txt),bs2=sizeof(buf8);
+	if (iconv(kb->iconv, &b1, &bs1, &b2, &bs2)!=(size_t)-1) txt = buf8;
+    }
     XDrawString(dpy, backing, gc.txt, xx, yy, txt, strlen(txt));
 #endif
   }

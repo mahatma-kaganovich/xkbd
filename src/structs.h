@@ -44,10 +44,15 @@
 	"-*-*-*-*-*-*-%i-*-*-*-*-*-iso10646-1|" \
 	"fixed"
 #else
+//#include <locale.h>
+//#include <langinfo.h>
+#include <iconv.h>
 #define FNTYPE XFontStruct *
 #define DEFAULT_FONT \
-	"-*-*-medium-r-normal-*-%i-*-*-*-*-*-*-*|" \
-	"-*-*-*-*-*-*-%i-*-*-*-*-*-*-*|" \
+	"-*-*-medium-r-normal-*-%i-*-*-*-*-*-%s|" \
+	"-*-*-*-*-*-*-%i-*-*-*-*-*-%s|" \
+	"-*-*-medium-r-normal-*-%i-*-*-*-*-*-*-%s|" \
+	"-*-*-*-*-*-*-%i-*-*-*-*-*-*-%s|" \
 	"fixed"
 #endif
 
@@ -218,6 +223,9 @@ typedef struct _keyboard
   int act_width, act_height; // ConfigureNotify - touch control only
 
   fontinfo finfo,finfo1;
+#if !defined(USE_XFT) && !defined(F_UTF8)
+  iconv_t iconv;
+#endif
 
   int pad;
 
