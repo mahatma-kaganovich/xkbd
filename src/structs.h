@@ -40,8 +40,10 @@
 #include <locale.h>
 #define FNTYPE XFontSet
 #define DEFAULT_FONT \
-	"-*-*-medium-r-normal-*-%i-*-*-*-*-*-iso10646-1|" \
-	"-*-*-*-*-*-*-%i-*-*-*-*-*-iso10646-1|" \
+	"-*-fixed-medium-r-normal-*-%i-*-*-*-*-*-iso10646-1|" \
+	"-*-*-medium-r-normal-*-%i-*-*-*-*-*|" \
+	"-*-*-*-*-*-*-%i-*-*-*-*-*|" \
+	"*|"
 	"fixed"
 #else
 //#include <locale.h>
