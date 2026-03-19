@@ -43,7 +43,7 @@
 	"-*-fixed-medium-r-normal-*-%i-*-*-*-*-*-iso10646-1|" \
 	"-*-*-medium-r-normal-*-%i-*-*-*-*-*|" \
 	"-*-*-*-*-*-*-%i-*-*-*-*-*|" \
-	"*|"
+	"*|" \
 	"fixed"
 #else
 //#include <locale.h>
