@@ -1,6 +1,6 @@
 SUBDIRS = img
 kbdconfigdir = $(pkgdatadir)
-kbdconfig_DATA = *.???? *.patch
+kbdconfig_DATA = *.*
 bin_PROGRAMS = xkbd-onoff xkbd-config
 CLEANFILES =  $(kbdconfig_DATA) $(bin_PROGRAMS)
 
