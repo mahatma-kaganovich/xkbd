@@ -35,10 +35,10 @@ _deflock(){
 }
 
 _kill(){
-	if [ -x /usr/bin/pkill ]; then
-		pkill -x xkbd -u "$EUID" ${@} && exit
+	if [ -x /usr/bin/killall ]; then
+		killall -qw xkbd -u "$USER" ${@} && [ ! -v next ] && exit
 	else
-		killall -qw xkbd -u "$USER" ${@} && exit
+		pkill -x xkbd -u "$EUID" ${@} && [ ! -v next ] && exit
 	fi
 }
 
@@ -197,7 +197,7 @@ _next(){
 	[ -n "$patch" -a -e "$patch" ] && patch --no-backup-if-mismatch -r - -sfi "$i" "$conf"
 }
 
-share=/usr/share/xkbd
+#share=/usr/share/xkbd
 cache="$HOME/.cache/xkbd"
 
 if [ -v conf ]; then
