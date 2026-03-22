@@ -49,8 +49,6 @@ int ks_per_kc = 0;
 
 char *font = NULL;
 char *font1 = NULL;
-char *loaded_font = NULL;
-char *loaded_font1 = NULL;
 
 static void kb_process_keypress(button *b, int repeat, unsigned int flags);
 static int kb_switch_layout(keyboard *kb, int kbd_layout_num, int shift);
@@ -63,7 +61,6 @@ static int load_a_single_font(keyboard *kb, char *fontname, fontinfo *inf) {
 	inf->height = _max((inf->font)->height, (inf->ascent=(inf->font)->ascent) + (inf->font)->descent);
 	inf->width = (inf->font)->max_advance_width;
 #elif defined(F_UTF8)
-	setlocale(LC_CTYPE,"");
 	char **missing_list;
 	int missing_count;
 	char *def_string;
@@ -92,51 +89,41 @@ static int load_a_single_font(keyboard *kb, char *fontname, fontinfo *inf) {
 	return 1;
 }
 
-static void load_font(keyboard *kb, char **loaded, char *fnt, fontinfo *inf, int fontsize){
+static void load_font(keyboard *kb, char *fnt, fontinfo *inf, int fontsize){
 	char *fnames0, *fnames, *fname, *fname1;
-	int i;
+	size_t l = strlen(fnt) + 1;
 
-	if (*loaded) {
-		if (!strcmp(*loaded,fnt)) return;
-		free1(*loaded);
-	}
-	fnames0 = fnames = strdup1(fnt);
-	*loaded = fname1 = malloc2(strlen(fnt)+64);
+	fnames0 = fnames = malloc2(l);
+	memcpy(fnames0,fnt,l);
+	fname1 = malloc2(l+63);
 
 	char *codeset = "*-*";
-#if !defined(USE_XFT) && !defined(F_UTF8)
+#ifdef USE_XFT
+#elif defined(F_UTF8)
+	setlocale(LC_CTYPE,"");
+#else
 //	setlocale(LC_ALL, "");
 //	char *cs = nl_langinfo(CODESET);
 	static const char *utf = "UTF-8";
 	char *cs = getenv("LANG");
 	kb->iconv = (iconv_t) -1;
-	if (cs && (cs = strchr(getenv("LANG"),'.')) &&
+	if (cs && (cs = strchr(cs,'.')) &&
 	    strncasecmp(++cs,utf,3) &&
 	    (kb->iconv = iconv_open(cs,utf)) != (iconv_t) -1) {
 		codeset = cs;
 	}
 #endif
-
-	//fontsize=10;
-	while((fname = strsep(&fnames, "|"))) {
+	while((fname=fnames)){
+		if ((fnames = strchr(fnames,'|'))) *(fnames++) = 0;
 		sprintf(fname1,fname,fontsize,codeset);
-		if (!load_a_single_font(kb,fname1,inf)) continue;
-/*
-		// font found
-		if (strcmp(fname1,fname)) {
-			i = div(kb->vbox->act_width, inf->width * keycap_size).quot;
-			if (i!=init_size && i<1000) {
-				sprintf(fname1,fname,i);
-				if (!load_a_single_font(kb,fname1,inf)) continue;
-			}
-		}
-*/
-		free1(fnames0);
-		return;
+		if (load_a_single_font(kb,fname1,inf)) goto ret;
 	}
 err:
 	fprintf(stderr, "xkbd: unable to find suitable font in '%s'\n", fnt);
 	exit(1);
+ret:
+	free1(fname1);
+	free1(fnames0);
 }
 
 static void button_update(button *b) {
@@ -960,8 +947,8 @@ void kb_size(keyboard *kb) {
 
 	if (kb->finfo1.font == kb->finfo.font) kb->finfo1.font = NULL;
 	if (font1 && !strcmp(font, font1)) font1 = NULL;
-	load_font(kb, &loaded_font, font, &kb->finfo, fntsize);
-	if (font1) load_font(kb, &loaded_font1, font1, &kb->finfo1, fntsize);
+	load_font(kb, font, &kb->finfo, fntsize);
+	if (font1) load_font(kb, font1, &kb->finfo1, fntsize);
 	else kb->finfo1 = kb->finfo;
 
 #if !defined(USE_XFT) && !defined(F_UTF8)
