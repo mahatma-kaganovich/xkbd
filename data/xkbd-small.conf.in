@@ -9,31 +9,31 @@
 col  0:0:0
 
 # color of an active key ( default black )
-down_col  31:31:0
+down_col  0:63:63
 
 # color of key text ( default black )
-txt_col 0:255:0
+txt_col 63:127:127
 
 # color of key borders ( default black )
-border_col 63:63:0
+border_col 31:63:63
 
 # color of non-chars
-grey_col 31:63:0
+grey_col 0:31:31
 
 # color of keypad
-kp_col 127:127:0
+kp_col 0:31:31
 
 # max keyboard dimentions, mm
 width  270
 height 100
 
 # button style, can be rounded ( default ), square, arc or plain
-button_style arc
+#button_style arc
 
 # border width or 0 to use "solid keycaps" with border color
-border_width 0
+#border_width 0
 
-button_padding 4
+#button_padding 1
 
 #repeat_delay 50
 # 0 disable repeat (powersave), -1 - delay & time from X
@@ -283,8 +283,7 @@ kp_width 6
 		default_ks Up
 		shift PgUp
 		shift_ks Prior
-		bg 31:31:0
-		down_col 15:15:0
+		bg 0:31:31
 	</key>
 	<key>
 		default Enter
@@ -335,22 +334,19 @@ kp_width 6
 	<key>
 		default ←
 		default_ks Left
-		bg 31:31:0
-		down_col 15:15:0
+		bg 0:31:31
 	</key>
 	<key>
 		default ↓
 		default_ks Down
 		shift PgDn
 		shift_ks Next
-		bg 31:31:0
-		down_col 15:15:0
+		bg 0:31:31
 	</key>
 	<key>
 		default →
 		default_ks Right
-		bg 31:31:0
-		down_col 15:15:0
+		bg 0:31:31
 	</key>
 </row>
 </layout>
