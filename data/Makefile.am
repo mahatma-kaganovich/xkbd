@@ -1,13 +1,13 @@
 SUBDIRS = img
 kbdconfigdir = $(pkgdatadir)
-kbdconfig_DATA = *.????
+kbdconfig_DATA = *.???? *.patch
 bin_PROGRAMS = xkbd-onoff xkbd-config
 CLEANFILES =  $(kbdconfig_DATA) $(bin_PROGRAMS)
 
 EXTRA_DIST = *.in
 
-*.????: *.????.in
-	sh ./mk.sh "$(pkgdatadir)" "$(CPPFLAGS)" *.????.in
+*.*: *.*.in
+	sh ./mk.sh "$(pkgdatadir)" "$(CPPFLAGS)" *.*.in
 
 xkbd-config$(EXEEXT): xkbd-config.in
 	sh ./mk.sh "$(pkgdatadir)" "$(CPPFLAGS)" xkbd-config.in
