@@ -12,6 +12,7 @@ Params:
   --xrdb
   --boot
   --dpms [on|off|auto]
+  --next [cfg|patch]
 Examples:
   $0 --nokill --test-touch --lock - on .Xinitrc
   $0 --lock - lock with xkbd
@@ -106,18 +107,15 @@ _setxkbmap(){
 	[[ -e ~/.Xmodmap ]] && xmodmap ~/.Xmodmap
 }
 
-unset conf
 kill=true
-unset lock
-unset lock1
-unset xss
-unset dpms
+unset conf lock lock1 xss dpms next cfg patch
 sudo='sudo -n --'
 touch=true
 boot=false
 dpmslockstandby=10
 dpmslocksuspend=12
 dpmslockoff=14
+share=@pkgdatadir@
 n=
 for i in "${@}"; do
 	case "$i" in
@@ -163,7 +161,7 @@ for i in "${@}"; do
 		}
 		n=
 	;;
-	--lock|--conf|--sudo1|--sudo2|--xss|--extlock|--dpms)n="${i#--}";declare $n='';;
+	--lock|--conf|--sudo1|--sudo2|--xss|--extlock|--dpms|--next)n="${i#--}";declare $n='';;
 	-h|--help)_help;;
 	*)
 		[ -n "$n" ] && declare $n+="${!n:+ }$i" || _help
@@ -171,10 +169,55 @@ for i in "${@}"; do
 	esac
 done
 
-[ -v conf ] ||
-for conf in {~/.config,/etc}/xkbd{,-config}.conf @pkgdatadir@/xkbd-std-15x6.conf; do
-	[ -e $conf ] && break
-done
+_next(){
+	local n=$1 i0 i1 i2
+	shift
+	read $n <"$cache/$n"  || mkdir -p "$cache"
+	unset i0 i1 i2
+	for i in "${@}"; do
+		[ -e "$i" ] || continue
+		case $next in
+		patch)
+		    patch --dry-run --no-backup-if-mismatch -r - -sfi "$i" "$cfg" >/dev/null || continue
+		    [ -v i0 ] || i0=
+		;;
+		esac
+		[ -v i0 ] || i0=$i
+		[ "$i1" = "${!n}" ] && i2=$i && break
+		i1=$i
+	done
+	
+	[ -v i2 ] && i=$i2 || i=$i0
+	declare $n=$i
+	echo $i >"$cache/$n"
+	echo "next $n = $i"
+
+	[ -e "$cfg" ] || return
+	cp "$cfg" "$conf"
+	[ -n "$patch" -a -e "$patch" ] && patch --no-backup-if-mismatch -r - -sfi "$i" "$conf"
+}
+
+share=/usr/share/xkbd
+cache="$HOME/.cache/xkbd"
+
+if [ -v conf ]; then
+	true
+else
+    conf="$cache/xkbd.conf"
+    ! [ -v next ] && ! [ -e "$conf" ] && next=cfg && rm "$cache/cfg" -f
+
+    read $n <"$cache/$n"  || mkdir -p "$cache"
+    
+    case "$next" in
+    cfg)
+	rm "$cache/patch" -f
+	_next cfg {~/.config,/etc}/xkbd{,-config}.conf $share/*.conf;;
+    patch)
+	read cfg <"$cache/cfg"
+	_next patch $share/*.patch
+    ;;
+    esac
+fi 2>/dev/null
 
 opt="-l -k $conf -e $0 --nokill"
 

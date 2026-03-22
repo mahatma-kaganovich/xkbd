@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Keyboard next cfg
+Exec=xkbd-onoff --next cfg
+Type=Application
+Icon=xkbd
+Categories=Utility;Accessibility
+X-MB-INPUT-MECHANSIM=True

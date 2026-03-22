@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Keyboard next patch
+Exec=xkbd-onoff --next patch
+Type=Application
+Icon=xkbd
+Categories=Utility;Accessibility
+X-MB-INPUT-MECHANSIM=True

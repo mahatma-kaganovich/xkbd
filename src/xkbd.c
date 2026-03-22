@@ -689,7 +689,7 @@ int main(int argc, char **argv)
 		goto stop_argv;
 	    case 'v' :
 		version();
-		exit(0);
+		return(0);
 		break;
 	    default:
 		for (res=0; (res1=&resources[res])->param!=s[1]; res++) {
@@ -713,7 +713,7 @@ Options:\n\
 					case 2:printf("  -%c [<%s: 1>]  ([int]=%i) %s\n",res1->param, res1->name, *(int *)res1->ptr, h);break;
 					}
 				}
-				exit(0);
+				return(0);
 			}
 		};
 		if (!res1->ptr) continue;
@@ -730,7 +730,7 @@ Options:\n\
 				*(int *)res1->ptr = j;
 			} else if (res1->type == 1){
 				fprintf(stderr,"%s: invalid option value: %s %s\n",iam,s,argv[i]);
-//				exit(1);
+//				return(1);
 			} else {
 				i--;
 no_more_param:
@@ -770,7 +770,7 @@ stop_argv:
 				*(int *)res1->ptr = j;
 			} else if (res1->type == 1){
 				fprintf(stderr,"%s: invalid xrdb value: %s %s\n",iam,s,(char *)val.addr);
-//				exit(1);
+//				return(1);
 			};
 			break;
 		}
@@ -1306,7 +1306,7 @@ evfree:
 		{
 //			xkbd_destroy(kb);
 			XCloseDisplay(display);
-			exit(0);
+			return(0);
 		}
 		break;
 #undef e
@@ -1377,7 +1377,7 @@ evfree:
 		}
 		XFree(wins);
 		// first lock: fork (to realize init-lock safe wait)
-		if (re && !lock_cnt++ && fork()) exit(0);
+		if (re && !lock_cnt++ && fork()) return(0);
 	    }
 	    if ((dock & 256) && e.state!=VisibilityUnobscured) {
 			if (rootChanged(&wa)) goto chScreen;
@@ -1446,5 +1446,5 @@ evfree:
       }
 no_dpy:
 	fprintf(stderr, "%s: cannot connect to X server\n", argv[0]);
-	exit(1);
+	return(1);
 }
