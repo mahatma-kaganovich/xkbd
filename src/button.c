@@ -250,12 +250,12 @@ int button_render(button *b, int mode)
     {
       gc.bg = gc.rev;
       if (gc.bdr_rev) gc.bdr = gc.bdr_rev;
-      if (no_lock) {
+//      if (no_lock) {
 	gc.txt   = gc.txt_rev;
 #ifdef USE_XFT
 	gc.col  = gc.col_rev;
 #endif
-     }
+//     }
     }
   else if(mode & STATE(OBIT_LOCKED))
     {
@@ -425,7 +425,6 @@ button* button_new(keyboard *k)
   b->kb = k;
 
   b->gc = k->gc;
-//  b->gc.txt = b->gc.txt_rev = NULL;
 
   b->layout_switch = -1;
 

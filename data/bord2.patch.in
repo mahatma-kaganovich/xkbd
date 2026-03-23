@@ -1,0 +1,48 @@
+--- xkbd-std-15x6.conf	2026-03-22 23:34:05.000000000 +0300
++++ xkbd2.conf	2026-03-23 22:02:22.768946298 +0300
+@@ -12 +12 @@
+-down_col  0:63:63
++down_col  0:0:0
+@@ -15 +15,3 @@
+-txt_col 63:127:127
++txt_col 0:255:0
++txt_rev_col 0:255:0
++#sym_col 255:255:0
+@@ -18 +20,2 @@
+-border_col 31:63:63
++border_col 63:63:0
++border_rev_col 127:127:0
+@@ -21 +24 @@
+-grey_col 0:31:31
++grey_col 0:0:0
+@@ -24 +27 @@
+-kp_col 0:31:31
++kp_col 0:0:0
+@@ -34 +37 @@
+-#border_width 0
++border_width 4
+@@ -36 +39 @@
+-#button_padding 1
++button_padding 4
+@@ -121 +124 @@
+-		width -1
++		default_ks Delete
+@@ -124 +127 @@
+-		default_ks Delete
++		width -1
+@@ -210 +210,2 @@
+-		bg 0:31:31
++		bg 31:31:0
++		down_col 31:31:0
+@@ -212 +214,2 @@
+-		bg 0:31:31
++		bg 31:31:0
++		down_col 31:31:0
+@@ -216 +218,2 @@
+-		bg 0:31:31
++		bg 31:31:0
++		down_col 31:31:0
+@@ -220 +222,2 @@
+-		bg 0:31:31
++		bg 31:31:0
++		down_col 31:31:0
