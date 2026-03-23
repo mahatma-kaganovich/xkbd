@@ -24,12 +24,6 @@
 @@ -36 +39 @@
 -#button_padding 1
 +button_padding 4
-@@ -121 +124 @@
--		width -1
-+		default_ks Delete
-@@ -124 +127 @@
--		default_ks Delete
-+		width -1
 @@ -210 +210,2 @@
 -		bg 0:31:31
 +		bg 0:31:31
