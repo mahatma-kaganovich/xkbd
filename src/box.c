@@ -32,7 +32,7 @@ static void box_add_(box *bx, void *b, int type) {
   list *new  = malloc1(list);
   new->next = NULL;
   new->data = b;
-  new->type = WIDGET_BUTTON;
+  new->type = type;
 
   if (bx->root_kid == NULL) { /* new list */
       bx->root_kid = new;
