@@ -488,7 +488,7 @@ static box *clone_box(Display *dpy, box *vbox, int group){
 int __set_colors(keyboard *kb,char *tmpstr_A, char *tmpstr_C, gcs_t *gc){
 	if (strcmp(tmpstr_A, "col") == 0 || strcmp(tmpstr_A, "bg") == 0) {
 		_set_color_bgfg(kb,tmpstr_C,&gc->bg,NULL);
-		if (!cache_pix || cache_pix == 3) {
+		if (gc == &kb->gc && (!cache_pix || cache_pix == 3)) {
 			kb->filled = gc->bg;
 			if (kb->GCval.background)
 			    XSetWindowBackground(kb->display, kb->win, kb->GCval.background);
