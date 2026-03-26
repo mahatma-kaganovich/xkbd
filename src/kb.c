@@ -643,10 +643,10 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 		else if (strncmp(tmpstr_A, "row", 3) == 0) {
 		  if (kb->total_layouts == 0) kb->total_layouts++;
 		  context=rowdef;
-		  tmp_box = box_add_box(kb->vbox, box_new());
+		  box_add_box(kb->vbox, tmp_box = box_new());
 		} else if (strncmp(tmpstr_A, "key", 3) == 0) {
 		  /* check here for NULL tmp_button */
-		  b = box_add_button(tmp_box, button_new(kb) );
+		  box_add_button(tmp_box, b = button_new(kb) );
 		  context=keydef;
 		} else {
 //		  fprintf(stderr,"Config file parse failed (tag) at line: %i\n", line_no);

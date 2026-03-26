@@ -19,8 +19,8 @@
 #define _BOX_H_
 
 box* box_new(void);
-button *box_add_button(box *bx, button *but);
-box *box_add_box(box *bx, box *b);
+void box_add_button(box *bx, button *but);
+void box_add_box(box *bx, box *b);
 void box_list_contents(box *bx);
 
 #endif

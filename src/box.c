@@ -28,58 +28,30 @@ box* box_new(void)
   return calloc1(box);
 }
 
-button *box_add_button(box *bx, button *but)
-{
-  list *new_ptr  = NULL;
+static void box_add_(box *bx, void *b, int type) {
+  list *new  = malloc1(list);
+  new->next = NULL;
+  new->data = b;
+  new->type = WIDGET_BUTTON;
 
-  but->parent = bx; /* set its parent */
-
-  if (bx->root_kid == NULL) /* new list */
-    {
-      bx->root_kid = (list *)malloc1(list);
-      bx->root_kid->next = NULL;
-      bx->tail_kid = bx->root_kid;
-      bx->root_kid->data = but;
-      bx->root_kid->type = WIDGET_BUTTON;
-
-      return but;
-    }
-
-  new_ptr = bx->tail_kid;
-  new_ptr->next = malloc1(list);
-  new_ptr->next->next = NULL;
-  new_ptr->next->data = but;
-  new_ptr->next->type = WIDGET_BUTTON;
-  bx->tail_kid = new_ptr->next;
-
-  return but;
-
+  if (bx->root_kid == NULL) { /* new list */
+      bx->root_kid = new;
+  } else {
+      bx->tail_kid->next = new;
+  }
+  bx->tail_kid = new;
 }
 
-box *box_add_box(box *bx, box *b)
+void box_add_button(box *bx, button *but)
 {
-  list *new_ptr  = NULL;
+  box_add_(bx,but,WIDGET_BUTTON);
+  but->parent = bx; /* set its parent */
+}
 
+void box_add_box(box *bx, box *b)
+{
+  box_add_(bx,b,WIDGET_BOX);
   b->parent = bx; /* set its parent */
-
-  if (bx->root_kid == NULL) /* new list */
-    {
-      bx->root_kid = (list *)malloc1(list);
-      bx->root_kid->next = NULL;
-      bx->tail_kid = bx->root_kid;
-      bx->root_kid->data = b;
-      bx->root_kid->type = WIDGET_BOX;
-      return b;
-    }
-
-  new_ptr = bx->tail_kid;
-  new_ptr->next = malloc1(list);
-  new_ptr->next->next = NULL;
-  new_ptr->next->data = b;
-  new_ptr->next->type = WIDGET_BOX;
-  bx->tail_kid = new_ptr->next;
-  return b;
-
 }
 
 void box_list_contents(box *bx)
