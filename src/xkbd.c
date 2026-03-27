@@ -100,6 +100,8 @@ unsigned long scr_mwidth;
 unsigned long scr_mheight;
 SubpixelOrder subpixel_order;
 
+char buffer[512];
+
 // IBM standard 500x200mm, ~22x6 keys? or key 20x20mm
 // int max_width = 440, max_height=120;
 
@@ -111,16 +113,14 @@ enum {
 };
 
 static int xerrh(Display *dsp, XErrorEvent *ev) {
-	char buf[256];
-
 	fprintf(stderr,"%s: X error %i ",iam,ev->error_code);
 	if (!XFlush(dsp)) {
 		fprintf(stderr,"fatal\n");
 		exit(1);
 	}
-	buf[0]=0;
-	XGetErrorText(dsp,ev->error_code,(char*)&buf,sizeof(buf));
-	fprintf(stderr,"%s %s\n",XDisplayString(dsp),buf);
+	buffer[0]=0;
+	XGetErrorText(dsp,ev->error_code,(char*)&buffer,sizeof(buffer));
+	fprintf(stderr,"%s %s\n",XDisplayString(dsp),buffer);
 	return 0;
 }
 
@@ -595,7 +595,6 @@ int main(int argc, char **argv)
 
    int i,j,w,h;
    char *s,*r;
-   char userconffile[256];
    FILE *fp;
    KeySym mode_switch_ksym;
    XWindowAttributes wa;
@@ -973,16 +972,16 @@ re_crts:
 
       if (!remapped) {
         if (conf_file == NULL) {
-	  strcpy(userconffile,getenv("HOME"));
-	  strcat(userconffile, "/.");
-	  strcat(userconffile, iam);
+	  strcpy(buffer,getenv("HOME"));
+	  strcat(buffer, "/.");
+	  strcat(buffer, iam);
 
-	  if ((fp = fopen(userconffile, "r")) != NULL) {
-		conf_file = (char *)malloc2(sizeof(char)*512);
-		if (fgets(conf_file, 512, fp) != NULL) {
+	  if ((fp = fopen(buffer, "r")) != NULL) {
+		conf_file = fgets(buffer, sizeof(buffer), fp);
+		if (conf_file) {
 			fclose(fp);
-			if ( conf_file[strlen(conf_file)-1] == '\n')
-				conf_file[strlen(conf_file)-1] = '\0';
+			if ( buffer[strlen(buffer)-1] == '\n')
+				buffer[strlen(buffer)-1] = '\0';
 		}
 	  } else conf_file = DEFAULTCONFIG;
 	}

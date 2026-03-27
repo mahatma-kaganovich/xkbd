@@ -90,12 +90,9 @@ static int load_a_single_font(keyboard *kb, char *fontname, fontinfo *inf) {
 }
 
 static void load_font(keyboard *kb, char *fnt, fontinfo *inf, int fontsize){
-	char *fnames0, *fnames, *fname, *fname1;
-	size_t l = strlen(fnt) + 1;
+	char *fnames0, *fnames, *fname;
 
-	fnames0 = fnames = malloc2(l);
-	memcpy(fnames0,fnt,l);
-	fname1 = malloc2(l+63);
+	fnames0 = fnames = fnt;
 
 	char *codeset = "*-*";
 #ifdef USE_XFT
@@ -114,16 +111,21 @@ static void load_font(keyboard *kb, char *fnt, fontinfo *inf, int fontsize){
 	}
 #endif
 	while((fname=fnames)){
-		if ((fnames = strchr(fnames,'|'))) *(fnames++) = 0;
-		sprintf(fname1,fname,fontsize,codeset);
-		if (load_a_single_font(kb,fname1,inf)) goto ret;
+		size_t l;
+		if ((fnames = strchr(fnames,'|'))) {
+			*(fnames++) = 0;
+			l = fnames - fname;
+		} else l = strlen(fname)+1;
+		if (l > sizeof(buffer)-64) {
+			fprintf(stderr,"font name too long '%s'\n",fname);
+			exit(1);
+		}
+		sprintf(buffer,fname,fontsize,codeset);
+		if (load_a_single_font(kb,buffer,inf)) return;
 	}
 err:
 	fprintf(stderr, "xkbd: unable to find suitable font in '%s'\n", fnt);
 	exit(1);
-ret:
-	free1(fname1);
-	free1(fnames0);
 }
 
 static void button_update(button *b) {
@@ -516,7 +518,6 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
   list *listp;
 
   FILE *rcfp;
-  char rcbuf[255];		/* buffer for conf file */
   char *tp;                     /* tmp pointer */
 
   char tmpstr_A[128];
@@ -606,9 +607,9 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
 
   context = none;
 
-  while(fgets(rcbuf, sizeof(rcbuf), rcfp) != NULL)
+  while(fgets(buffer, sizeof(buffer), rcfp) != NULL)
     {
-      tp = &rcbuf[0];
+      tp = &buffer[0];
 
       /* strip init spaces */
       while(*tp == ' ' || *tp == '\t') tp++;
@@ -813,20 +814,9 @@ keyboard* kb_new(Window win, Display *display, int screen, int kb_x, int kb_y,
       line_no++;
     }
 
-#ifndef STALLOC
-    if (font_name) {
-	if (font) free1(font);
-	font = strdup1(font_name);
-    } else if (!font) font = strdup1(DEFAULT_FONT);
-
-    if (font_name1) {
-	if (font1) free1(font1);
-	font1 = strdup1(font_name1);
-    }
-#else
-    font = font_name?:DEFAULT_FONT;
+    static char def_font[] = DEFAULT_FONT;
+    font = font_name?:def_font;
     font1 = font_name1;
-#endif
 
   kb->key_delay_repeat1 = kb->key_delay_repeat;
   kb->key_repeat1 = kb->key_repeat;

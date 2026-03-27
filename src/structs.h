@@ -367,6 +367,7 @@ extern unsigned long int scr_width;
 extern unsigned long int scr_height;
 extern unsigned long scr_mwidth;
 extern unsigned long scr_mheight;
+extern char buffer[512];
 #ifdef COUNT_TOUCHES
 extern uint8_t num_touches;
 #endif
