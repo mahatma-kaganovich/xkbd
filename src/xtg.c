@@ -295,9 +295,13 @@ XEvent ev;
 unsigned char *ret;
 
 // min/max: X11/Xlibint.h
+#if __GNUC__
+#define _min(x,y) ({__typeof__(x) _x=(x); __typeof__(y) _y=(y); _x<_y?_x:_y;})
+#define _max(x,y) ({__typeof__(x) _x=(x); __typeof__(y) _y=(y); _x>_y?_x:_y;})
+#else
 static inline _int _min(_int x,_int y){ return x<y?x:y; }
 static inline _int _max(_int x,_int y){ return x>y?x:y; }
-
+#endif
 
 #ifdef XTG
 int devid = 0;
