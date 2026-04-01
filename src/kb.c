@@ -115,7 +115,7 @@ static void load_font(keyboard *kb, char *fnt, fontinfo *inf, int fontsize){
 		if ((fnames = strchr(fnames,'|'))) {
 			*(fnames++) = 0;
 			l = fnames - fname;
-		} else l = strlen(fname)+1;
+		} else l = strlen(fname);
 		if (l > sizeof(buffer)-64) {
 			fprintf(stderr,"font name too long '%s'\n",fname);
 			exit(1);
