@@ -349,18 +349,19 @@ int button_render(button *b, int mode)
     fontinfo *f = strlen1utf8(txt)?&kb->finfo1:&kb->finfo;
     int xx = x+((w - _but_size(b,l))>>1);
     int yy = y+((h - (b->vheight?:f->height))>>1) + f->ascent;
+    size_t l = strlen(txt);
 #ifdef USE_XFT
     XftDrawStringUtf8(kb->xftdraw, &gc.col, f->font,
-		xx, yy, (FcChar8 *) txt, strlen(txt));
+		xx, yy, (FcChar8 *) txt, l);
 #elif defined(F_UTF8)
-    Xutf8DrawString(dpy, backing, f->font, gc.txt, xx, yy, txt, strlen(txt));
+    Xutf8DrawString(dpy, backing, f->font, gc.txt, xx, yy, txt, l);
 #else
-    if ((kb->iconv)!=(iconv_t)-1 && (txt[1] & 0xC0) == 0x80) {
+    if ((kb->iconv)!=(iconv_t)-1 && *txt && (txt[1] & 0xC0) == 0x80) {
 	char *b1=txt,*b2=buffer;
-	size_t bs1=strlen(txt),bs2=sizeof(buffer);
+	size_t bs1=l,bs2=sizeof(buffer);
 	if (iconv(kb->iconv, &b1, &bs1, &b2, &bs2)!=(size_t)-1) txt = buffer;
     }
-    XDrawString(dpy, backing, gc.txt, xx, yy, txt, strlen(txt));
+    XDrawString(dpy, backing, gc.txt, xx, yy, txt, l);
 #endif
   }
 pixmap:
