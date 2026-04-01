@@ -377,10 +377,19 @@ extern int cache_pix;
 #define cache_pix 0
 #endif
 
-static inline long _min(long x,long y){ return x<y?x:y; }
-static inline long _max(long x,long y){ return x>y?x:y; }
-#define _MAX(x,y) {long tmpY = (y); if (tmpY > x) x = tmpY;}
-#define _MIN(x,y) {long tmpY = (y); if (tmpY < x) x = tmpY;}
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L
+#define __typeof__ typeof
+#endif
+
+#if __GNUC__
+#define _min(x,y) ({__typeof__(x) _x=(x); __typeof__(y) _y=(y); _x<_y?_x:_y;})
+#define _max(x,y) ({__typeof__(x) _x=(x); __typeof__(y) _y=(y); _x>_y?_x:_y;})
+#else
+static inline long long _min(long long x,long long y){ return x<y?x:y; }
+static inline long long _max(long long x,long long y){ return x>y?x:y; }
+#endif
+#define _MAX(x,y) {__typeof__(y) tmpY = (y); if (tmpY > x) x = tmpY;}
+#define _MIN(x,y) {__typeof__(y) tmpY = (y); if (tmpY < x) x = tmpY;}
 
 static inline int strlen1utf8(char *s) {
 	int cnt=0;
