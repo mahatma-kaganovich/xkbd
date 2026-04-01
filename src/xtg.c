@@ -294,8 +294,12 @@ int xkbEventType=-100, xkbError, n1;
 XEvent ev;
 unsigned char *ret;
 
+
 // min/max: X11/Xlibint.h
 #if __GNUC__
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L
+#define __typeof__ typeof
+#endif
 #define _min(x,y) ({__typeof__(x) _x=(x); __typeof__(y) _y=(y); _x<_y?_x:_y;})
 #define _max(x,y) ({__typeof__(x) _x=(x); __typeof__(y) _y=(y); _x>_y?_x:_y;})
 #else
