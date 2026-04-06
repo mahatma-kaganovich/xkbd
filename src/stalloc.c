@@ -147,6 +147,7 @@ void *ststrdup(const char *s){
 rep:
 	if ((d = memccpy(m.buf,s,0,m.size))) {
 		m.pos = _align(d - m.buf);
+		m.size -= m.pos;
 		return m.buf;
 	}
 	m.pos = 0;
