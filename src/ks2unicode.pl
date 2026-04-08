@@ -235,8 +235,7 @@ tr:
 int ksText_(KeySym ks, char **txt, int *is_sym){
 	ksText(ks,txt,is_sym);
 	if (*txt == ksText_buf) {
-		*txt = malloc2((_align(1) >= sizeof(ksText_buf)) ? sizeof(ksText_buf) : ++n);
-		memcpy(*txt, ksText_buf, n);
+		strdup2(*txt,ksText_buf,n);
 		return 1;
 	}
 	return 0;
