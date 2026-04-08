@@ -18,8 +18,8 @@ void *stalloc(size_t l);
 void *ststrdup(const char *s);
 
 #define strdup2(d,s,size) memcpy(d = malloc2(\
-	(sizeof(s) > sizeof(void*) && sizeof(s) <= _align(1))? sizeof(s) : _ALIGN ? size+1 : ++size\
-    ),s,size)
+	(sizeof(s) > sizeof(void*) && sizeof(s) <= _align(1))? sizeof(s) : size+1\
+    ),s,_ALIGN ? size : (size+1))
 
 #if STALLOC == -1
 #define _ALIGN 0
