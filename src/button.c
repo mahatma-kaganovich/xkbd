@@ -115,35 +115,36 @@ KeySym button_ks(char *txt)
   return res;
 }
 
-int _button_get_txt_size(keyboard *kb, char *txt)
+static int _but_size(button *b, int l)
 {
-  if (!txt) return 0;
+#ifdef CACHE_SIZES
+  int s = b->txt_size[l];
+  if (s) goto ret;
+#else
+  int s = 0;
+#endif
+  char *txt = b->txt[l];
+  if (!txt) goto ret;
+  keyboard *kb = b->kb;
   fontinfo *f = strlen1utf8(txt)?&kb->finfo1:&kb->finfo;
 #ifdef USE_XFT
   XGlyphInfo extents;
   XftTextExtentsUtf8(kb->display, f->font, (FcChar8 *)txt, strlen(txt), &extents);
-  return extents.width;
+  s = extents.width;
 #elif defined(F_UTF8)
   XRectangle r1,r2;
   Xutf8TextExtents(f->font,(char *) txt, strlen(txt),&r1,&r2);
-  return r1.width;
+  s = r1.width;
 #else
-  return XTextWidth(f->font, txt, strlen(txt));
+  s = XTextWidth(f->font, txt, strlen(txt));
 #endif
-}
-
-static int _but_size(button *b, int l){
 #ifdef CACHE_SIZES
-	int i,s=0;
-	if (!(s=b->txt_size[l])) {
-		// set size=1 to empty as checked
-		s=_button_get_txt_size(b->kb, b->txt[l])?:1;
-		for (i=0; i<STD_LEVELS; i++) if (b->txt[i]==b->txt[l]) b->txt_size[i]=s;
-	}
-	return s;
-#else
-	return _button_get_txt_size(b->kb, b->txt[l]);
+  if (!s) s=1;
+  int i;
+  for (i=0; i<STD_LEVELS; i++) if (b->txt[i]==b->txt[l]) b->txt_size[i]=s;
 #endif
+ret:
+  return s;
 }
 
 void button_calc_vwidth(button *b)
@@ -151,16 +152,14 @@ void button_calc_vwidth(button *b)
   if (b->vwidth ) return; /* already calculated from image or width_param */
 
 #ifdef CACHE_SIZES
-  int i,sz = 0;
-  for (i=0; i<STD_LEVELS; i++) if (b->txt[i]) _MAX(sz,_but_size(b,i));
-  b->vwidth = sz;
+  const int ls = STD_LEVELS;
 #else
-  b->vwidth = _max(
-	_button_get_txt_size(b->kb, DEFAULT_TXT(b)),
-    _max(_button_get_txt_size(b->kb, SHIFT_TXT(b)),
-	_button_get_txt_size(b->kb, MOD_TXT(b))
-    ));
+  const int ls = 3;
 #endif
+  int i,sz = 0;
+  for (i=0; i<ls; i++) _MAX(sz,_but_size(b,i));
+  b->vwidth = sz;
+
   if (b->vwidth < 2
 //	&& !(DEFAULT_KS(b) || SHIFT_KS(b) || MOD_KS(b)) &&
 //	DEFAULT_TXT(b) == NULL && SHIFT_TXT(b) == NULL && MOD_TXT(b) == NULL

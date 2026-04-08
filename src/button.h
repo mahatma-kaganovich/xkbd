@@ -27,7 +27,6 @@ KeySym button_ks(char *txt);
 void button_set_pixmap(button *b, char *txt);
 void button_set_txt_ks(button *b, char *txt);
 void button_set_slide_ks(button *b, char *txt, int dir);
-int _button_get_txt_size(keyboard *kb, char *txt);
 void button_calc_vwidth(button *b);
 
 int button_render(button *b, int mode);
