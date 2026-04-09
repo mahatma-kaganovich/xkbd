@@ -36,6 +36,8 @@ void *ststrdup(const char *s);
 #define calloc1(s) stalloc(_align(sizeof(s)))
 #define malloc1(s) stalloc(_align(sizeof(s)))
 #define malloc2(s) stalloc(_align(s))
-#define strdup1(s) ststrdup(s)
+#define strdup1(s) ((sizeof(s) > sizeof(void*) && sizeof(s) <= _align(1))?\
+	strcpy(malloc2(sizeof(s)),s):\
+	ststrdup(s))
 #define free1(s) {}
 #endif
