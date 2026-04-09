@@ -236,6 +236,7 @@ int ksText_(KeySym ks, char **txt, int *is_sym){
 	ksText(ks,txt,is_sym);
 	if (*txt == ksText_buf) {
 		strdup2(*txt,ksText_buf,n);
+//		*txt = strdup1(ksText_buf);
 		return 1;
 	}
 	return 0;

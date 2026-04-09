@@ -165,6 +165,7 @@ rep:
 	m.buf+=m.pos;
 	if ((d = memccpy(m.buf,s,0,m.size))) {
 		m.pos = _align(d - m.buf);
+		m.size -= m.pos;
 		return m.buf;
 	}
 	size_t l = strlen(s);
@@ -181,6 +182,14 @@ rep:
 	memcpy(d,s,l);
 	return d;
 #endif
+}
+
+void *ststrdup_buf(const char *s,size_t n){
+	if (n > m.size) return ststrdup(s);
+	m.buf+=m.pos;
+	m.pos = _align((void*)stpcpy(m.buf,s) - m.buf + 1);
+	m.size -= m.pos;
+	return m.buf;
 }
 
 void stline(){

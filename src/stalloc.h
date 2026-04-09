@@ -16,6 +16,7 @@
 
 void *stalloc(size_t l);
 void *ststrdup(const char *s);
+void *ststrdup_buf(const char *s,size_t n);
 
 #define strdup2(d,s,size) memcpy(d = malloc2(\
 	(sizeof(s) > sizeof(void*) && sizeof(s) <= _align(1))? sizeof(s) : size+1\
@@ -36,8 +37,9 @@ void *ststrdup(const char *s);
 #define calloc1(s) stalloc(_align(sizeof(s)))
 #define malloc1(s) stalloc(_align(sizeof(s)))
 #define malloc2(s) stalloc(_align(s))
-#define strdup1(s) ((sizeof(s) > sizeof(void*) && sizeof(s) <= _align(1))?\
-	strcpy(malloc2(sizeof(s)),s):\
-	ststrdup(s))
+#define strdup1(s) (\
+	(sizeof(s) > sizeof(void*))?ststrdup_buf(s,_align(sizeof(s))):\
+	ststrdup(s)\
+	)
 #define free1(s) {}
 #endif
