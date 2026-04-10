@@ -1,5 +1,8 @@
 /* static alloc / (c) mahatma / GPLv2 or Anarchy license */
 
+#ifndef _STALLOC_H_
+#define _STALLOC_H_
+
 #ifdef MINIMAL
 #define ENABLE_HUGE_MMAP
 #define STALLOC 0
@@ -17,6 +20,8 @@
 void *stalloc(size_t l);
 void *ststrdup(const char *s);
 void *ststrdup_buf(const char *s,size_t n);
+void *stalloc3(size_t l);
+void stfree3(void *p,size_t l);
 
 #define strdup2(d,s,size) memcpy(d = malloc2(\
 	(sizeof(s) > sizeof(void*) && sizeof(s) <= _align(1))? sizeof(s) : size+1\
@@ -28,8 +33,10 @@ void *ststrdup_buf(const char *s,size_t n);
 #define calloc1(s) calloc(1,sizeof(s))
 #define malloc1(s) malloc(sizeof(s))
 #define malloc2(s) malloc(s)
+#define malloc3(s) malloc(s)
 #define strdup1(s) strdup(s)
 #define free1(s) free(s)
+#define free3(s) free(s)
 #else
 #define _ALIGN STALLOC
 //#define _align(s) (((((s)+((1<<_ALIGN)-1)))>>_ALIGN)<<_ALIGN)
@@ -37,9 +44,13 @@ void *ststrdup_buf(const char *s,size_t n);
 #define calloc1(s) stalloc(_align(sizeof(s)))
 #define malloc1(s) stalloc(_align(sizeof(s)))
 #define malloc2(s) stalloc(_align(s))
+#define malloc3(s) stalloc3(_align(sizeof(s)))
 #define strdup1(s) (\
 	(sizeof(s) > sizeof(void*))?ststrdup_buf(s,_align(sizeof(s))):\
 	ststrdup(s)\
 	)
 #define free1(s) {}
+#define free3(s) stfree3(s,_align(sizeof(s)))
+#endif
+
 #endif

@@ -312,10 +312,10 @@ static void kb_find_button_siblings(button *b) {
 			buf[n++] = tmp_but;
 		}
 	}
-	if (b->siblings) free(b->siblings);
+//	if (b->siblings) free(b->siblings);
 	b->nsiblings = n;
 	n *= sizeof(button*);
-	memcpy(b->siblings = malloc(n),buf,n);
+	memcpy(b->siblings = malloc2(n),buf,n);
 }
 
 static void kb_update(keyboard *kb){

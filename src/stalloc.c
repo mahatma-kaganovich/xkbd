@@ -192,6 +192,23 @@ void *ststrdup_buf(const char *s,size_t n){
 	return m.buf;
 }
 
+_th void *allocs[64] = {};
+
+void *stalloc3(size_t l){
+	size_t a = (l >> _ALIGN);
+	void **p = allocs[a];
+	if (!p) return stalloc(l);
+	allocs[a] = *p;
+//	memset(p,0,l);
+	return p;
+}
+
+void stfree3(void *p,size_t l){
+	size_t a = (l >> _ALIGN);
+	*(void **)p = allocs[a];
+	allocs[a] = p;
+}
+
 void stline(){
 	if (BUF_ALIGN > _ALIGN) stalloc(buf_align - (m.size&(buf_align-1)));
 }
