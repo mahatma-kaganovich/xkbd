@@ -58,18 +58,19 @@ void *ststrdup_buf(const char *s,size_t n);
 	ststrdup(s)\
 	)
 #define free1(s) {}
-#define free3(s) stfree3(s,sizeof(s))
+#define free3(s) stfree3(s,sizeof(*s))
 #endif
 
-extern _th void *allocs[(MAX_ALLOC_FREE+1)>>_ALIGN];
+#define _PRE_ALIGN(x) ((((x)+((1<<_ALIGN)-1)))>>_ALIGN)
+extern _th void *allocs[_PRE_ALIGN(MAX_ALLOC_FREE)];
 
 // sized malloc/free, const optimized
 static inline void *stalloc3(size_t l){
-	if (l > MAX_ALLOC_FREE) {
-		fprintf(stderr,"stalloc3 - big alloc\n");
+	size_t a = _PRE_ALIGN(l);
+	if (a < _PRE_ALIGN(sizeof(void*)) || a > _PRE_ALIGN(MAX_ALLOC_FREE)) {
+		fprintf(stderr,"stalloc3 - bad alloc %lu\n",l);
 		return malloc(l);
 	}
-	size_t a = ((((l)+((1<<_ALIGN)-1)))>>_ALIGN);
 	void **p = allocs[a];
 	if (!p) return stalloc(a<<_ALIGN);
 	allocs[a] = *p;
@@ -77,11 +78,11 @@ static inline void *stalloc3(size_t l){
 }
 
 static inline void stfree3(void *p,size_t l){
-	if (l > MAX_ALLOC_FREE) {
+	size_t a = _PRE_ALIGN(l);
+	if (a < _PRE_ALIGN(sizeof(void*)) || a > _PRE_ALIGN(MAX_ALLOC_FREE)) {
 		free(p);
 		return;
 	}
-	size_t a = ((((l)+((1<<_ALIGN)-1)))>>_ALIGN);
 	*(void **)p = allocs[a];
 	allocs[a] = p;
 }

@@ -185,7 +185,7 @@ void *ststrdup_buf(const char *s,size_t n){
 	return m.buf;
 }
 
-_th void *allocs[(MAX_ALLOC_FREE+1)>>_ALIGN] = {};
+_th void *allocs[_PRE_ALIGN(MAX_ALLOC_FREE)] = {};
 
 void stline(){
 	if (BUF_ALIGN > _ALIGN) stalloc(buf_align - (m.size&(buf_align-1)));
