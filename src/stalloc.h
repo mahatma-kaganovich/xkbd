@@ -64,7 +64,7 @@ void *ststrdup_buf(const char *s,size_t n);
 #endif
 
 #define _PRE_ALIGN(x) ((((x)+((1<<_ALIGN)-1)))>>_ALIGN)
-extern _th void *allocs[_PRE_ALIGN(MAX_ALLOC_FREE)];
+extern _th void *allocs[_PRE_ALIGN(MAX_ALLOC_FREE)+1];
 
 // sized malloc/free, const optimized
 static inline void *stalloc3(size_t l){
