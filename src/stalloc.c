@@ -15,24 +15,17 @@
 
 #if __STDC_VERSION__ >= 201112L
 #include <stddef.h>
-#define _th thread_local
 #if __STDC_VERSION__ < 202311L
 #endif
 #define CALIGN alignof(max_align_t)
 #else
 #include <malloc.h>
-#define _th __thread
 #ifdef __BIGGEST_ALIGNMENT__
 #define CALIGN __BIGGEST_ALIGNMENT__
 #else
 #define CALIGN 1
 #endif
 #endif //  __STDC_VERSION__ >= 201112L
-
-#ifndef _REENTRANT
-#undef _th
-#define _th
-#endif
 
 #if defined(_POSIX_MAPPED_FILES) && (_POSIX_MAPPED_FILES - 0) > 0
 #define USE_MMAP
@@ -192,22 +185,7 @@ void *ststrdup_buf(const char *s,size_t n){
 	return m.buf;
 }
 
-_th void *allocs[64] = {};
-
-void *stalloc3(size_t l){
-	size_t a = (l >> _ALIGN);
-	void **p = allocs[a];
-	if (!p) return stalloc(l);
-	allocs[a] = *p;
-//	memset(p,0,l);
-	return p;
-}
-
-void stfree3(void *p,size_t l){
-	size_t a = (l >> _ALIGN);
-	*(void **)p = allocs[a];
-	allocs[a] = p;
-}
+_th void *allocs[(MAX_ALLOC_FREE+1)>>_ALIGN] = {};
 
 void stline(){
 	if (BUF_ALIGN > _ALIGN) stalloc(buf_align - (m.size&(buf_align-1)));
