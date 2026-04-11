@@ -3,6 +3,8 @@
 #ifndef _STALLOC_H_
 #define _STALLOC_H_
 
+#include <stdio.h>
+
 #ifdef MINIMAL
 #define ENABLE_HUGE_MMAP
 #define STALLOC 0
