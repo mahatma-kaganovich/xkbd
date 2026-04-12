@@ -833,6 +833,9 @@ chScreen:
 	scr_mheight = sw;
    }
 
+    void *b1 = malloc3(button);
+    void *b2 = stalloc3(X1+sizeof(button));
+    free3((button*)b1);
 #ifdef USE_XR
 	// find actual output;
 	// if no geometry, try to avoid strut in the middle of overlapped outputs (-> top/left).

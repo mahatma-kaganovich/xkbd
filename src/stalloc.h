@@ -64,7 +64,7 @@ void *ststrdup_buf(const char *s,size_t n);
 #endif
 
 #define _PRE_ALIGN(x) ((((x)+((1<<_ALIGN)-1)))>>_ALIGN)
-extern _th void *allocs[_PRE_ALIGN(MAX_ALLOC_FREE)];
+extern _th void *allocs[_PRE_ALIGN(MAX_ALLOC_FREE+1)];
 
 // sized malloc/free, const optimized
 static inline void *stalloc3(size_t l){
@@ -73,7 +73,7 @@ static inline void *stalloc3(size_t l){
 		fprintf(stderr,"stalloc3 - bad alloc %lu\n",l);
 		return malloc(l);
 	}
-	void **ap = &allocs[a-1];
+	void **ap = &allocs[a];
 	void **p = *ap;
 	if (!p) return stalloc(a<<_ALIGN);
 	*ap = *p;
@@ -86,7 +86,7 @@ static inline void stfree3(void *p,size_t l){
 		free(p);
 		return;
 	}
-	void **ap = &allocs[a-1];
+	void **ap = &allocs[a];
 	*(void **)p = *ap;
 	*ap = p;
 }
