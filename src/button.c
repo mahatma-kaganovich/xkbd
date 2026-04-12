@@ -119,12 +119,17 @@ static int _but_size(button *b, int l)
 {
 #ifdef CACHE_SIZES
   int s = b->txt_size[l];
-  if (s) goto ret;
+  if (s) return s;
+  char *txt = b->txt[l];
 #else
   int s = 0;
-#endif
   char *txt = b->txt[l];
+  static char *txt1 = NULL;
+  static int s1 = 0;
+  if (txt1 == txt) return s1;
+#endif
   if (!txt) goto ret;
+
   keyboard *kb = b->kb;
   fontinfo *f = strlen1utf8(txt)?&kb->finfo1:&kb->finfo;
 #ifdef USE_XFT
@@ -138,12 +143,15 @@ static int _but_size(button *b, int l)
 #else
   s = XTextWidth(f->font, txt, strlen(txt));
 #endif
+ret:
 #ifdef CACHE_SIZES
   if (!s) s=1;
   int i;
   for (i=0; i<STD_LEVELS; i++) if (b->txt[i]==b->txt[l]) b->txt_size[i]=s;
+#else
+  txt1 = txt;
+  s1 = s;
 #endif
-ret:
   return s;
 }
 

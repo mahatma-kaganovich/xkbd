@@ -132,10 +132,10 @@ static inline unsigned int MODS(unsigned int l){
 // features
 
 // cache pixmaps increase render speed 5x and RAM 0.3-2.5k per layout
-#define CACHE_SIZES
 #define CACHE_PIX
 
 #ifndef MINIMAL
+#define CACHE_SIZES
 //#define SLIDES
 #define SIBLINGS
 #define GESTURES_EMULATE
