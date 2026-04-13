@@ -5,6 +5,19 @@
 
 #include <stdio.h>
 
+#ifndef __SIZEOF_POINTER__
+#include <stdint.h>
+#if UINTPTR_MAX == 0xfffff
+#define __SIZEOF_POINTER__ 2
+#elif UINTPTR_MAX == 0xffffffff
+#define __SIZEOF_POINTER__ 4
+#elif UINTPTR_MAX == 0xffffffffffffffff
+#define __SIZEOF_POINTER__ 8
+#elif UINTPTR_MAX == 0xffffffffffffffffffffffffffffffff
+#define __SIZEOF_POINTER__ 16
+#endif
+#endif
+
 #ifdef MINIMAL
 #define ENABLE_HUGE_MMAP
 #define STALLOC 0
@@ -37,6 +50,26 @@ void *ststrdup_buf(const char *s,size_t n);
 	(sizeof(s) > sizeof(void*) && sizeof(s) <= _align(1))? sizeof(s) : size+1\
     ),s,_ALIGN ? size : (size+1))
 
+#define _ALIGN_(s,a) (((((s)+((1<<(a))-1)))>>(a))<<(a))
+#define _align_(s,a) ((((size_t)(s)+(((size_t)1<<(a))-1)))&~(((size_t)1<<(a))-1))
+
+#if __SIZEOF_POINTER__ == 2
+#define _PTR_PW 1
+#elif __SIZEOF_POINTER__ == 4
+#define _PTR_PW 2
+#elif __SIZEOF_POINTER__ == 8
+#define _PTR_PW 3
+#elif __SIZEOF_POINTER__ == 16
+#define _PTR_PW 4
+#else
+#undef _PTR_PW
+#error macro pointer size unknown
+#endif
+
+#if STALLOC == -2
+#define _ALIGN _PTR_PW
+#endif
+
 #if STALLOC == -1
 #define _ALIGN 0
 #define _align(s) (s)
@@ -49,8 +82,7 @@ void *ststrdup_buf(const char *s,size_t n);
 #define free3(s) free(s)
 #else
 #define _ALIGN STALLOC
-//#define _align(s) (((((s)+((1<<_ALIGN)-1)))>>_ALIGN)<<_ALIGN)
-#define _align(s) ((((size_t)(s)+(((size_t)1<<_ALIGN)-1)))&~(((size_t)1<<_ALIGN)-1))
+#define _align(s) _align_(s,_ALIGN)
 #define calloc1(s) stalloc(_align(sizeof(s)))
 #define malloc1(s) stalloc(_align(sizeof(s)))
 #define malloc2(s) stalloc(_align(s))
@@ -63,19 +95,42 @@ void *ststrdup_buf(const char *s,size_t n);
 #define free3(s) stfree3(s,sizeof(*s))
 #endif
 
-#define _PRE_ALIGN(x) ((((x)+((1<<_ALIGN)-1)))>>_ALIGN)
-extern _th void *allocs[_PRE_ALIGN(MAX_ALLOC_FREE+1)];
+
+#undef _PRE_ALIGN
+#undef _POST_ALIGN
+
+#ifndef _PTR_PW
+#define _PRE_ALIGN(x) (((((x)+((1<<_ALIGN)-1)))>>_ALIGN)*sizeof(void*))
+#elif _PTR_PW == _ALIGN
+#define _PRE_ALIGN(x) _align(x)
+#define _POST_ALIGN(l,a) (a)
+#elif _PTR_PW < _ALIGN
+#define _POST_ALIGN(l,a) ((a)<<(_ALIGN-_PTR_PW))
+#else
+#define _POST_ALIGN(l,a) ((a)>>(_PTR_PW-_ALIGN))
+#endif
+
+#ifndef _PRE_ALIGN
+#define _PRE_ALIGN(x) (((((x)+((1<<_ALIGN)-1)))>>_ALIGN)<<_PTR_PW)
+#endif
+#ifndef _POST_ALIGN
+//#define _POST_ALIGN(l,a) (((a)>>_PTR_PW)<<_ALIGN)
+#define _POST_ALIGN(l,a) _align(l)
+#endif
+
+extern _th void *allocs[_ALIGN_(MAX_ALLOC_FREE+1,_ALIGN)];
 
 // sized malloc/free, const optimized
+// minimal code - align == pointer / -DSTALLOC=-2
 static inline void *stalloc3(size_t l){
 	size_t a = _PRE_ALIGN(l);
 	if (a < _PRE_ALIGN(sizeof(void*)) || a > _PRE_ALIGN(MAX_ALLOC_FREE)) {
 		fprintf(stderr,"stalloc3 - bad alloc %lu\n",l);
 		return malloc(l);
 	}
-	void **ap = &allocs[a];
+	void **ap = ((void*)&allocs)+a;
 	void **p = *ap;
-	if (!p) return stalloc(a<<_ALIGN);
+	if (!p) return stalloc(_POST_ALIGN(l,a));
 	*ap = *p;
 	return p;
 }
@@ -86,7 +141,7 @@ static inline void stfree3(void *p,size_t l){
 		free(p);
 		return;
 	}
-	void **ap = &allocs[a];
+	void **ap = ((void*)&allocs)+a;
 	*(void **)p = *ap;
 	*ap = p;
 }
