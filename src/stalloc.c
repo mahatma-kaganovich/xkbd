@@ -44,7 +44,7 @@ const size_t st_block=1024*8;
 #endif
 
 _th struct _stalloc_buf {
-	__aligned *buf;
+	void __aligned *buf;
 	size_t size;
 	size_t pos;
 } m = {};
@@ -73,8 +73,8 @@ static void _mmap(){
 
 
 #ifndef ENABLE_HUGE_MMAP
-static __aligned *_alloc(size_t l){
-	__aligned *p;
+static void __aligned *_alloc(size_t l){
+	void __aligned *p;
 #if _ALIGN
 	if ((CALIGN&(buf_align-1)) &&
 #if __STDC_VERSION__ >= 201112L || defined(_ISOC11_SOURCE)
@@ -89,9 +89,9 @@ static __aligned *_alloc(size_t l){
 	return NULL;
 }
 
-//static __aligned *_calloc(size_t l){
-static __aligned *_calloc(size_t l){
-	__aligned *p;
+//static void __aligned *_calloc(size_t l){
+static void __aligned *_calloc(size_t l){
+	void __aligned *p;
 #if _ALIGN
 	if ((p=_alloc(buf_align))) memset(p,0,l); else
 #endif
@@ -99,8 +99,8 @@ static __aligned *_calloc(size_t l){
 	return p;
 }
 
-static __aligned *_malloc(size_t l){
-	__aligned *p;
+static void __aligned *_malloc(size_t l){
+	void __aligned *p;
 #if _ALIGN
 	if (!(p=_alloc(buf_align)))
 #endif
@@ -109,7 +109,7 @@ static __aligned *_malloc(size_t l){
 }
 #endif
 
-__aligned *stalloc(size_t l){
+void __aligned *stalloc(size_t l){
 	if (m.size < l) goto new;
 	m.buf+=m.pos;
 a:
@@ -134,8 +134,8 @@ new:
 	goto a;
 }
 
-__aligned *ststrdup(const char *s){
-	__aligned *d;
+void __aligned *ststrdup(const char *s){
+	void __aligned *d;
 #ifdef ENABLE_HUGE_MMAP
 	m.buf+=m.pos;
 rep:
@@ -178,7 +178,7 @@ rep:
 #endif
 }
 
-__aligned *ststrdup_buf(const char *s,size_t n){
+void __aligned *ststrdup_buf(const char *s,size_t n){
 	if (n > m.size) return ststrdup(s);
 	m.buf+=m.pos;
 	m.pos = _align((void*)stpcpy(m.buf,s) - m.buf + 1);
