@@ -40,9 +40,6 @@
 // _ALIGN to code optimize
 #define BUF_ALIGN _ALIGN
 
-void *stalloc(size_t l);
-void *ststrdup(const char *s);
-void *ststrdup_buf(const char *s,size_t n);
 
 #define MAX_ALLOC_FREE 1024
 
@@ -80,11 +77,12 @@ void *ststrdup_buf(const char *s,size_t n);
 #define strdup1(s) strdup(s)
 #define free1(s) free(s)
 #define free3(s) free(s)
+typedef void __aligned;
 #else
 #define _ALIGN STALLOC
 #define _align(s) _align_(s,_ALIGN)
-#define calloc1(s) stalloc(_align(sizeof(s)))
-#define malloc1(s) stalloc(_align(sizeof(s)))
+#define calloc1(s) malloc2(sizeof(s))
+#define malloc1(s) malloc2(sizeof(s))
 #define malloc2(s) stalloc(_align(s))
 #define malloc3(s) stalloc3(sizeof(s))
 #define strdup1(s) (\
@@ -93,6 +91,11 @@ void *ststrdup_buf(const char *s,size_t n);
 	)
 #define free1(s) {}
 #define free3(s) stfree3(s,sizeof(*s))
+#if defined(__GNUC__) || defined(__clang__)
+typedef void __attribute__((aligned(_align_(1,_ALIGN)))) __aligned;
+#else
+typedef void __aligned;
+#endif
 #endif
 
 
@@ -118,11 +121,17 @@ void *ststrdup_buf(const char *s,size_t n);
 #define _POST_ALIGN(l,a) _align(l)
 #endif
 
+__aligned *stalloc(size_t l);
+//__aligned *stalloc(size_t l);
+__aligned *ststrdup(const char *s);
+__aligned *ststrdup_buf(const char *s,size_t n);
+
+
 extern _th void *allocs[_ALIGN_(MAX_ALLOC_FREE+1,_ALIGN)];
 
 // sized malloc/free, const optimized
 // minimal code - align == pointer / -DSTALLOC=-2
-static inline void *stalloc3(size_t l){
+static inline __aligned *stalloc3(size_t l){
 	size_t a = _PRE_ALIGN(l);
 	if (a < _PRE_ALIGN(sizeof(void*)) || a > _PRE_ALIGN(MAX_ALLOC_FREE)) {
 		fprintf(stderr,"stalloc3 - bad alloc %lu\n",l);
