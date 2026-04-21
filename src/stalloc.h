@@ -84,7 +84,11 @@
 #define _align(s) _align_(s,_ALIGN)
 #define calloc1(s) malloc2(sizeof(s))
 #define malloc1(s) malloc2(sizeof(s))
+#ifdef STALLOC_INLINE
+#define malloc2(s) stalloc_(s)
+#else
 #define malloc2(s) stalloc(_align(s))
+#endif
 #define malloc3(s) stalloc3(sizeof(s))
 #define strdup1(s) (\
 	(sizeof(s) > sizeof(void*))?ststrdup_buf(s,_align(sizeof(s))):\
@@ -92,9 +96,13 @@
 	)
 #define free1(s) {}
 #define free3(s) stfree3(s,sizeof(*s))
-#if defined(__GNUC__) || defined(__clang__)
+//#if defined(__GNUC__) || defined(__clang__)
+#if defined(__has_attribute) && __has_attribute(aligned)
 #undef __aligned
 #define __aligned __attribute__((aligned(_align_(1,_ALIGN))))
+#elif defined(_MSC_VER)
+#undef __aligned
+#define _aligned __declspec(align(_align_(1,_ALIGN)))
 #endif
 #endif
 
@@ -113,6 +121,7 @@
 #define _POST_ALIGN(l,a) ((a)>>(_PTR_PW-_ALIGN))
 #endif
 
+
 #ifndef _PRE_ALIGN
 #define _PRE_ALIGN(x) (((((x)+((1<<_ALIGN)-1)))>>_ALIGN)<<_PTR_PW)
 #endif
@@ -125,8 +134,29 @@ void __aligned *stalloc(size_t l);
 void __aligned *ststrdup(const char *s);
 void __aligned *ststrdup_buf(const char *s,size_t n);
 
+typedef struct _stalloc_buf_t {
+	void __aligned *buf;
+	size_t size;
+	size_t pos;
+} stalloc_buf_t;
 
+extern _th stalloc_buf_t m;
+
+static inline void __aligned *stalloc_(size_t l){
+	l = _align(l);
+	if (m.size < l) return stalloc(l);
+	m.buf+=m.pos;
+	m.size-=(m.pos=l);
+	return m.buf;
+}
+
+#ifdef ENABLE_HUGE_MMAP
+extern _th void *allocs;
+#else
 extern _th void *allocs[_ALIGN_(MAX_ALLOC_FREE+1,_ALIGN)];
+#endif
+
+void stalloc3_init();
 
 // sized malloc/free, const optimized
 // minimal code - align == pointer / -DSTALLOC=-2
@@ -136,7 +166,11 @@ static inline void __aligned *stalloc3(size_t l){
 		fprintf(stderr,"stalloc3 - bad alloc %lu\n",l);
 		return malloc(l);
 	}
+#ifdef ENABLE_HUGE_MMAP
+	void **ap = allocs+a;
+#else
 	void **ap = ((void*)&allocs)+a;
+#endif
 	void **p = *ap;
 	if (!p) return stalloc(_POST_ALIGN(l,a));
 	*ap = *p;
@@ -149,7 +183,11 @@ static inline void stfree3(void *p,size_t l){
 		free(p);
 		return;
 	}
+#ifdef ENABLE_HUGE_MMAP
+	void **ap = allocs+a;
+#else
 	void **ap = ((void*)&allocs)+a;
+#endif
 	*(void **)p = *ap;
 	*ap = p;
 }

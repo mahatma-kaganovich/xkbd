@@ -1,5 +1,15 @@
 /* static alloc / (c) mahatma / GPLv2 or Anarchy license */
 
+#ifdef ENABLE_HUGE_MMAP
+#define USE_MMAP
+#endif
+#if defined(_POSIX_MAPPED_FILES) && (_POSIX_MAPPED_FILES - 0) > 0
+//#define USE_MMAP
+#elif defined(USE_MMAP)
+#warning MMAP support not found. disabled.
+#undef USE_MMAP
+#undef ENABLE_HUGE_MMAP
+#endif
 
 #include <stdlib.h>
 #include <string.h>
@@ -7,8 +17,7 @@
 
 #ifdef _POSIX_C_SOURCE
 #include <unistd.h>
-//#undef _POSIX_MAPPED_FILES
-#if defined(_POSIX_MAPPED_FILES) && (_POSIX_MAPPED_FILES - 0) > 0
+#ifdef USE_MMAP
 #include <sys/mman.h>
 #endif
 #endif
@@ -27,13 +36,6 @@
 #endif
 #endif //  __STDC_VERSION__ >= 201112L
 
-#if defined(_POSIX_MAPPED_FILES) && (_POSIX_MAPPED_FILES - 0) > 0
-#define USE_MMAP
-#else
-#undef USE_MMAP
-#undef ENABLE_HUGE_MMAP
-#endif
-
 
 #define  buf_align (1<<BUF_ALIGN)
 
@@ -43,11 +45,13 @@ const size_t st_block=0xffffffff;
 const size_t st_block=1024*8;
 #endif
 
-_th struct _stalloc_buf {
-	void __aligned *buf;
-	size_t size;
-	size_t pos;
-} m = {};
+_th stalloc_buf_t m = {};
+
+static void *O0M(){
+//	return NULL;
+	fprintf(stderr,"Out of memory\n");
+	abort();
+}
 
 #ifdef USE_MMAP
 #ifdef ENABLE_HUGE_MMAP
@@ -68,9 +72,25 @@ static void _mmap(){
 		| MAP_NORESERVE
 #endif
 		, -1, 0);
+#ifdef ENABLE_HUGE_MMAP
+	if (m.buf == MAP_FAILED) O0M();
+#endif
 }
 #endif
 
+void stalloc3_init(){
+next:
+	stalloc(_align(1));
+	m.size -= m.pos;
+	m.pos = 0;
+#ifdef ENABLE_HUGE_MMAP
+	if (allocs == MAP_FAILED) {
+		m.size = 0;
+		allocs = m.buf;
+		goto next;
+	}
+#endif
+}
 
 #ifndef ENABLE_HUGE_MMAP
 static void __aligned *_alloc(size_t l){
@@ -96,7 +116,7 @@ static void __aligned *_calloc(size_t l){
 	if ((p=_alloc(buf_align))) memset(p,0,l); else
 #endif
 		p=calloc(1,l);
-	return p;
+	return p?:O0M();
 }
 
 static void __aligned *_malloc(size_t l){
@@ -105,7 +125,7 @@ static void __aligned *_malloc(size_t l){
 	if (!(p=_alloc(buf_align)))
 #endif
 		p=malloc(l);
-	return p;
+	return p?:O0M();
 }
 #endif
 
@@ -118,17 +138,17 @@ a:
 new:
 	if (l > st_block)
 #ifdef ENABLE_HUGE_MMAP
-	    return NULL;
+	    return O0M();
 #else
 	    return _calloc(l);
 #endif
 #ifdef USE_MMAP
 	_mmap();
+#ifndef ENABLE_HUGE_MMAP
 	if (m.buf == MAP_FAILED)
 #endif
-#ifdef ENABLE_HUGE_MMAP
-	    return NULL;
-#else
+#endif
+#ifndef ENABLE_HUGE_MMAP
 	    m.buf=_calloc(m.size=st_block);
 #endif
 	goto a;
@@ -145,11 +165,9 @@ rep:
 		return m.buf;
 	}
 	m.pos = 0;
-	if (m.size < (st_block>>1)) {
-		_mmap();
-		if (m.buf != MAP_FAILED) goto rep;
-	}
-	return NULL;
+	if (m.size > (st_block>>1)) return O0M();
+	_mmap();
+	goto rep;
 #else
 #if !defined(MINIMAL) && \
     (__STDC_VERSION__ >= 202311L || defined(_POSIX_C_SOURCE)) && \
@@ -186,7 +204,11 @@ void __aligned *ststrdup_buf(const char *s,size_t n){
 	return m.buf;
 }
 
+#ifdef ENABLE_HUGE_MMAP
+_th void *allocs = MAP_FAILED;
+#else
 _th void *allocs[] = {};
+#endif
 
 void stline(){
 	if (BUF_ALIGN > _ALIGN) stalloc(buf_align - (m.size&(buf_align-1)));
