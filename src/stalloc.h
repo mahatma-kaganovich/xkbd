@@ -24,7 +24,7 @@
 #endif
 
 #ifndef STALLOC
-// 128-bit alignment if possible
+// 16 bytes
 #define STALLOC 4
 #endif
 

@@ -1,14 +1,9 @@
 /* static alloc / (c) mahatma / GPLv2 or Anarchy license */
 
+//#define USE_MMAP
+
 #ifdef ENABLE_HUGE_MMAP
 #define USE_MMAP
-#endif
-#if defined(_POSIX_MAPPED_FILES) && (_POSIX_MAPPED_FILES - 0) > 0
-//#define USE_MMAP
-#elif defined(USE_MMAP)
-#warning MMAP support not found. disabled.
-#undef USE_MMAP
-#undef ENABLE_HUGE_MMAP
 #endif
 
 #include <stdlib.h>
@@ -17,7 +12,7 @@
 
 #ifdef _POSIX_C_SOURCE
 #include <unistd.h>
-#ifdef USE_MMAP
+#if defined(USE_MMAP) && defined(_POSIX_MAPPED_FILES) && (_POSIX_MAPPED_FILES - 0) > 0
 #include <sys/mman.h>
 #endif
 #endif
@@ -36,13 +31,18 @@
 #endif
 #endif //  __STDC_VERSION__ >= 201112L
 
+#if defined(_POSIX_MAPPED_FILES) && (_POSIX_MAPPED_FILES - 0) > 0
+#else
+#undef USE_MMAP
+#undef ENABLE_HUGE_MMAP
+#endif
 
 #define  buf_align (1<<BUF_ALIGN)
 
 #ifdef ENABLE_HUGE_MMAP
 const size_t st_block=0xffffffff;
 #else
-const size_t st_block=1024*8;
+const size_t st_block=4096*3;
 #endif
 
 _th stalloc_buf_t m = {};
@@ -113,7 +113,7 @@ static void __aligned *_alloc(size_t l){
 static void __aligned *_calloc(size_t l){
 	void __aligned *p;
 #if _ALIGN
-	if ((p=_alloc(buf_align))) memset(p,0,l); else
+	if ((p=_alloc(l))) memset(p,0,l); else
 #endif
 		p=calloc(1,l);
 	return p?:O0M();
@@ -122,7 +122,7 @@ static void __aligned *_calloc(size_t l){
 static void __aligned *_malloc(size_t l){
 	void __aligned *p;
 #if _ALIGN
-	if (!(p=_alloc(buf_align)))
+	if (!(p=_alloc(l)))
 #endif
 		p=malloc(l);
 	return p?:O0M();
@@ -130,7 +130,11 @@ static void __aligned *_malloc(size_t l){
 #endif
 
 void __aligned *stalloc(size_t l){
+#if defined(__GNUC__) || defined(__clang__)
+	if (__builtin_expect(m.size < l,0)) goto new;
+#else
 	if (m.size < l) goto new;
+#endif
 	m.buf+=m.pos;
 a:
 	m.size-=(m.pos=l);

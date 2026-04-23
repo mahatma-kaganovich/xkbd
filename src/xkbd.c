@@ -21,6 +21,11 @@
 #include <unistd.h>
 #include <signal.h>
 
+//#define _PROF_INIT
+#ifdef _PROF_INIT
+#include <time.h>
+#endif
+
 #include <X11/Xproto.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -566,8 +571,14 @@ static void _getMT(int devid) {
 
 #endif
 
+
 int main(int argc, char **argv)
 {
+#ifdef _PROF_INIT
+struct timespec start, end;
+clock_gettime(CLOCK_MONOTONIC, &start);
+#endif
+
    char *window_name = iam;
    char *icon_name = iam;
 
@@ -1008,6 +1019,11 @@ re_crts:
       if (!kb) {
 	kb = kb_new(win, display, screen, 0, 0, width, height, conf_file, font_name, font_name1);
 	kb_size(kb);
+#ifdef _PROF_INIT
+clock_gettime(CLOCK_MONOTONIC, &end);
+long long ns = (end.tv_sec - start.tv_sec) * 1000000000LL + (end.tv_nsec - start.tv_nsec);
+printf("%lld ns\n", ns);
+#endif
       }
       i=kb->vbox->act_width;
       j=kb->vbox->act_height;
