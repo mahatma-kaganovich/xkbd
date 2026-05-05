@@ -1,5 +1,5 @@
 /*
-	xtg v1.62 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.63 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -592,7 +592,8 @@ char *ph[MAX_PAR] = {
 	,
 #ifdef XSS
 	"fullscreen \"content type\" prop.: see \"xrandr --props\"",
-	"fullscreen \"Colorspace\" prop.: see \"xrandr --props\"",
+	"fullscreen \"Colorspace\" prop.: see \"xrandr --props\"\n"
+	"		(BT2020_YCC|BT2020_RGB|DCI-P3_RGB_Theater)",
 #else
 	NULL,NULL,
 #endif
@@ -5733,7 +5734,8 @@ int main(int argc, char **argv){
 			pi[p_safe] = 1+4+128+4096;
 			pi[p_Safe] = 1+64;
 			pa[p_content_type] = "Cinema";
-			pa[p_colorspace] = "DCI-P3_RGB_Theater";
+			// 2do: check avail
+			pa[p_colorspace] = "BT2020_YCC"; // BT2020_YCC|BT2020_RGB|DCI-P3_RGB_Theater
 			break;
 		}
 	}
