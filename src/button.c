@@ -52,6 +52,7 @@ void button_set_pixmap(button *b, char *filename)
 
 void button_set_txt_ks(button *b, char *txt)
 {
+  if (strchr("CSAMN!",*txt)) {
   if (!strcmp(txt, "Caps_Lock")) {
     b->modifier = STATE(KBIT_CAPS);
     b->flags |= STATE(OBIT_LOCK);
@@ -70,6 +71,7 @@ void button_set_txt_ks(button *b, char *txt)
 	b->modifier = STATE(KBIT_MOD);
 //	SET_KS(b,0,0);
 	txt=NULL;
+  }
   }
 
   if (txt) {

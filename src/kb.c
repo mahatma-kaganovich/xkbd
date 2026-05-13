@@ -209,12 +209,12 @@ found:
 			if (!txt) {
 			    ksText_(ks,&txt,&l1);
 			    if (!l) is_sym = l1;
-			    if (
+			    if (strchr("XK",*txt) && (
 				!strncmp(txt,"XF86Switch_",n=11) ||
 				!strncmp(txt,"XF86_",n=5) ||
 				!strncmp(txt,"XF86",n=4) ||
 				!strncmp(txt,"KP_",n=3)
-				) txt+=n;
+				)) txt+=n;
 			}
 #endif
 			b->txt[l] = txt;
