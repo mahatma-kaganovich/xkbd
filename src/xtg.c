@@ -1,5 +1,5 @@
 /*
-	xtg v1.63 - per-window keyboard layout switcher [+ XSS suspend].
+	xtg v1.64 - per-window keyboard layout switcher [+ XSS suspend].
 	Common principles looked up from kbdd http://github.com/qnikst/kbdd
 	- but rewrite from scratch.
 
@@ -963,6 +963,7 @@ static void xrPropFlush();
 static void WMState(Atom state, _short op){
 	int i = (state == aFullScreen);
 	if (!i && !noXSS) return;
+	DBG("WMState %s %i",natom(0,state),op);
 	switch (op) {
 	    case 0: // delete
 	    case 1: // add
@@ -1357,7 +1358,7 @@ static _short getProp(Atom prop, Atom type, void *data, int pos, long cnt, _shor
 	return _chk_prop(_pr_name,minf->out,prop,type,(void*)&data,cnt,chk&0x0f);
 }
 
-
+unsigned ch_prop_cnt = 0;
 static _short setProp(Atom prop, Atom type, int mode, void *data, long cnt, _short chk){
 	int f = fmtOf(type,32);
 	if (chk&0xf) {
@@ -1375,6 +1376,7 @@ static _short setProp(Atom prop, Atom type, int mode, void *data, long cnt, _sho
 		XSync(dpy,False);
 	}
 	_error = 0;
+	ch_prop_cnt++;
 	switch (target) {
 	    case pr_win:
 		XChangeProperty(dpy,win,prop,type,f,mode,data,cnt);
@@ -4266,12 +4268,75 @@ pan1:
 	}
 }
 
+#if 1
+#define set_gamma(g)
+#else
+// debug after AI help
+#include <math.h>
+double lift_shadows = .10; // .05 .. .15
+double contrast = 1.20; // Чем выше, тем темнее серый (попробуйте 1.12 - 1.20)
+void set_gamma(int g){
+	if (!minf->crt) return;
+	int size = XRRGetCrtcGammaSize(dpy, minf->crt);
+	XRRCrtcGamma *gamma = XRRAllocGamma(size);
+//	XRRCrtcGamma *gamma0 = XRRGetCrtcGamma(dpy, minf->crt);
+	for (int i = 0; i < size; ++i) {
+		unsigned short val;
+		switch (g) {
+		    case 0: val = (65535.0 / (size - 1)) * i + .5; break;
+		    case 1:{
+			double x = (double)i / (size - 1);
+			// Степень > 1 прогибает кривую вниз (делает серый темнее)
+			double y = pow(x, contrast);
+			// Приподнимаем только самые глубокие тени, плавно угасая к белому
+			y = y + lift_shadows * (1.0 - x);
+			if (y > 1.0) y = 1.0;
+			if (y < 0.0) y = 0.0;
+			val = y * 65535 + .5;
+		    }
+		    case 3:{
+			double x = (double)i / (size - 1);
+			double y = x;
+			if (x > .0 && x < 1.) {
+				// За основу берем прогиб вниз (x^1.2) и слегка корректируем
+				y = pow(x, 1.25);
+    				// lift_shadows работает как микро-компенсация в самом начале (до x = 0.3)
+    				y += lift_shadows * pow(1.0 - x, 4.0); 
+			}
+			val = (unsigned short)(y * 65535 + .5);
+		    }
+		    case 2:{
+			double x = (double)i / (size - 1);
+			double y = x;
+			if (x > .0 && x < 1.) {
+				y = lift_shadows + (1 - lift_shadows) * powf(x, contrast);
+				y = y * (1 - x) + x * x;
+				if (y > 1.) y = 1.;
+				if (y < 0.) y = 0.;
+			}
+			val = (unsigned short)(y * 65535 + .5);
+		    }
+		    break;
+		}
+
+		gamma->red[i] = val;
+		gamma->green[i] = val;
+		gamma->blue[i] = val;
+	}
+	XRRSetCrtcGamma(dpy, minf->crt, gamma);
+	XRRFreeGamma(gamma);
+	XFlush(dpy);
+}
+#endif
 
 #ifdef XSS
 static void _monFS(xrp_t p, _short st){
 	if (val_xrp[p].a) {
+//		unsigned c = ch_prop_cnt;
+		_grabX();
 		pr_set(p,st);
-		xrPropFlush();
+		_ungrabX();
+//		if (c != ch_prop_cnt) xrPropFlush();
 	}
 }
 
@@ -4282,13 +4347,17 @@ static void monFullScreen(){
 		wa.y = -1;
 		getGeometry();
 	}
+	unsigned c = ch_prop_cnt;
+	_grabX();
 	MINF(minf->out) {
 		_short st = noXSS && (minf->type&o_active) && wa.x>=minf->x && wa.x<=minf->x2 && wa.y>=minf->y && wa.y<=minf->y2;
 		_monFS(xrp_ct,st);
 		_monFS(xrp_cs,st);
 		_monFS(xrp_rgb,st);
+		set_gamma(st);
 	}
-//	xrPropFlush();
+	_ungrabX();
+	if (c != ch_prop_cnt) xrPropFlush();
 }
 #endif
 
@@ -5441,7 +5510,8 @@ static void init(){
 #ifdef XSS
 	if (pa[p_content_type]) val_xrp[xrp_ct].a = XInternAtom(dpy, pa[p_content_type], False);
 	if (pa[p_colorspace]) val_xrp[xrp_cs].a = XInternAtom(dpy, pa[p_colorspace], False);
-	val_xrp[xrp_rgb].a = XInternAtom(dpy, "Limited 16:235", False);
+//	val_xrp[xrp_rgb].a = XInternAtom(dpy, "Limited 16:235", False);
+//	val_xrp[xrp_rgb].a = XInternAtom(dpy, "Full", False);
 #endif
 	val_xrp[xrp_sm].a = XInternAtom(dpy, pa[p_sm], False); // if native aspect
 
@@ -5735,7 +5805,7 @@ int main(int argc, char **argv){
 			pi[p_Safe] = 1+64;
 			pa[p_content_type] = "Cinema";
 			// 2do: check avail
-			pa[p_colorspace] = "BT2020_YCC"; // BT2020_YCC|BT2020_RGB|DCI-P3_RGB_Theater
+			//pa[p_colorspace] = "DCI-P3_RGB_Theater"; // BT2020_YCC|BT2020_RGB|DCI-P3_RGB_Theater
 			break;
 		}
 	}
