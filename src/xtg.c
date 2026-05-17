@@ -963,7 +963,7 @@ static void xrPropFlush();
 static void WMState(Atom state, _short op){
 	int i = (state == aFullScreen);
 	if (!i && !noXSS) return;
-	DBG("WMState %s %i",natom(0,state),op);
+//	DBG("WMState %s %i",natom(0,state),op);
 	switch (op) {
 	    case 0: // delete
 	    case 1: // add
@@ -4278,45 +4278,47 @@ double contrast = 1.20; // Чем выше, тем темнее серый (по
 void set_gamma(int g){
 	if (!minf->crt) return;
 	int size = XRRGetCrtcGammaSize(dpy, minf->crt);
+	double size1 = size - 1;
+	double y = 65535 / size1;
 	XRRCrtcGamma *gamma = XRRAllocGamma(size);
 //	XRRCrtcGamma *gamma0 = XRRGetCrtcGamma(dpy, minf->crt);
 	for (int i = 0; i < size; ++i) {
 		unsigned short val;
+		double x;
 		switch (g) {
-		    case 0: val = (65535.0 / (size - 1)) * i + .5; break;
-		    case 1:{
-			double x = (double)i / (size - 1);
+		    case 0: val = y * i + .5; break;
+		    case 1:
+			x = i / size1;
 			// Степень > 1 прогибает кривую вниз (делает серый темнее)
-			double y = pow(x, contrast);
+			y = pow(x, contrast);
 			// Приподнимаем только самые глубокие тени, плавно угасая к белому
 			y = y + lift_shadows * (1.0 - x);
 			if (y > 1.0) y = 1.0;
-			if (y < 0.0) y = 0.0;
+			else if (y < 0.0) y = 0.0;
 			val = y * 65535 + .5;
-		    }
-		    case 3:{
-			double x = (double)i / (size - 1);
-			double y = x;
+			break;
+		    case 3:
+			x = i / size1;
+			y = x;
 			if (x > .0 && x < 1.) {
 				// За основу берем прогиб вниз (x^1.2) и слегка корректируем
 				y = pow(x, 1.25);
-    				// lift_shadows работает как микро-компенсация в самом начале (до x = 0.3)
-    				y += lift_shadows * pow(1.0 - x, 4.0); 
+				// lift_shadows работает как микро-компенсация в самом начале (до x = 0.3)
+				y += lift_shadows * pow(1.0 - x, 4.0); 
 			}
-			val = (unsigned short)(y * 65535 + .5);
-		    }
-		    case 2:{
-			double x = (double)i / (size - 1);
-			double y = x;
+			val = y * 65535 + .5;
+			break;
+		    case 2:
+			x = i / size1;
+			y = x;
 			if (x > .0 && x < 1.) {
-				y = lift_shadows + (1 - lift_shadows) * powf(x, contrast);
+				y = lift_shadows + (1 - lift_shadows) * pow(x, contrast);
 				y = y * (1 - x) + x * x;
 				if (y > 1.) y = 1.;
 				if (y < 0.) y = 0.;
 			}
-			val = (unsigned short)(y * 65535 + .5);
-		    }
-		    break;
+			val = y * 65535 + .5;
+			break;
 		}
 
 		gamma->red[i] = val;
