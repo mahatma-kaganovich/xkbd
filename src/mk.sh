@@ -58,6 +58,6 @@ evdev=$(pkg-config --cflags --libs libevdev) || {
 	[ -e /usr/include/libevdev-1.0 ] && evdev='-levdev -I/usr/include/libevdev-1.0'
 }
 [ -n "$evdev" ] && evdev="$evdev -DUSE_EVDEV"
-_c xtg xtg.c "xtst xi xrandr xext xscrnsaver xfixes" "$(pkg-config --variable=xthreadlib x11) -DUSE_XTHREAD $evdev -lm"
+_c xtg xtg.c "xtst xi xrandr xext xscrnsaver xfixes" "$(pkg-config --variable=xthreadlib x11) -DUSE_XTHREAD $evdev"
 
 wait

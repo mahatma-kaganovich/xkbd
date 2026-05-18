@@ -256,6 +256,7 @@ typedef long _int;
 
 
 Display *dpy = 0;
+#define local_dpy(dpy) static Display *dpy = 0; if (!dpy && !(dpy = XOpenDisplay(NULL))) return;
 Window win = None, win1 = None;
 int screen;
 Window root;
@@ -1868,26 +1869,114 @@ static int active_bl_(){
 	return 0;
 }
 
+#undef GAMMA_FULL
+// russian comments from AI
+//#define GAMMA_FULL
+#ifdef GAMMA_FULL
+#include <math.h>
+double lift_shadows = .10; // .05 .. .15
+double contrast = 1.20; // Чем выше, тем темнее серый (попробуйте 1.12 - 1.20)
+#endif
+void set_gamma(minf_t *minf,int g){
+	if (!minf->crt) return;
+//#if USE_MUTEX != 2
+//	local_dpy(dpy);
+//#endif
+	pinf_t *pr = &minf->prop[xrp_bl];
+	long brightness = pr->v1.i = pr->v.i;
+
+	int size = XRRGetCrtcGammaSize(dpy, minf->crt);
+	if (size < 2) return;
+	XRRCrtcGamma *gamma = XRRAllocGamma(size);
+	if (!gamma) return;
+#ifdef GAMMA_FULL
+	if (g || contrast != 1 || lift_shadows != 0.) {
+		double x = 0., step = 1./(size - 1), br = brightness*(65535./100);
+		contrast = 1;
+		for (int i = 0; i < size; i++,x+=step) {
+			unsigned short val;
+			double y = ((contrast==1)?x:pow(x, contrast));
+
+			switch (g) {
+			case 1:
+			case 0:
+				break;
+			case 4:
+				// Степень > 1 прогибает кривую вниз (делает серый темнее)
+				// Приподнимаем только самые глубокие тени, плавно угасая к белому
+				y = y + lift_shadows * (1.0 - x);
+				break;
+			case 3:
+				y = x;
+				if (x > .0 && x < 1.) {
+					// За основу берем прогиб вниз (x^1.2) и слегка корректируем
+					//contrast = 1.25;
+					y = pow(x, 1.25));
+					// lift_shadows работает как микро-компенсация в самом начале (до x = 0.3)
+					y += lift_shadows * pow(1.0 - x, 4.0); 
+				}
+				break;
+			case 2:
+				if (x > .0 && x < 1.) {
+					y = lift_shadows + (1 - lift_shadows) * y;
+					y = y * (1 - x) + x * x;
+				}else y = x;
+				break;
+			}
+			val = y * br + .5;
+
+			if (val < 1024) val = 1024;
+			else if (val > 65535) val = 65535;
+			gamma->red[i] = gamma->green[i] = gamma->blue[i] = val;
+		}
+	} else
+#endif
+	{
+		// fast int brightness-only
+		uint64_t x = (1<<19), step = ((uint64_t)65535<<20)*brightness/((size - 1)*100);
+		for (int i = 0; i < size; i++,x+=step) {
+			unsigned short val = x>>20;
+			//DBG("%i",val);
+			//val = 65535.*i*brightness/(size-1)/100+.5;
+			//if (val < 1024) val = 1024;
+			//else if (val > 65535) val = 65535;
+			gamma->red[i] = val;
+			gamma->green[i] = val;
+			gamma->blue[i] = val;
+		}
+	}
+	XRRSetCrtcGamma(dpy, minf->crt, gamma);
+	XFlush(dpy);
+
+//	XRRCrtcGamma *gamma0 = XRRGetCrtcGamma(dpy, crt);
+//	XRRFreeGamma(gamma0);
+
+	XRRFreeGamma(gamma);
+}
+
 float max_light;
 static void chlight(const unsigned long long l){
 	minf_t *minf;
 	xmutex_lock(&mutex);
-	MINF(minf->blfd > 0 || minf->prop[xrp_bl].en) {
+	Bool _bl;
+	MINF((_bl=(minf->blfd > 0 || minf->prop[xrp_bl].en)) || minf->crt) {
 		pinf_t *pr = &minf->prop[xrp_bl];
-		long l1 = pr->p->values[1];
+		long minbl = minf->minbl?:pf[p_min_backlight];
+		long l1 = pr->p?pr->p->values[1]:100;
 		if (l < max_light) {
 #ifdef min_light
-			l1 = (l <= min_light) ? minf->minbl :
-			    (minf->minbl + (l1 - minf->minbl)*(l*light_scale - min_light)/(pf[p_max_light] - min_light));
+			l1 = (l <= min_light) ? minbl :
+			    (minbl + (l1 - minbl)*(l*light_scale - min_light)/(pf[p_max_light] - min_light));
 #else
-			l1 = minf->minbl + (l1 - minf->minbl)*(l/max_light);
+			l1 = minbl + (l1 - minbl)*(l/max_light);
 #endif
 		}
 
 		//DBG("light %llu -> %li %f",l,l1,l/max_light);
 		if (pr->vs[0].i == l1) continue;
 		pr->vs[0].i = l1;
-		if (!pr->v.i) continue;
+		//if (!pr->v.i) continue;
+		if (!pr->v.i && _bl) continue;
 		pr->v.i = l1;
 		if (pr->v1.i == l1)
 		    pr->v1.i = !l1;
@@ -1899,6 +1988,7 @@ static void chlight(const unsigned long long l){
 #endif
 #if USE_MUTEX == 2
 		if (pr->en) _bl2prop(minf);
+		else if (!_bl) set_gamma(minf,0);
 #else
 		oldShowPtr |= 128;
 #endif
@@ -2111,6 +2201,7 @@ unsigned long v4nb = 0;
 struct v4l2_format v4 = {.type = V4L2_BUF_TYPE_VIDEO_CAPTURE};
 int nv4ldves = 0;
 useconds_t v4delay = V4MINDELAY;
+unsigned long v4l_cnt0;
 
 #define IOD(s) io.s = (struct s)
 union {
@@ -2176,7 +2267,11 @@ static void v4buf0(unsigned index){
 }
 
 static void v4stop(){
-	if (io0.buf.memory) v4call1(VIDIOC_STREAMOFF);
+	if (io0.buf.memory) {
+		v4call1(VIDIOC_STREAMOFF);
+		v4l_cnt0 = 1;
+		chlight(max_light);
+	}
 }
 
 static void v4close(){
@@ -2217,7 +2312,7 @@ static int v4cinfo(__u32 id) {
 	return iocall(VIDIOC_QUERYCTRL);
 }
 
-static void v4ctrl_list(){\
+static void v4ctrl_list(){
 	__u32 id = V4L2_CTRL_FLAG_NEXT_CTRL;;
 	while (v4cinfo(id)){
 		printf("v4l ctrl %u 0x%x '%s' %i..%i/%i =%i\n",
@@ -2250,12 +2345,13 @@ static void v4cdefault(__u32 id, int i) {
 	}
 }
 
+
 static void *thread_v4l(){
-	unsigned long cnt, i, cnt0 = 1;
+	unsigned long cnt, i;
+	v4l_cnt0 = 1;
 	unsigned char *b;
 	unsigned long long l0, l = 0xfff;
-	float s0,s1=0, dv = 1, dv0
-	;
+	float s0,s1=0, dv = 1, dv0;
 	max_light = pf[p_max_light];
 #ifdef V4L_NOBLOCK
 	fd_set fds;
@@ -2350,12 +2446,12 @@ rep1:
 		}
 	}
 	// dont want! to do  early as cnt=width*height*2
-	if (cnt != cnt0) {
+	if (cnt != v4l_cnt0) {
 		DBG("v4r read buffer size %lu x%lu",cnt,cnt/v4.fmt.pix.width/v4.fmt.pix.height);
 		if (!cnt) {
 			goto err1;
 		}
-		dv = (cnt0 = cnt)/dv0;
+		dv = (v4l_cnt0 = cnt)/dv0;
 		l = s0 = s1 = s/dv;
 		v4delay = V4MINDELAY;
 	} else if ((s0 = s/dv) == s1 ||
@@ -2673,7 +2769,7 @@ err1:
 	    (!io0.buf.memory)?"read":(io0.buf.memory==V4L2_MEMORY_USERPTR)?"userptr":"mmap",v4nb);
 
 	_thread(2,(void*)&thread_v4l);
-	return 1; 
+	return 1;
 }
 
 #endif
@@ -4268,68 +4364,7 @@ pan1:
 	}
 }
 
-#if 1
-#define set_gamma(g)
-#else
-// debug after AI help
-#include <math.h>
-double lift_shadows = .10; // .05 .. .15
-double contrast = 1.20; // Чем выше, тем темнее серый (попробуйте 1.12 - 1.20)
-void set_gamma(int g){
-	if (!minf->crt) return;
-	int size = XRRGetCrtcGammaSize(dpy, minf->crt);
-	double size1 = size - 1;
-	double y = 65535 / size1;
-	XRRCrtcGamma *gamma = XRRAllocGamma(size);
-//	XRRCrtcGamma *gamma0 = XRRGetCrtcGamma(dpy, minf->crt);
-	for (int i = 0; i < size; ++i) {
-		unsigned short val;
-		double x;
-		switch (g) {
-		    case 0: val = y * i + .5; break;
-		    case 1:
-			x = i / size1;
-			// Степень > 1 прогибает кривую вниз (делает серый темнее)
-			y = pow(x, contrast);
-			// Приподнимаем только самые глубокие тени, плавно угасая к белому
-			y = y + lift_shadows * (1.0 - x);
-			if (y > 1.0) y = 1.0;
-			else if (y < 0.0) y = 0.0;
-			val = y * 65535 + .5;
-			break;
-		    case 3:
-			x = i / size1;
-			y = x;
-			if (x > .0 && x < 1.) {
-				// За основу берем прогиб вниз (x^1.2) и слегка корректируем
-				y = pow(x, 1.25);
-				// lift_shadows работает как микро-компенсация в самом начале (до x = 0.3)
-				y += lift_shadows * pow(1.0 - x, 4.0); 
-			}
-			val = y * 65535 + .5;
-			break;
-		    case 2:
-			x = i / size1;
-			y = x;
-			if (x > .0 && x < 1.) {
-				y = lift_shadows + (1 - lift_shadows) * pow(x, contrast);
-				y = y * (1 - x) + x * x;
-				if (y > 1.) y = 1.;
-				if (y < 0.) y = 0.;
-			}
-			val = y * 65535 + .5;
-			break;
-		}
 
-		gamma->red[i] = val;
-		gamma->green[i] = val;
-		gamma->blue[i] = val;
-	}
-	XRRSetCrtcGamma(dpy, minf->crt, gamma);
-	XRRFreeGamma(gamma);
-	XFlush(dpy);
-}
-#endif
 
 #ifdef XSS
 static void _monFS(xrp_t p, _short st){
@@ -4356,7 +4391,9 @@ static void monFullScreen(){
 		_monFS(xrp_ct,st);
 		_monFS(xrp_cs,st);
 		_monFS(xrp_rgb,st);
-		set_gamma(st);
+#ifdef GAMMA_FULL
+		set_gamma(minf,st);
+#endif
 	}
 	_ungrabX();
 	if (c != ch_prop_cnt) xrPropFlush();
@@ -5178,9 +5215,12 @@ repeat:
 #elif USE_MUTEX == 1
 	if (oldShowPtr&128) {
 		oldShowPtr ^= 128;
-		MINF_T(o_backlight) {
+		//MINF_T(o_active){
+		MINF(1){
 			pr = &minf->prop[xrp_bl];
-			if (pr->v.i != pr->v1.i) _bl2prop(minf);
+			if (pr->v.i == pr->v1.i) continue;
+			if(minf->type & o_backlight) _bl2prop(minf);
+			else if (minf->blfd <= 0 && !pr->en) set_gamma(minf,0);
 		}
 	}
 #else
@@ -5188,6 +5228,9 @@ repeat:
 		oldShowPtr ^= 128;
 		MINF_T(o_backlight) if (minf->blfd) {
 			if (!_sysfs2prop(minf)) _SYSFS_FREE();
+		} else if (minf->blfd <= 0 && !minf->prop[xrp_bl].pr->en) {
+			pr = &minf->prop[xrp_bl];
+			if (pr->v.i != pr->v1.i) set_gamma(minf,0);
 		}
 	}
 #endif
