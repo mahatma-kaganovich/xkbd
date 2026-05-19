@@ -1877,7 +1877,7 @@ static int active_bl_(){
 double lift_shadows = .10; // .05 .. .15
 double contrast = 1.20; // Чем выше, тем темнее серый (попробуйте 1.12 - 1.20)
 #endif
-void set_gamma(minf_t *minf,int g){
+static void set_gamma(minf_t *minf,int g){
 	if (!minf->crt) return;
 //#if USE_MUTEX != 2
 //	local_dpy(dpy);
@@ -1887,8 +1887,36 @@ void set_gamma(minf_t *minf,int g){
 
 	int size = XRRGetCrtcGammaSize(dpy, minf->crt);
 	if (size < 2) return;
-	XRRCrtcGamma *gamma = XRRAllocGamma(size);
-	if (!gamma) return;
+	static XRRCrtcGamma *gamma = NULL;
+#if 0
+	if (gamma && gamma->size != size) {
+		XRRFreeGamma(gamma);
+		gamma = NULL;
+	}
+	if (!gamma) {
+		gamma = XRRAllocGamma(size);
+		if (!gamma) {
+			ERR("Gamma alloc %i",size);
+			return;
+		}
+	}
+#else
+	// multi-crt hack
+	static int size0 = 0;
+	if (size == size0);
+	else if (size < size0) gamma->size = size;
+	else {
+		if (gamma) {
+			gamma->size = size0;
+			XRRFreeGamma(gamma);
+		}
+		gamma = XRRAllocGamma(size0 = size);
+		if (!gamma) {
+			ERR("Gamma alloc %i",size);
+			return;
+		}
+	}
+#endif
 #ifdef GAMMA_FULL
 	if (g || contrast != 1 || lift_shadows != 0.) {
 		double x = 0., step = 1./(size - 1), br = brightness*(65535./100);
@@ -1951,7 +1979,7 @@ void set_gamma(minf_t *minf,int g){
 //	XRRCrtcGamma *gamma0 = XRRGetCrtcGamma(dpy, crt);
 //	XRRFreeGamma(gamma0);
 
-	XRRFreeGamma(gamma);
+//	XRRFreeGamma(gamma); gamma = NULL;
 }
 
 float max_light;
