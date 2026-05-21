@@ -4398,9 +4398,9 @@ pan1:
 static void _monFS(xrp_t p, _short st){
 	if (val_xrp[p].a) {
 //		unsigned c = ch_prop_cnt;
-		_grabX();
+		//_grabX();
 		pr_set(p,st);
-		_ungrabX();
+		//_ungrabX();
 //		if (c != ch_prop_cnt) xrPropFlush();
 	}
 }
@@ -4413,7 +4413,7 @@ static void monFullScreen(){
 		getGeometry();
 	}
 	unsigned c = ch_prop_cnt;
-	_grabX();
+	//_grabX();
 	MINF(minf->out) {
 		_short st = noXSS && (minf->type&o_active) && wa.x>=minf->x && wa.x<=minf->x2 && wa.y>=minf->y && wa.y<=minf->y2;
 		_monFS(xrp_ct,st);
@@ -4423,7 +4423,7 @@ static void monFullScreen(){
 		set_gamma(minf,st);
 #endif
 	}
-	_ungrabX();
+	//_ungrabX();
 	if (c != ch_prop_cnt) xrPropFlush();
 }
 #endif
